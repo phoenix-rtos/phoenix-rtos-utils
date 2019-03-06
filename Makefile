@@ -1,5 +1,5 @@
 #
-# Makefile for phoenix-rtos-devices
+# Makefile for psh
 #
 # Copyright 2018, 2019 Phoenix Systems
 #
@@ -14,7 +14,7 @@ MAKEFLAGS += --no-print-directory
 TARGET ?= arm-imx6ull
 
 TOPDIR := $(CURDIR)
-BUILD_PREFIX ?= ../build/$(TARGET)
+BUILD_PREFIX ?= ../_build/$(TARGET)
 BUILD_PREFIX := $(abspath $(BUILD_PREFIX))
 BUILD_DIR ?= $(BUILD_PREFIX)/$(notdir $(TOPDIR))
 BUILD_DIR := $(abspath $(BUILD_DIR))
