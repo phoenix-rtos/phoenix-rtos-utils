@@ -51,13 +51,13 @@ HEADER = $(SIL)mkdir -p $(@D); \
 	(printf "HEADER %-24s\n" "$<"); \
 	cp -pR "$<" "$@"
 
-$(PREFIX_O)%.o: %.c
+$(PREFIX_O)%.o: %.c $(filter clean,$(MAKECMDGOALS))
 	@mkdir -p $(@D)
 	$(SIL)(printf "CC  %-24s\n" "$<")
 	$(SIL)$(CC) -c $(CFLAGS) "$<" -o "$@"
 	$(SIL)$(CC) -M  -MD -MP -MF $(PREFIX_O)$*.c.d -MT "$@" $(CFLAGS) $<
 
-$(PREFIX_O)%.o: %.S
+$(PREFIX_O)%.o: %.S $(filter clean,$(MAKECMDGOALS))
 	@mkdir -p $(@D)
 	$(SIL)(printf "ASM %s/%-24s\n" "$(notdir $(@D))" "$<")
 	$(SIL)$(CC) -c $(CFLAGS) "$<" -o "$@"
