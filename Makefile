@@ -75,8 +75,6 @@ all: $(PREFIX_PROG_STRIPPED)psh
 
 .PHONY: clean
 clean:
-	@echo "rm -rf $(BUILD_DIR)"
-
-ifneq ($(filter clean,$(MAKECMDGOALS)),)
-	$(shell rm -rf $(BUILD_DIR))
-endif
+	rm -rf $(PREFIX_PROG)psh
+	rm -rf $(PREFIX_PROG_STRIPPED)psh
+	rm -rf $(PREFIX_O)*.o
