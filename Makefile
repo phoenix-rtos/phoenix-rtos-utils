@@ -46,7 +46,7 @@ ARCH =  $(SIL)@mkdir -p $(@D); \
 LINK = $(SIL)mkdir -p $(@D); \
 	(printf "LD  %-24s\n" "$(@F)"); \
 	$(LD) $(LDFLAGS) -o "$@"  $^ $(LDLIBS)
-	
+
 HEADER = $(SIL)mkdir -p $(@D); \
 	(printf "HEADER %-24s\n" "$<"); \
 	cp -pR "$<" "$@"
@@ -62,7 +62,7 @@ $(PREFIX_O)%.o: %.S $(filter clean,$(MAKECMDGOALS))
 	$(SIL)(printf "ASM %s/%-24s\n" "$(notdir $(@D))" "$<")
 	$(SIL)$(CC) -c $(CFLAGS) "$<" -o "$@"
 	$(SIL)$(CC) -M  -MD -MP -MF $(PREFIX_O)$*.S.d -MT "$@" $(CFLAGS) $<
-	
+
 $(PREFIX_PROG_STRIPPED)%: $(PREFIX_PROG)%
 	@mkdir -p $(@D)
 	@(printf "STR %-24s\n" "$(@F)")
@@ -71,10 +71,21 @@ $(PREFIX_PROG_STRIPPED)%: $(PREFIX_PROG)%
 $(PREFIX_PROG)psh: $(PREFIX_O)psh.o
 	$(LINK)
 
-all: $(PREFIX_PROG_STRIPPED)psh
+$(PREFIX_PROG)psd: $(PREFIX_O)psd.o
+	$(SIL)mkdir -p $(@D); \
+	(printf "LD  %-24s\n" "$(@F)"); \
+	$(LD) $(LDFLAGS) -o "$@"  $^ $(LDLIBS) $(USBLIB)
+
+all: psh psd
+
+b_psh: $(PREFIX_PROG_STRIPPED)psh
+
+b_psd: $(PREFIX_PROG_STRIPPED)psd
 
 .PHONY: clean
 clean:
 	rm -rf $(PREFIX_PROG)psh
 	rm -rf $(PREFIX_PROG_STRIPPED)psh
+	rm -rf $(PREFIX_PROG)psd
+	rm -rf $(PREFIX_PROG_STRIPPED)psd
 	rm -rf $(PREFIX_O)*.o

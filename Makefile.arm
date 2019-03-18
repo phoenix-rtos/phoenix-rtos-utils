@@ -29,6 +29,7 @@ LDFLAGS = -z max-page-size=0x1000
 LDFLAGS += --gc-sections
 GCCLIB := $(shell $(CC) $(CFLAGS) -print-libgcc-file-name)
 PHOENIXLIB := $(shell $(CC) $(CFLAGS) -print-file-name=libphoenix.a)
+USBLIB := -lusb-imx6ull
 LDLIBS := $(PHOENIXLIB) $(GCCLIB)
 
 OBJCOPY = $(CROSS)objcopy
