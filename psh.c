@@ -468,7 +468,7 @@ static int psh_ps_cmp_name(const void *t1, const void *t2)
 
 static int psh_ps_cmp_pid(const void *t1, const void *t2)
 {
-	return (int)((threadinfo_t *)t2)->pid - (int)((threadinfo_t *)t1)->pid;
+	return (int)((threadinfo_t *)t1)->pid - (int)((threadinfo_t *)t2)->pid;
 }
 
 
@@ -478,7 +478,7 @@ static int psh_ps_cmp_cpu(const void *t1, const void *t2)
 }
 
 
-static int psh_ps(char *arg)
+static int psh_ts(char *arg)
 {
 	threadinfo_t *info;
 	int tcnt, i, n = 32;
@@ -486,14 +486,14 @@ static int psh_ps(char *arg)
 	char unit;
 
 	if ((info = malloc(n * sizeof(threadinfo_t))) == NULL) {
-		printf("ps: out of memory\n");
+		printf("ts: out of memory\n");
 		return -ENOMEM;
 	}
 
 	while ((tcnt = threadsinfo(n, info)) >= n) {
 		n *= 2;
 		if ((info = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
-			printf("ps: out of memory\n");
+			printf("ts: out of memory\n");
 			return -ENOMEM;
 		}
 	}
@@ -511,13 +511,13 @@ static int psh_ps(char *arg)
 			qsort(info, tcnt, sizeof(threadinfo_t), psh_ps_cmp_cpu);
 
 		else
-			printf("ps: unknown option '%s'\n", arg);
+			printf("ts: unknown option '%s'\n", arg);
 	}
 
-	printf("%9s %5s %4s  %5s %5s %12s %6s %7s  %s\n", "PID", "TTY", "PRI", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "CMD");
+	printf("%9s %5s %4s  %5s %5s %12s %6s %7s  %s\n", "PID", "PPID", "PRI", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "CMD");
 
 	for (i = 0; i < tcnt; ++i) {
-		printf("%9d %5s %4d  %5s %3d.%d %12llu %3u:%02u", info[i].pid, "-", info[i].priority, info[i].state ? "sleep" : "ready",
+		printf("%9d %5d %4d  %5s %3d.%d %12llu %3u:%02u", info[i].pid, info[i].ppid, info[i].priority, info[i].state ? "sleep" : "ready",
 			info[i].load / 10, info[i].load % 10, info[i].wait,
 			info[i].cpu_time / 60, info[i].cpu_time % 60);
 
@@ -557,7 +557,92 @@ static int psh_ps(char *arg)
 		else
 			printf("  %4u %c", ipart, unit);
 
-		printf("  %-32s\n", info[i].name);
+		printf("  %-64s\n", info[i].name);
+	}
+
+	free(info);
+	return EOK;
+}
+
+
+static int psh_ps(char *arg)
+{
+	threadinfo_t *info;
+	int tcnt, i, j, n = 32;
+	unsigned ipart, fpart;
+	char unit;
+
+	if ((info = malloc(n * sizeof(threadinfo_t))) == NULL) {
+		printf("ps: out of memory\n");
+		return -ENOMEM;
+	}
+
+	while ((tcnt = threadsinfo(n, info)) >= n) {
+		n *= 2;
+		if ((info = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
+			printf("ps: out of memory\n");
+			return -ENOMEM;
+		}
+	}
+
+	qsort(info, tcnt, sizeof(threadinfo_t), psh_ps_cmp_pid);
+
+	printf("%9s %9s %4s  %5s %5s %12s %6s %7s  THR  %s\n", "PID", "PPID", "PRI", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "CMD");
+
+	for (i = 0; i < tcnt; i = j) {
+		for (j = i+1; j < tcnt && info[j].pid == info[i].pid; ++j) {
+			info[i].load += info[j].load;
+			info[i].cpu_time += info[j].cpu_time;
+			info[i].priority = min(info[i].priority, info[j].priority);
+			info[i].state = min(info[i].state, info[j].state);
+			info[i].wait = max(info[i].wait, info[j].wait);
+		}
+
+		if (!info[i].state)
+			printf("\033[1m\033[37m");
+
+		printf("%9d %9d %4d  %5s %3d.%d %12llu %3u:%02u", info[i].pid, info[i].ppid, info[i].priority, info[i].state ? "sleep" : "ready",
+			info[i].load / 10, info[i].load % 10, info[i].wait,
+			info[i].cpu_time / 60, info[i].cpu_time % 60);
+
+		info[i].vmem /= 1024;
+
+		if (info[i].vmem < 1000) {
+			ipart = info[i].vmem;
+			fpart = 0;
+			unit = 'K';
+		}
+		else {
+			ipart = info[i].vmem / 1024;
+			fpart = ((info[i].vmem % 1024) * 100) / 1024;
+			fpart = ((fpart % 10 >= 5) ? fpart + 10 : fpart) / 10;
+			unit = 'M';
+
+			if (fpart >= 10) {
+				++ipart;
+				fpart = 0;
+			}
+
+			if (ipart >= 1000) {
+				fpart = ((ipart % 1024) * 100) / 1024;
+				fpart = ((fpart % 10 >= 5) ? fpart + 10 : fpart) / 10;
+				ipart /= 1024;
+				unit = 'G';
+			}
+
+			if (fpart >= 10) {
+				++ipart;
+				fpart = 0;
+			}
+		}
+
+		if (fpart)
+			printf(" %3u.%1u %c", ipart, fpart, unit);
+		else
+			printf("  %4u %c", ipart, unit);
+
+		printf("  %3d", j-i);
+		printf("  %-64s\033[0m\n", info[i].name);
 	}
 
 	free(info);
@@ -765,6 +850,9 @@ void psh_run(void)
 		else if (!strcmp(cmd, "ps"))
 			psh_ps(cmd + 3);
 
+		else if (!strcmp(cmd, "ts"))
+			psh_ps(cmd + 3);
+
 		else if (!strcmp(cmd, "cat"))
 			psh_cat(cmd + 4);
 
@@ -948,6 +1036,8 @@ int main(int argc, char **argv)
 			psh_mem(args);
 		else if (!strcmp(base, "ps"))
 			psh_ps(args);
+		else if (!strcmp(base, "ts"))
+			psh_ts(args);
 		else if (!strcmp(base, "perf"))
 			psh_perf(args);
 		else if (!strcmp(base, "mount"))
