@@ -502,7 +502,7 @@ static int psh_ps(char *arg)
 	arg = psh_nextString(arg, &len);
 
 	if (len) {
-		if (!strcmp(arg, "-p"))
+		if (!strcmp(arg, "-i"))
 			qsort(info, tcnt, sizeof(threadinfo_t), psh_ps_cmp_pid);
 
 		else if (!strcmp(arg, "-n"))
@@ -511,7 +511,7 @@ static int psh_ps(char *arg)
 		else if (!strcmp(arg, "-c"))
 			qsort(info, tcnt, sizeof(threadinfo_t), psh_ps_cmp_cpu);
 
-		else if (!strcmp(arg, "-t"))
+		else if (!strcmp(arg, "-p"))
 			collapse_threads = 1;
 
 		else
@@ -540,7 +540,7 @@ static int psh_ps(char *arg)
 		}
 
 		if (!info[i].state)
-			printf("\033[1m\033[37m");
+			printf("\e[30m\e[47m");
 
 		printf("%9d %9d %4d  %5s %3d.%d %12llu %3u:%02u", info[i].pid, info[i].ppid, info[i].priority, info[i].state ? "sleep" : "ready",
 			info[i].load / 10, info[i].load % 10, info[i].wait,
