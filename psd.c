@@ -18,6 +18,14 @@ typedef struct _usbclient_descriptor_hid_t {
 	uint16_t	desc_len0;		/* mandatory descriptor length */
 } __attribute__((packed)) usbclient_descriptor_hid_t;
 
+#define MAX_REPORT (128)
+/* HID report descriptor */
+typedef struct _usbclient_descriptor_hid_report_t {
+	uint8_t	len;
+	uint8_t	desc_type;
+	uint8_t	report_data[MAX_REPORT];
+} __attribute__((packed)) usbclient_descriptor_hid_report_t;
+
 #define MAX_STRING (128)
 /* String descriptor */
 typedef struct _usbclient_descriptor_string_t {
@@ -69,16 +77,20 @@ usbclient_descriptor_interface_t interface_desc = {
 	.intf_str = 2
 };
 
-/* Raw HID report descriptor - compatibile with IMX6ULL SDP protocol */
-uint8_t report_desc[] = {
-	0x06, 0x00, 0xff, 0x09, 0x01, 0xa1, 0x01, 0x85, 0x01, 0x19,
-	0x01, 0x29, 0x01, 0x15, 0x00, 0x26, 0xff, 0x00, 0x75, 0x08,
-	0x95, 0x10, 0x91, 0x02, 0x85, 0x02, 0x19, 0x01, 0x29, 0x01,
-	0x15, 0x00, 0x26, 0xff, 0x00, 0x75, 0x80, 0x95, 0x40, 0x91,
-	0x02, 0x85, 0x03, 0x19, 0x01, 0x29, 0x01, 0x15, 0x00, 0x26,
-	0xff, 0x00, 0x75, 0x08, 0x95, 0x04, 0x81, 0x02, 0x85, 0x04,
-	0x19, 0x01, 0x29, 0x01, 0x15, 0x00, 0x26, 0xff, 0x00, 0x75,
-	0x08, 0x95, 0x40, 0x81, 0x02, 0xc0 };
+usbclient_descriptor_hid_report_t hid_report_desc = {
+	.len = 2 + 76,
+	.desc_type = USBCLIENT_DESC_TYPE_HID_REPORT,
+	/* Raw HID report descriptor - compatibile with IMX6ULL SDP protocol */
+	.report_data = {
+		0x06, 0x00, 0xff, 0x09, 0x01, 0xa1, 0x01, 0x85, 0x01, 0x19,
+		0x01, 0x29, 0x01, 0x15, 0x00, 0x26, 0xff, 0x00, 0x75, 0x08,
+		0x95, 0x10, 0x91, 0x02, 0x85, 0x02, 0x19, 0x01, 0x29, 0x01,
+		0x15, 0x00, 0x26, 0xff, 0x00, 0x75, 0x80, 0x95, 0x40, 0x91,
+		0x02, 0x85, 0x03, 0x19, 0x01, 0x29, 0x01, 0x15, 0x00, 0x26,
+		0xff, 0x00, 0x75, 0x08, 0x95, 0x04, 0x81, 0x02, 0x85, 0x04,
+		0x19, 0x01, 0x29, 0x01, 0x15, 0x00, 0x26, 0xff, 0x00, 0x75,
+		0x08, 0x95, 0x40, 0x81, 0x02, 0xc0 }
+};
 
 usbclient_descriptor_hid_t hid_desc = {
 	.len = sizeof(usbclient_descriptor_hid_t),
@@ -87,7 +99,7 @@ usbclient_descriptor_hid_t hid_desc = {
 	.country_code = 0x0,
 	.num_desc = 1,
 	.desc_type0 = 0x22,
-	.desc_len0 = sizeof(report_desc)
+	.desc_len0 = 76
 };
 
 usbclient_descriptor_endpoint_t endpoint_desc = {
@@ -118,7 +130,8 @@ usbclient_descriptor_string_t string_prod_desc = {
 };
 
 
-usbclient_descriptor_list_t string_prod_el = { .size = 1, .descriptors = (usbclient_descriptor_generic_t*)&string_prod_desc, .next = NULL };
+usbclient_descriptor_list_t hid_report_el = { .size = 1, .descriptors = (usbclient_descriptor_generic_t*)&string_prod_desc, .next = NULL };
+usbclient_descriptor_list_t string_prod_el = { .size = 1, .descriptors = (usbclient_descriptor_generic_t*)&hid_report_desc, .next = &hid_report_el };
 usbclient_descriptor_list_t string_man_el = { .size = 1, .descriptors = (usbclient_descriptor_generic_t*)&string_man_desc, .next = &string_prod_el };
 usbclient_descriptor_list_t string_zero_el = { .size = 1, .descriptors = (usbclient_descriptor_generic_t*)&string_zero_desc, .next = &string_man_el };
 usbclient_descriptor_list_t endpoint_el = { .size = 1, .descriptors = (usbclient_descriptor_generic_t*)&endpoint_desc, .next = &string_zero_el };
