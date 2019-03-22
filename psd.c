@@ -87,7 +87,7 @@ usbclient_descriptor_endpoint_t endpoint_desc = {
 	.len = 7,
 	.desc_type = USBCLIENT_DESC_TYPE_ENDPT,
 	.endpt_addr = 0x81, /* direction IN */
-	.attr_bmp = 0x02,
+	.attr_bmp = 0x03,	/* interrupt transfer */
 	.max_pkt_sz = 64,
 	.interval = 0x01
 };
@@ -100,8 +100,11 @@ usbclient_descriptor_list_t device_el = { .size = 1, .descriptors = (usbclient_d
 
 static usbclient_config_t config = {
 	.endpoint_list = {
-		.size = 1,
-		.endpoints = {{ .type = USBCLIENT_ENDPT_TYPE_CONTROL, .direction = 0 /* for control endpoint it's ignored */}}
+		.size = 2,
+		.endpoints = {
+			{ .type = USBCLIENT_ENDPT_TYPE_CONTROL, .direction = 0 /* for control endpoint it's ignored */},
+			{ .type = USBCLIENT_ENDPT_TYPE_INTR, .direction = USBCLIENT_ENDPT_DIR_IN } /* IN interrupt endpoint required for HID */
+		}
 	},
 	.descriptors_head = &device_el
 };
