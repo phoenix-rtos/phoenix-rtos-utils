@@ -138,8 +138,20 @@ static usbclient_config_t config = {
 	.descriptors_head = &device_el
 };
 
+#define MAX_RECV_DATA (1024)
+
+extern volatile uint8_t* sprint_buf;
+#define print_msg() \
+do { \
+	if (sprint_buf[0]) { \
+		printf("%s", sprint_buf + 1); \
+		sprint_buf[0] = 0; \
+	} \
+} while(0);
+
 int main(int argc, char **argv)
 {
+	uint8_t recv_data[MAX_RECV_DATA] = { 0 };
 	printf("Started psd\n");
 
 	// Initialize USB library
@@ -148,7 +160,16 @@ int main(int argc, char **argv)
 		printf("Couldn't initialize USB library (%d)\n", result);
 	}
 
-	while(1);
+	while(1) {
+		print_msg();
+		//printf("receive data...\n");
+		//int result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+		//printf("receive result: %d\n", result);
+		//for (int i = 0; (i < result) && i < MAX_RECV_DATA; i++) {
+		//	printf("%02x ", recv_data[i]);
+		//}
+		//printf("\n");
+	};
 
 	// Cleanup all USB related data
 	usbclient_destroy();
