@@ -478,22 +478,23 @@ static int psh_ps_cmp_cpu(const void *t1, const void *t2)
 }
 
 
-static int psh_ts(char *arg)
+static int psh_ps(char *arg)
 {
 	threadinfo_t *info;
-	int tcnt, i, n = 32;
+	int tcnt, i, j, n = 32;
 	unsigned len, ipart, fpart;
 	char unit;
+	int collapse_threads = 0;
 
 	if ((info = malloc(n * sizeof(threadinfo_t))) == NULL) {
-		printf("ts: out of memory\n");
+		printf("ps: out of memory\n");
 		return -ENOMEM;
 	}
 
 	while ((tcnt = threadsinfo(n, info)) >= n) {
 		n *= 2;
 		if ((info = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
-			printf("ts: out of memory\n");
+			printf("ps: out of memory\n");
 			return -ENOMEM;
 		}
 	}
@@ -510,92 +511,32 @@ static int psh_ts(char *arg)
 		else if (!strcmp(arg, "-c"))
 			qsort(info, tcnt, sizeof(threadinfo_t), psh_ps_cmp_cpu);
 
+		else if (!strcmp(arg, "-t"))
+			collapse_threads = 1;
+
 		else
-			printf("ts: unknown option '%s'\n", arg);
+			printf("ps: unknown option '%s'\n", arg);
 	}
 
-	printf("%9s %5s %4s  %5s %5s %12s %6s %7s  %s\n", "PID", "PPID", "PRI", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "CMD");
+	if (collapse_threads) {
+		qsort(info, tcnt, sizeof(threadinfo_t), psh_ps_cmp_pid);
+		printf("%9s %9s %4s  %5s %5s %12s %6s %7s  THR  %s\n", "PID", "PPID", "PRI", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "CMD");
 
-	for (i = 0; i < tcnt; ++i) {
-		printf("%9d %5d %4d  %5s %3d.%d %12llu %3u:%02u", info[i].pid, info[i].ppid, info[i].priority, info[i].state ? "sleep" : "ready",
-			info[i].load / 10, info[i].load % 10, info[i].wait,
-			info[i].cpu_time / 60, info[i].cpu_time % 60);
-
-		info[i].vmem /= 1024;
-
-		if (info[i].vmem < 1000) {
-			ipart = info[i].vmem;
-			fpart = 0;
-			unit = 'K';
-		}
-		else {
-			ipart = info[i].vmem / 1024;
-			fpart = ((info[i].vmem % 1024) * 100) / 1024;
-			fpart = ((fpart % 10 >= 5) ? fpart + 10 : fpart) / 10;
-			unit = 'M';
-
-			if (fpart >= 10) {
-				++ipart;
-				fpart = 0;
-			}
-
-			if (ipart >= 1000) {
-				fpart = ((ipart % 1024) * 100) / 1024;
-				fpart = ((fpart % 10 >= 5) ? fpart + 10 : fpart) / 10;
-				ipart /= 1024;
-				unit = 'G';
-			}
-
-			if (fpart >= 10) {
-				++ipart;
-				fpart = 0;
-			}
-		}
-
-		if (fpart)
-			printf(" %3u.%1u %c", ipart, fpart, unit);
-		else
-			printf("  %4u %c", ipart, unit);
-
-		printf("  %-64s\n", info[i].name);
 	}
-
-	free(info);
-	return EOK;
-}
-
-
-static int psh_ps(char *arg)
-{
-	threadinfo_t *info;
-	int tcnt, i, j, n = 32;
-	unsigned ipart, fpart;
-	char unit;
-
-	if ((info = malloc(n * sizeof(threadinfo_t))) == NULL) {
-		printf("ps: out of memory\n");
-		return -ENOMEM;
+	else {
+		printf("%9s %9s %4s  %5s %5s %12s %6s %7s  %s\n", "PID", "PPID", "PRI", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "CMD");
 	}
-
-	while ((tcnt = threadsinfo(n, info)) >= n) {
-		n *= 2;
-		if ((info = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
-			printf("ps: out of memory\n");
-			return -ENOMEM;
-		}
-	}
-
-	qsort(info, tcnt, sizeof(threadinfo_t), psh_ps_cmp_pid);
-
-	printf("%9s %9s %4s  %5s %5s %12s %6s %7s  THR  %s\n", "PID", "PPID", "PRI", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "CMD");
 
 	for (i = 0; i < tcnt; i = j) {
-		for (j = i+1; j < tcnt && info[j].pid == info[i].pid; ++j) {
-			info[i].load += info[j].load;
-			info[i].cpu_time += info[j].cpu_time;
-			info[i].priority = min(info[i].priority, info[j].priority);
-			info[i].state = min(info[i].state, info[j].state);
-			info[i].wait = max(info[i].wait, info[j].wait);
+		j = i+1;
+		if (collapse_threads) {
+			for (; j < tcnt && info[j].pid == info[i].pid; ++j) {
+				info[i].load += info[j].load;
+				info[i].cpu_time += info[j].cpu_time;
+				info[i].priority = min(info[i].priority, info[j].priority);
+				info[i].state = min(info[i].state, info[j].state);
+				info[i].wait = max(info[i].wait, info[j].wait);
+			}
 		}
 
 		if (!info[i].state)
@@ -641,8 +582,10 @@ static int psh_ps(char *arg)
 		else
 			printf("  %4u %c", ipart, unit);
 
-		printf("  %3d", j-i);
-		printf("  %-64s\033[0m\n", info[i].name);
+		if (collapse_threads)
+			printf("  %3d", j-i);
+
+		printf("  %s\033[0m\n", info[i].name);
 	}
 
 	free(info);
@@ -850,9 +793,6 @@ void psh_run(void)
 		else if (!strcmp(cmd, "ps"))
 			psh_ps(cmd + 3);
 
-		else if (!strcmp(cmd, "ts"))
-			psh_ps(cmd + 3);
-
 		else if (!strcmp(cmd, "cat"))
 			psh_cat(cmd + 4);
 
@@ -1036,8 +976,6 @@ int main(int argc, char **argv)
 			psh_mem(args);
 		else if (!strcmp(base, "ps"))
 			psh_ps(args);
-		else if (!strcmp(base, "ts"))
-			psh_ts(args);
 		else if (!strcmp(base, "perf"))
 			psh_perf(args);
 		else if (!strcmp(base, "mount"))
