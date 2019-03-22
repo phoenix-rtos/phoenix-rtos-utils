@@ -648,7 +648,8 @@ int psh_runfile(char *cmd)
 	volatile int exerr = EOK;
 	int pid;
 	int argc = 0;
-	char **argv = NULL, **argv_re;
+	char **argv = malloc(sizeof(char *)), **argv_re;
+	int bg = 0;
 
 	char *arg = cmd;
 	unsigned int len;
@@ -664,6 +665,11 @@ int psh_runfile(char *cmd)
 		arg += len + 1;
 	}
 
+	if (argc > 1 && !strcmp(argv[argc-1], "&")) {
+		--argc;
+		bg = 1;
+	}
+
 	argv[argc] = NULL;
 
 	if ((pid = vfork()) < 0) {
@@ -674,8 +680,9 @@ int psh_runfile(char *cmd)
 		exit(exerr = execve(cmd, argv, NULL));
 	}
 
+	free(argv);
 	if (exerr == EOK)
-		return wait(0);
+		return bg ? EOK : wait(0);
 
 	if (exerr == -ENOMEM)
 		printf("psh: not enough memory to exec\n");
