@@ -2,6 +2,7 @@
 #include <sys/threads.h>
 #include <errno.h>
 #include <stdio.h>
+#include <arpa/inet.h>
 #include <usbclient.h>
 
 /* Endpoints configuration */
@@ -151,6 +152,16 @@ static usbclient_config_t config = {
 	.descriptors_head = &device_el
 };
 
+/* SDP command */
+typedef struct _sdp_command {
+	uint16_t type;
+	uint32_t address;
+	uint8_t format;
+	uint32_t data_count;
+	uint32_t data;
+	uint8_t _reserved;
+} __attribute__((packed)) sdp_command_t;
+
 #define MAX_RECV_DATA (0x1000)
 
 extern volatile uint8_t* sprint_buf;
@@ -161,6 +172,67 @@ do { \
 		sprint_buf[0] = 0; \
 	} \
 } while(0);
+
+#define print_buffer(buffer, size) \
+do { \
+	for (int i = 0; (i < size) && (i < MAX_RECV_DATA); i++) { \
+		printf("%02x ", recv_data[i]); \
+	} \
+	printf("\n"); \
+} while(0);
+
+enum {
+	HID_REPORT_SDP_COMMAND = 1,
+	HID_REPORT_SDP_COMMAND_DATA,
+	HID_REPORT_HAB_SECURITY,
+	HID_REPORT_SDP_RESPONSE_DATA,
+};
+
+static sdp_command_t command;
+
+void print_sdp_command(sdp_command_t *cmd) {
+	printf("SDP command\n    type: 0x%04x\n    address: 0x%08x\n    format: 0x%02x\n    data_count: %d\n    data: 0x%08x\n",
+			cmd->type,
+			cmd->address,
+			cmd->format,
+			cmd->data_count,
+			cmd->data);
+}
+
+void decode_sdp_command(sdp_command_t *cmd, uint8_t *data, uint32_t len)
+{
+	cmd->type = ntohs(*((uint16_t*)data));
+	data += 2;
+	cmd->address = ntohl(*((uint32_t*)data));
+	data += 4;
+	cmd->format = *data;
+	data += 1;
+	cmd->data_count = ntohl(*((uint32_t*)data));
+	data += 4;
+	cmd->_reserved = *data;
+}
+
+int decode_incoming_report(uint8_t *data, uint32_t len)
+{
+	if (len <= 1)
+		return -1;
+
+	const uint8_t report_type = data[0];
+	switch (report_type){
+		case HID_REPORT_SDP_COMMAND:
+			for(int i = 0; i < len; i++) printf("%02x ", data[i]);
+			printf("\n");
+			decode_sdp_command(&command, data + 1, len - 1);
+			return report_type;
+		case HID_REPORT_SDP_COMMAND_DATA:
+			return report_type;
+		default:
+			printf("Invalid report type (0x%02x)\n", report_type);
+			break;
+	}
+
+	return -1;
+}
 
 int main(int argc, char **argv)
 {
@@ -174,16 +246,26 @@ int main(int argc, char **argv)
 	}
 	printf("Initialized USB library\n");
 
-	while(1) {
-		print_msg();
-		printf("receive data...\n");
-		int result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
-		printf("receive result: %d\n", result);
-		//for (int i = 0; (i < result) && i < MAX_RECV_DATA; i++) {
-		//	printf("%02x ", recv_data[i]);
-		//}
-		//printf("\n");
+	/* Receive command */
+	result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+	if (decode_incoming_report(recv_data, result) != HID_REPORT_SDP_COMMAND) {
+		printf("Did not receive command. Exiting...\n");
+		return -1;
+	}
+	print_sdp_command(&command);
+
+	/* Read modules */
+	uint32_t read_data = 0;
+	printf("Reading module\n");
+	while (read_data < command.data_count) {
+		/* Receive command */
+		result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+		decode_incoming_report(recv_data, result);
+		//printf("Received: %d\n", result);
+		read_data += result - 1; /* substract 1 byte for report ID */
+		//print_buffer(recv_data, 16);
 	};
+	printf("\nFinished reading module\n");
 
 	// Cleanup all USB related data
 	usbclient_destroy();
