@@ -188,15 +188,39 @@ enum {
 	HID_REPORT_SDP_RESPONSE_DATA,
 };
 
+enum {
+	SDP_CMD_READ_REG = 0x0101,
+	SDP_CMD_WRITE_REG = 0x0202,
+	SDP_CMD_WRITE_FILE = 0x0404,
+	SDP_CMD_ERR_STATUS = 0x0505,
+	SDP_CMD_DCD_WRITE = 0x0a0a,
+	SDP_CMD_JMP_ADDR = 0x0b0b,
+	SDP_CMD_SKIP_DCD_HEADER = 0x0c0c
+};
+
 static sdp_command_t command;
 
-void print_sdp_command(sdp_command_t *cmd) {
+void print_sdp_command(sdp_command_t *cmd)
+{
 	printf("SDP command\n    type: 0x%04x\n    address: 0x%08x\n    format: 0x%02x\n    data_count: %d\n    data: 0x%08x\n",
 			cmd->type,
 			cmd->address,
 			cmd->format,
 			cmd->data_count,
 			cmd->data);
+}
+
+int send_hab_security(void)
+{
+	//const uint8_t send_data[] = { HID_REPORT_HAB_SECURITY, 0x12, 0x34, 0x34, 0x12 };
+	const uint8_t send_data[] = { HID_REPORT_HAB_SECURITY, 0x56, 0x78, 0x78, 0x56 };
+	return usbclient_send_data(&config.endpoint_list.endpoints[1], send_data, sizeof(send_data));
+}
+
+int send_complete_status(void)
+{
+	const uint8_t send_data[] = { HID_REPORT_SDP_RESPONSE_DATA, 0x88, 0x88, 0x88, 0x88 };
+	return usbclient_send_data(&config.endpoint_list.endpoints[1], send_data, sizeof(send_data));
 }
 
 void decode_sdp_command(sdp_command_t *cmd, uint8_t *data, uint32_t len)
@@ -220,8 +244,6 @@ int decode_incoming_report(uint8_t *data, uint32_t len)
 	const uint8_t report_type = data[0];
 	switch (report_type){
 		case HID_REPORT_SDP_COMMAND:
-			for(int i = 0; i < len; i++) printf("%02x ", data[i]);
-			printf("\n");
 			decode_sdp_command(&command, data + 1, len - 1);
 			return report_type;
 		case HID_REPORT_SDP_COMMAND_DATA:
@@ -233,6 +255,7 @@ int decode_incoming_report(uint8_t *data, uint32_t len)
 
 	return -1;
 }
+#define DISABLE_REPORT_3_4 1
 
 int main(int argc, char **argv)
 {
@@ -246,26 +269,35 @@ int main(int argc, char **argv)
 	}
 	printf("Initialized USB library\n");
 
-	/* Receive command */
-	result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
-	if (decode_incoming_report(recv_data, result) != HID_REPORT_SDP_COMMAND) {
-		printf("Did not receive command. Exiting...\n");
-		return -1;
-	}
-	print_sdp_command(&command);
-
-	/* Read modules */
-	uint32_t read_data = 0;
-	printf("Reading module\n");
-	while (read_data < command.data_count) {
+	do
+	{
 		/* Receive command */
 		result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
-		decode_incoming_report(recv_data, result);
-		//printf("Received: %d\n", result);
-		read_data += result - 1; /* substract 1 byte for report ID */
-		//print_buffer(recv_data, 16);
-	};
-	printf("\nFinished reading module\n");
+		if (decode_incoming_report(recv_data, result) != HID_REPORT_SDP_COMMAND ||
+				command.type != SDP_CMD_WRITE_FILE) {
+			printf("Did not receive proper command. Exiting...\n");
+			return -1;
+		}
+		print_sdp_command(&command);
+
+		/* Read modules */
+		uint32_t read_data = 0;
+		printf("Reading module\n");
+		while (read_data < command.data_count) {
+			/* Receive command */
+			result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+			decode_incoming_report(recv_data, result);
+			read_data += result - 1; /* substract 1 byte for report ID */
+		};
+		printf("Finished reading module\n");
+
+#ifndef DISABLE_REPORT_3_4
+		/* Response HAB security */
+		send_hab_security();
+		/* Response complete status */
+		send_complete_status();
+#endif
+	} while (1);
 
 	// Cleanup all USB related data
 	usbclient_destroy();
