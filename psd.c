@@ -151,7 +151,7 @@ static usbclient_config_t config = {
 	.descriptors_head = &device_el
 };
 
-#define MAX_RECV_DATA (1024)
+#define MAX_RECV_DATA (0x1000)
 
 extern volatile uint8_t* sprint_buf;
 #define print_msg() \
@@ -172,12 +172,13 @@ int main(int argc, char **argv)
 	if((result = usbclient_init(&config)) != EOK) {
 		printf("Couldn't initialize USB library (%d)\n", result);
 	}
+	printf("Initialized USB library\n");
 
 	while(1) {
 		print_msg();
-		//printf("receive data...\n");
-		//int result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
-		//printf("receive result: %d\n", result);
+		printf("receive data...\n");
+		int result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+		printf("receive result: %d\n", result);
 		//for (int i = 0; (i < result) && i < MAX_RECV_DATA; i++) {
 		//	printf("%02x ", recv_data[i]);
 		//}
