@@ -68,26 +68,40 @@ static char *psh_nextString(char *buff, unsigned int *size)
 static int psh_readln(char *line, int size)
 {
 	int count = 0;
+	int err;
 	char c;
 
 	for (;;) {
-		read(0, &c, 1);
+		err = read(0, &c, 1);
 
-		if (c == 0) /* EOF - exit */
+		if (err == 0) /* EOF - exit */
 			exit(EXIT_SUCCESS);
-
-		if (!psh_isAcceptable(c))
+		if (err < 0) {
+			//perror("read");	//kernel BUG: after fork() every second call gets EBADF
 			continue;
-
-		/* Check, if line has maximum size. */
-		if (count >= size - 1 && c != 0x7f && !psh_isNewline(c))
-			continue;
+		}
 
 		if (psh_isNewline(c))
 			break;
 
-		line[count++] = c;
+		if (c == 0x7f || c == 8) {
+			if (count > 0)
+				--count;
+			continue;
+		}
+
+		if (!psh_isAcceptable(c)) {
+			printf("got char %d\n", c);
+			continue;
+		}
+
+		/* Check, if line has maximum size. */
+		if (++count < size)
+			line[count - 1] = c;
 	}
+
+	if (count >= size)
+		count = size - 1;
 
 	memset(&line[count], '\0', size - count);
 
