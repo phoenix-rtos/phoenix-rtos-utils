@@ -4,12 +4,15 @@
 #include <stdio.h>
 #include <arpa/inet.h>
 #include <usbclient.h>
-
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #define MAX_REPORT (128)
 #define MAX_STRING (128)
 #define MAX_RECV_DATA (0x1000)
 #define MAX_MODS (8)
+#define INIT_PATH "/init"
 /* Disable sending report 3 and 4 in response */
 #define DISABLE_REPORT_3_4 1
 
@@ -376,7 +379,6 @@ int receive_content(mod_t *mod)
 
 int main(int argc, char **argv)
 {
-	uint8_t recv_data[MAX_RECV_DATA] = { 0 };
 	printf("Started psd\n");
 
 	/* Initialize USB library */
@@ -387,7 +389,6 @@ int main(int argc, char **argv)
 	printf("Initialized USB library\n");
 
 	uint32_t modn = 0;
-	int clean_exit = 0;
 	while (1) {
 		if (modn >= MAX_MODS) {
 			printf("Maximum modules number reached (%d). Stopping USB\n", MAX_MODS);
@@ -419,9 +420,51 @@ int main(int argc, char **argv)
 	usbclient_destroy();
 
 	/* Write data to flash */
+	/* TODO: switch to raw flash writes instead of using filesystem */
 	if (result == 1) {
+		if (mkdir("/init", 0777) < 0) {
+			printf("Couldn't create directory\n");
+			return -1;
+		}
 
+		for(int i = 0; i < modn; i++) {
+			printf("Writing module (%d/%d)\n", i + 1, modn);
+			char path[MAX_STRING] = { INIT_PATH"/" };
+			strcat(path, mods[i].name + 1);
+			FILE* file = fopen(path, "w");
+			fwrite(mods[i].data, 1, mods[i].size, file);
+			fclose(file);
+		}
+
+		/* Execute nandtool module */
+		/* It is expected that only one module has X in name and it's nandtool */
+		/* This solution will be replaced with raw flash writes */
+		char *arg_tok;
+		char *argv[16] = { 0 };
+		int argc;
+		for (int i = 0; i < modn; i++) {
+			if(mods[i].name[0] == 'X') {
+				char path[MAX_STRING] = { INIT_PATH"/" };
+				argc = 1;
+				arg_tok = strtok(mods[i].args, ",");
+
+				while (arg_tok != NULL && argc < 15){
+					argv[argc] = arg_tok;
+					arg_tok = strtok(NULL, ",");
+					argc++;
+				}
+				argv[argc] = NULL;
+				strcat(path, mods[i].name + 1);
+
+				argv[0] = path;
+				if(execve(path, argv, NULL) != EOK) {
+					printf("Failed to start %s\n", path);
+				}
+				break;
+			}
+		}
 	}
 
+	printf("Exiting\n");
 	return EOK;
 }
