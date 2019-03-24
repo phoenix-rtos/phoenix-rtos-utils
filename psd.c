@@ -9,6 +9,7 @@
 #define MAX_REPORT (128)
 #define MAX_STRING (128)
 #define MAX_RECV_DATA (0x1000)
+#define MAX_MODS (8)
 /* Disable sending report 3 and 4 in response */
 #define DISABLE_REPORT_3_4 1
 
@@ -25,7 +26,7 @@ do { \
 #define print_buffer(buffer, size) \
 do { \
 	for (int i = 0; (i < size) && (i < MAX_RECV_DATA); i++) { \
-		printf("%02x ", recv_data[i]); \
+		printf("%02x ", buffer[i]); \
 	} \
 	printf("\n"); \
 } while(0);
@@ -202,10 +203,16 @@ enum {
 	SDP_CMD_SKIP_DCD_HEADER = 0x0c0c
 };
 
-/* Structure holding received data info */
-static sdp_command_t command;
+typedef struct _mod_t
+{
+	size_t size;
+	char name[MAX_STRING];
+	char args[MAX_STRING];
+	void *data;
+} mod_t;
+
 /* Array holding received data */
-static void* mods_data[MAX_MODS];
+static mod_t mods[MAX_MODS];
 
 void print_sdp_command(sdp_command_t *cmd)
 {
@@ -243,7 +250,7 @@ void decode_sdp_command(sdp_command_t *cmd, uint8_t *data, uint32_t len)
 	cmd->_reserved = *data;
 }
 
-int decode_incoming_report(uint8_t *data, uint32_t len)
+int decode_incoming_report(sdp_command_t *cmd, uint8_t *data, uint32_t len)
 {
 	if (len <= 1)
 		return -1;
@@ -251,7 +258,7 @@ int decode_incoming_report(uint8_t *data, uint32_t len)
 	const uint8_t report_type = data[0];
 	switch (report_type){
 		case HID_REPORT_SDP_COMMAND:
-			decode_sdp_command(&command, data + 1, len - 1);
+			decode_sdp_command(cmd, data + 1, len - 1);
 			return report_type;
 		case HID_REPORT_SDP_COMMAND_DATA:
 			return report_type;
@@ -263,38 +270,141 @@ int decode_incoming_report(uint8_t *data, uint32_t len)
 	return -1;
 }
 
+
+int receive_name(mod_t *mod)
+{
+	/* Structure holding received data info */
+	sdp_command_t command;
+	uint8_t recv_data[MAX_RECV_DATA] = { 0 };
+
+	/* Receive command */
+	int32_t result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+	if (decode_incoming_report(&command, recv_data, result) != HID_REPORT_SDP_COMMAND ||
+			command.type != SDP_CMD_WRITE_FILE) {
+		printf("Did not receive proper command. Exiting...\n");
+		return -1;
+	}
+
+	/* Command with size 0 finishes downloading */
+	if (command.data_count == 0) {
+		printf("Download finished\n");
+		return 1;
+	}
+
+	result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+	if (recv_data[0] == HID_REPORT_SDP_COMMAND_DATA) {
+		int to_copy = result - 1 > MAX_STRING ? MAX_STRING - 1 : result - 1;
+		memcpy(mod->name, recv_data + 1, to_copy);
+		mod->name[MAX_STRING - 1] = 0;
+	} else {
+		printf("name: Invalid report type (0x%02x)\n", recv_data[0]);
+		return -1;
+	}
+	printf("Receiving '%s'\n", mod->name);
+	return 0;
+}
+
+
+int receive_args(mod_t *mod)
+{
+	/* Structure holding received data info */
+	sdp_command_t command;
+	uint8_t recv_data[MAX_RECV_DATA] = { 0 };
+
+	/* Receive command */
+	int32_t result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+	if (decode_incoming_report(&command, recv_data, result) != HID_REPORT_SDP_COMMAND ||
+			command.type != SDP_CMD_WRITE_FILE) {
+		printf("Did not receive proper command. Exiting...\n");
+		return -1;
+	}
+
+	/* Do not expect second report */
+	if (command.data_count == 0) {
+		mod->args[0] = 0;
+		return 0;
+	}
+
+	result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+	if (recv_data[0] == HID_REPORT_SDP_COMMAND_DATA) {
+		int to_copy = result - 1 > MAX_STRING ? MAX_STRING - 1 : result - 1;
+		memcpy(mod->args, recv_data + 1, to_copy);
+		mod->args[MAX_STRING - 1] = 0;
+	} else {
+		printf("args: Invalid report type (0x%02x)\n", recv_data[0]);
+		return -1;
+	}
+	printf("Arguments '%s'\n", mod->args);
+	return 0;
+}
+
+
+int receive_content(mod_t *mod)
+{
+	/* Structure holding received data info */
+	sdp_command_t command;
+	uint8_t recv_data[MAX_RECV_DATA] = { 0 };
+	/* Receive command */
+	int32_t result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+	if (decode_incoming_report(&command, recv_data, result) != HID_REPORT_SDP_COMMAND ||
+			command.type != SDP_CMD_WRITE_FILE) {
+		printf("Did not receive proper command. Exiting...\n");
+		return -1;
+	}
+
+	mod->size = command.data_count;
+	/* Allocate memory for module - not portable */
+	mod->data = mmap(NULL, (mod->size + 0xfff) & ~0xfff, PROT_WRITE | PROT_READ, MAP_UNCACHED, OID_NULL, 0);
+
+	/* Read modules */
+	uint32_t read_data = 0;
+	printf("Reading module\n");
+	while (read_data < mod->size) {
+		/* Receive command */
+		result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+		if (recv_data[0] == HID_REPORT_SDP_COMMAND_DATA) {
+			memcpy(mod->data + read_data, recv_data + 1, result - 1);
+			read_data += result - 1; /* substract 1 byte for report ID */
+		} else {
+			printf("content: Invalid report type (0x%02x)\n", recv_data[0]);
+			return -1;
+		}
+	};
+	return 0;
+}
+
+
 int main(int argc, char **argv)
 {
 	uint8_t recv_data[MAX_RECV_DATA] = { 0 };
 	printf("Started psd\n");
 
-	// Initialize USB library
+	/* Initialize USB library */
 	int32_t result = 0;
 	if((result = usbclient_init(&config)) != EOK) {
 		printf("Couldn't initialize USB library (%d)\n", result);
 	}
 	printf("Initialized USB library\n");
 
-	do
-	{
-		/* Receive command */
-		result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
-		if (decode_incoming_report(recv_data, result) != HID_REPORT_SDP_COMMAND ||
-				command.type != SDP_CMD_WRITE_FILE) {
-			printf("Did not receive proper command. Exiting...\n");
-			return -1;
+	uint32_t modn = 0;
+	int clean_exit = 0;
+	while (1) {
+		if (modn >= MAX_MODS) {
+			printf("Maximum modules number reached (%d). Stopping USB\n", MAX_MODS);
+			break;
 		}
-		print_sdp_command(&command);
 
-		/* Read modules */
-		uint32_t read_data = 0;
-		printf("Reading module\n");
-		while (read_data < command.data_count) {
-			/* Receive command */
-			result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
-			decode_incoming_report(recv_data, result);
-			read_data += result - 1; /* substract 1 byte for report ID */
-		};
+		/* Returns 1 when received finish command */
+		if ((result = receive_name(&mods[modn])) != 0) {
+			break;
+		}
+		if ((result = receive_args(&mods[modn])) != 0) {
+			break;
+		}
+		if ((result = receive_content(&mods[modn++])) != 0) {
+			break;
+		}
+
 		printf("Finished reading module\n");
 
 #ifndef DISABLE_REPORT_3_4
@@ -303,10 +413,15 @@ int main(int argc, char **argv)
 		/* Response complete status */
 		send_complete_status();
 #endif
-	} while (1);
+	}
 
-	// Cleanup all USB related data
+	/* Cleanup all USB related data */
 	usbclient_destroy();
+
+	/* Write data to flash */
+	if (result == 1) {
+
+	}
 
 	return EOK;
 }
