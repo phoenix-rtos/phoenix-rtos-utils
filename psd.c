@@ -5,6 +5,31 @@
 #include <arpa/inet.h>
 #include <usbclient.h>
 
+
+#define MAX_REPORT (128)
+#define MAX_STRING (128)
+#define MAX_RECV_DATA (0x1000)
+/* Disable sending report 3 and 4 in response */
+#define DISABLE_REPORT_3_4 1
+
+/* Debug print buffer */
+extern volatile uint8_t* sprint_buf;
+#define print_msg() \
+do { \
+	if (sprint_buf[0]) { \
+		printf("%s", sprint_buf + 1); \
+		sprint_buf[0] = 0; \
+	} \
+} while(0);
+
+#define print_buffer(buffer, size) \
+do { \
+	for (int i = 0; (i < size) && (i < MAX_RECV_DATA); i++) { \
+		printf("%02x ", recv_data[i]); \
+	} \
+	printf("\n"); \
+} while(0);
+
 /* Endpoints configuration */
 
 /* Descriptors configuration */
@@ -19,7 +44,6 @@ typedef struct _usbclient_descriptor_hid_t {
 	uint16_t	desc_len0;		/* mandatory descriptor length */
 } __attribute__((packed)) usbclient_descriptor_hid_t;
 
-#define MAX_REPORT (128)
 /* HID report descriptor */
 typedef struct _usbclient_descriptor_hid_report_t {
 	uint8_t	len;
@@ -27,7 +51,6 @@ typedef struct _usbclient_descriptor_hid_report_t {
 	uint8_t	report_data[MAX_REPORT];
 } __attribute__((packed)) usbclient_descriptor_hid_report_t;
 
-#define MAX_STRING (128)
 /* String descriptor */
 typedef struct _usbclient_descriptor_string_t {
 	uint8_t	len;
@@ -162,25 +185,6 @@ typedef struct _sdp_command {
 	uint8_t _reserved;
 } __attribute__((packed)) sdp_command_t;
 
-#define MAX_RECV_DATA (0x1000)
-
-extern volatile uint8_t* sprint_buf;
-#define print_msg() \
-do { \
-	if (sprint_buf[0]) { \
-		printf("%s", sprint_buf + 1); \
-		sprint_buf[0] = 0; \
-	} \
-} while(0);
-
-#define print_buffer(buffer, size) \
-do { \
-	for (int i = 0; (i < size) && (i < MAX_RECV_DATA); i++) { \
-		printf("%02x ", recv_data[i]); \
-	} \
-	printf("\n"); \
-} while(0);
-
 enum {
 	HID_REPORT_SDP_COMMAND = 1,
 	HID_REPORT_SDP_COMMAND_DATA,
@@ -198,7 +202,10 @@ enum {
 	SDP_CMD_SKIP_DCD_HEADER = 0x0c0c
 };
 
+/* Structure holding received data info */
 static sdp_command_t command;
+/* Array holding received data */
+static void* mods_data[MAX_MODS];
 
 void print_sdp_command(sdp_command_t *cmd)
 {
@@ -255,7 +262,6 @@ int decode_incoming_report(uint8_t *data, uint32_t len)
 
 	return -1;
 }
-#define DISABLE_REPORT_3_4 1
 
 int main(int argc, char **argv)
 {
