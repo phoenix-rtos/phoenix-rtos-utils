@@ -62,8 +62,8 @@ typedef struct _usbclient_descriptor_string_t {
 	uint8_t string[MAX_STRING];
 } __attribute__((packed)) usbclient_descriptor_string_t;
 
-usbclient_descriptor_device_t device_desc = {
-	.len = sizeof(usbclient_descriptor_device_t),
+usbclient_desc_dev_t device_desc = {
+	.len = sizeof(usbclient_desc_dev_t),
 	.desc_type = USBCLIENT_DESC_TYPE_DEV,
 	.bcd_usb = 0x200,
 	.dev_class = 0,
@@ -79,13 +79,13 @@ usbclient_descriptor_device_t device_desc = {
 	.num_conf = 1
 };
 
-usbclient_descriptor_configuration_t config_desc = {
+usbclient_desc_conf_t config_desc = {
 	.len = 9,
 	.desc_type = USBCLIENT_DESC_TYPE_CFG,
-	.total_len = sizeof(usbclient_descriptor_configuration_t) +
-		sizeof(usbclient_descriptor_interface_t) +
+	.total_len = sizeof(usbclient_desc_conf_t) +
+		sizeof(usbclient_desc_intf_t) +
 		sizeof(usbclient_descriptor_hid_t) +
-		sizeof(usbclient_descriptor_endpoint_t),
+		sizeof(usbclient_desc_ep_t),
 	.num_intf = 1,
 	.conf_val = 1,
 	.conf_str = 1,
@@ -93,7 +93,7 @@ usbclient_descriptor_configuration_t config_desc = {
 	.max_pow = 10
 };
 
-usbclient_descriptor_interface_t interface_desc = {
+usbclient_desc_intf_t interface_desc = {
 	.len = 9,
 	.desc_type = USBCLIENT_DESC_TYPE_INTF,
 	.intf_num = 0,
@@ -130,7 +130,7 @@ usbclient_descriptor_hid_t hid_desc = {
 	.desc_len0 = 76
 };
 
-usbclient_descriptor_endpoint_t endpoint_desc = {
+usbclient_desc_ep_t endpoint_desc = {
 	.len = 7,
 	.desc_type = USBCLIENT_DESC_TYPE_ENDPT,
 	.endpt_addr = 0x81, /* direction IN */
@@ -139,8 +139,8 @@ usbclient_descriptor_endpoint_t endpoint_desc = {
 	.interval = 0x01
 };
 
-usbclient_descriptor_string_zero_t string_zero_desc = {
-	.len = sizeof(usbclient_descriptor_string_zero_t),
+usbclient_desc_str_zr_t string_zero_desc = {
+	.len = sizeof(usbclient_desc_str_zr_t),
 	.desc_type = USBCLIENT_DESC_TYPE_STR,
 	.w_langid0 = 0x0409 /* English */
 };
@@ -158,17 +158,17 @@ usbclient_descriptor_string_t string_prod_desc = {
 };
 
 
-usbclient_descriptor_list_t hid_report_el = { .size = 1, .descriptors = (usbclient_descriptor_generic_t*)&string_prod_desc, .next = NULL };
-usbclient_descriptor_list_t string_prod_el = { .size = 1, .descriptors = (usbclient_descriptor_generic_t*)&hid_report_desc, .next = &hid_report_el };
-usbclient_descriptor_list_t string_man_el = { .size = 1, .descriptors = (usbclient_descriptor_generic_t*)&string_man_desc, .next = &string_prod_el };
-usbclient_descriptor_list_t string_zero_el = { .size = 1, .descriptors = (usbclient_descriptor_generic_t*)&string_zero_desc, .next = &string_man_el };
-usbclient_descriptor_list_t endpoint_el = { .size = 1, .descriptors = (usbclient_descriptor_generic_t*)&endpoint_desc, .next = &string_zero_el };
-usbclient_descriptor_list_t hid_el = { .size = 1, .descriptors = (usbclient_descriptor_generic_t*)&hid_desc, .next = &endpoint_el };
-usbclient_descriptor_list_t interface_el = { .size = 1, .descriptors = (usbclient_descriptor_generic_t*)&interface_desc, .next = &hid_el };
-usbclient_descriptor_list_t config_el = { .size = 1, .descriptors = (usbclient_descriptor_generic_t*)&config_desc, .next = &interface_el };
-usbclient_descriptor_list_t device_el = { .size = 1, .descriptors = (usbclient_descriptor_generic_t*)&device_desc , .next = &config_el };
+usbclient_desc_list_t hid_report_el = { .size = 1, .descriptors = (usbclient_desc_gen_t*)&string_prod_desc, .next = NULL };
+usbclient_desc_list_t string_prod_el = { .size = 1, .descriptors = (usbclient_desc_gen_t*)&hid_report_desc, .next = &hid_report_el };
+usbclient_desc_list_t string_man_el = { .size = 1, .descriptors = (usbclient_desc_gen_t*)&string_man_desc, .next = &string_prod_el };
+usbclient_desc_list_t string_zero_el = { .size = 1, .descriptors = (usbclient_desc_gen_t*)&string_zero_desc, .next = &string_man_el };
+usbclient_desc_list_t endpoint_el = { .size = 1, .descriptors = (usbclient_desc_gen_t*)&endpoint_desc, .next = &string_zero_el };
+usbclient_desc_list_t hid_el = { .size = 1, .descriptors = (usbclient_desc_gen_t*)&hid_desc, .next = &endpoint_el };
+usbclient_desc_list_t interface_el = { .size = 1, .descriptors = (usbclient_desc_gen_t*)&interface_desc, .next = &hid_el };
+usbclient_desc_list_t config_el = { .size = 1, .descriptors = (usbclient_desc_gen_t*)&config_desc, .next = &interface_el };
+usbclient_desc_list_t device_el = { .size = 1, .descriptors = (usbclient_desc_gen_t*)&device_desc , .next = &config_el };
 
-static usbclient_config_t config = {
+static usbclient_conf_t config = {
 	.endpoint_list = {
 		.size = 2,
 		.endpoints = {
