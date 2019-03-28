@@ -231,13 +231,13 @@ int send_hab_security(void)
 {
 	//const uint8_t send_data[] = { HID_REPORT_HAB_SECURITY, 0x12, 0x34, 0x34, 0x12 };
 	const uint8_t send_data[] = { HID_REPORT_HAB_SECURITY, 0x56, 0x78, 0x78, 0x56 };
-	return usbclient_send_data(&config.endpoint_list.endpoints[1], send_data, sizeof(send_data));
+	return usbclient_send(&config.endpoint_list.endpoints[1], send_data, sizeof(send_data));
 }
 
 int send_complete_status(void)
 {
 	const uint8_t send_data[] = { HID_REPORT_SDP_RESPONSE_DATA, 0x88, 0x88, 0x88, 0x88 };
-	return usbclient_send_data(&config.endpoint_list.endpoints[1], send_data, sizeof(send_data));
+	return usbclient_send(&config.endpoint_list.endpoints[1], send_data, sizeof(send_data));
 }
 
 void decode_sdp_command(sdp_command_t *cmd, uint8_t *data, uint32_t len)
@@ -281,7 +281,7 @@ int receive_name(mod_t *mod)
 	uint8_t recv_data[MAX_RECV_DATA] = { 0 };
 
 	/* Receive command */
-	int32_t result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+	int32_t result = usbclient_receive(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
 	if (decode_incoming_report(&command, recv_data, result) != HID_REPORT_SDP_COMMAND ||
 			command.type != SDP_CMD_WRITE_FILE) {
 		printf("Did not receive proper command. Exiting...\n");
@@ -294,7 +294,7 @@ int receive_name(mod_t *mod)
 		return 1;
 	}
 
-	result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+	result = usbclient_receive(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
 	if (recv_data[0] == HID_REPORT_SDP_COMMAND_DATA) {
 		int to_copy = result - 1 > MAX_STRING ? MAX_STRING - 1 : result - 1;
 		memcpy(mod->name, recv_data + 1, to_copy);
@@ -315,7 +315,7 @@ int receive_args(mod_t *mod)
 	uint8_t recv_data[MAX_RECV_DATA] = { 0 };
 
 	/* Receive command */
-	int32_t result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+	int32_t result = usbclient_receive(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
 	if (decode_incoming_report(&command, recv_data, result) != HID_REPORT_SDP_COMMAND ||
 			command.type != SDP_CMD_WRITE_FILE) {
 		printf("Did not receive proper command. Exiting...\n");
@@ -328,7 +328,7 @@ int receive_args(mod_t *mod)
 		return 0;
 	}
 
-	result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+	result = usbclient_receive(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
 	if (recv_data[0] == HID_REPORT_SDP_COMMAND_DATA) {
 		int to_copy = result - 1 > MAX_STRING ? MAX_STRING - 1 : result - 1;
 		memcpy(mod->args, recv_data + 1, to_copy);
@@ -348,7 +348,7 @@ int receive_content(mod_t *mod)
 	sdp_command_t command;
 	uint8_t recv_data[MAX_RECV_DATA] = { 0 };
 	/* Receive command */
-	int32_t result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+	int32_t result = usbclient_receive(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
 	if (decode_incoming_report(&command, recv_data, result) != HID_REPORT_SDP_COMMAND ||
 			command.type != SDP_CMD_WRITE_FILE) {
 		printf("Did not receive proper command. Exiting...\n");
@@ -364,7 +364,7 @@ int receive_content(mod_t *mod)
 	printf("Reading module\n");
 	while (read_data < mod->size) {
 		/* Receive command */
-		result = usbclient_receive_data(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+		result = usbclient_receive(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
 		if (recv_data[0] == HID_REPORT_SDP_COMMAND_DATA) {
 			memcpy(mod->data + read_data, recv_data + 1, result - 1);
 			read_data += result - 1; /* substract 1 byte for report ID */
