@@ -1,3 +1,16 @@
+/*
+ * Phoenix-RTOS
+ *
+ * dummyfs - usb device controller driver
+ *
+ * Copyright 2019 Phoenix Systems
+ * Author: Bartosz Ciesla
+ *
+ * This file is part of Phoenix-RTOS.
+ *
+ * %LICENSE%
+ */
+
 #include <sys/mman.h>
 #include <sys/threads.h>
 #include <errno.h>
