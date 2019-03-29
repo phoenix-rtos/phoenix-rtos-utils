@@ -1,7 +1,7 @@
 /*
  * Phoenix-RTOS
  *
- * dummyfs - usb device controller driver
+ * psd - Serial Download Protocol client
  *
  * Copyright 2019 Phoenix Systems
  * Author: Bartosz Ciesla
