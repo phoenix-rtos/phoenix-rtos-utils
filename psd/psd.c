@@ -16,32 +16,44 @@
 #include <usbclient.h>
 #include <fcntl.h>
 
+struct {
+} psd;
 
-int psd_writeFile()
+
+int psd_readRegister(void)
+{
+}
+
+
+int psd_writeRegister(void)
+{
+}
+
+
+int psd_writeFile(void)
+{
+}
 
 
 int main(int argc, char **argv)
 {
 	printf("Initializing USB transport\n");
-	usbdev_init(&d);
+
+	hid_init(&psd.rf);
 
 	while (1) {
 		d->recv(0, dev);
 
 		switch (cmd.type) {
-			case SDP_READ_REG:
-				sdp_readReg(dev);
+			case SDP_READ_REGISTER:
+				psd_readReg();
 				break;
-			case SDP_WRITE_REG:
-				sdp_writeReg(dev);
+			case SDP_WRITE_REGISTER:
+				psd_writeReg();
 			case SDP_WRITE_FILE:
-				sdp_writeFile(dev);
-			case SDP_READ_FILE:
-				sdp_readFile(dev);
+				psd_writeFile();
 		}
 	}
-
-	usbdev_destroy();
 
 	return EOK;
 }

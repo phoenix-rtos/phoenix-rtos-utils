@@ -96,14 +96,14 @@ int hid_recv(int what, char *data, unsigned int len, char **outdata)
 		return -1;
 
 	if (!what) {
-		if (data[0] != HID_REPORT_SDP_COMMAND))
+		if (data[0] != 1))	/* HID report SDP CMD */
 			return -1;
 		cmd = &data[1];
 		cmd->type = ntohs(cmd->type);
 		cmd->address = ntohl(cmd->address);
 		cmd->data_count = ntohl(cmd->data_count);
 	}
-	else if (data[0] != HID_REPORT_SDP_COMMAND_DATA)
+	else if (data[0] != 2)		/* HID report SDP CMD DATA */
 		return -2;
 
 	*outdata = data + 1;
