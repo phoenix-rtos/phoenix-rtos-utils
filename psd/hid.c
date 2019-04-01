@@ -17,11 +17,13 @@
 #include <stdio.h>
 #include <usbclient.h>
 
+#include "sdp.h"
+
 
 struct {
 	u8 len;
 	u8 type;
-	u8 data[MAX_REPORT];
+	u8 data[128];
 } __attribute__((packed)) dhidreport = { 2 + 76, USBCLIENT_DESC_TYPE_HID_REPORT,
 
 	/* Raw HID report descriptor - compatibile with IMX6ULL SDP protocol */
@@ -36,7 +38,7 @@ struct {
 };
 
 
-usbclient_desc_ep_t dep { .len = 7, .desc_type = USBCLIENT_DESC_TYPE_ENDPT, .endpt_addr = 0x81, /* direction IN */
+usbclient_desc_ep_t dep = { .len = 7, .desc_type = USBCLIENT_DESC_TYPE_ENDPT, .endpt_addr = 0x81, /* direction IN */
 	.attr_bmp = 0x03, .max_pkt_sz = 64, .interval = 0x01
 };
 
@@ -44,7 +46,7 @@ usbclient_desc_ep_t dep { .len = 7, .desc_type = USBCLIENT_DESC_TYPE_ENDPT, .end
 /* HID descriptor */
 struct {
 	u8 bLength;
-	u8 bDescriptorType;
+	u8 bType;
 	u16 bcdHID;
 	u8 bCountryCode;
 	u8 bNumDescriptors;		/* number of descriptors (at least one) */
@@ -59,7 +61,7 @@ usbclient_desc_intf_t diface = { .len = 9, .desc_type = USBCLIENT_DESC_TYPE_INTF
 
 
 usbclient_desc_conf_t dconfig = { .len = 9, .desc_type = USBCLIENT_DESC_TYPE_CFG,
-	.total_len = sizeof(usbclient_desc_conf_t) + sizeof(usbclient_desc_intf_t) + sizeof(usbclient_descriptor_hid_t) + sizeof(usbclient_desc_ep_t),
+	.total_len = sizeof(usbclient_desc_conf_t) + sizeof(usbclient_desc_intf_t) + sizeof(dhid) + sizeof(usbclient_desc_ep_t),
 	.num_intf = 1, .conf_val = 1, .conf_str = 1, .attr_bmp = 0xc0, .max_pow = 10
 };
 
@@ -73,7 +75,7 @@ usbclient_desc_dev_t ddev = {
 };
 
 
-usbclient_desct_list_t dev, conf, iface, hid, ep, hidreport;
+usbclient_desc_list_t dev, conf, iface, hid, ep, hidreport;
 
 
 static usbclient_conf_t config = {
@@ -91,17 +93,18 @@ static usbclient_conf_t config = {
 int hid_recv(int what, char *data, unsigned int len, char **outdata)
 {
 	int res;
+//	sdp_cmd_t *cmd;
 
 	if ((res = usbclient_receive(&config.endpoint_list.endpoints[1], data, len - 1)) < 0)
 		return -1;
 
 	if (!what) {
-		if (data[0] != 1))	/* HID report SDP CMD */
+		if (data[0] != 1)	/* HID report SDP CMD */
 			return -1;
-		cmd = &data[1];
-		cmd->type = ntohs(cmd->type);
-		cmd->address = ntohl(cmd->address);
-		cmd->data_count = ntohl(cmd->data_count);
+		//cmd = (sdp_cmd_t *)&data[1];
+		//cmd->type = ntohs(cmd->type);
+		//cmd->address = ntohl(cmd->address);
+		//cmd->len = ntohl(cmd->data_count);
 	}
 	else if (data[0] != 2)		/* HID report SDP CMD DATA */
 		return -2;
@@ -116,29 +119,30 @@ int hid_init(int (**rf)(int, char *, unsigned int, char **))
 	int res;
 
 	dev.size = 1;
-	dev.descriptors = &ddev;;
+	dev.descriptors = (usbclient_desc_gen_t *)&ddev;;
 	dev.next = &conf;
 
 	conf.size = 1;
-	conf.descriptors = &dconf;
+	conf.descriptors = (usbclient_desc_gen_t *)&dconfig;
 	conf.next = &iface;
 
 	iface.size = 1;
-	iface.descriptors = &diface;
+	iface.descriptors = (usbclient_desc_gen_t *)&diface;
 	iface.next = &hid;
 
 	hid.size = 1;
-	hid.descriptors = &dhid;
-	hid.next = ep;
+	hid.descriptors = (usbclient_desc_gen_t *)&dhid;
+	hid.next = &ep;
 
 	ep.size = 1;
-	ep.desriptors = &dep;
+	ep.descriptors = (usbclient_desc_gen_t *)&dep;
 	ep.next = NULL;
 
 	if ((res = usbclient_init(&config)) != EOK) {
 		return res;
 	}
 
-	rf = hid_recv;
+	*rf = hid_recv;
+	return EOK;
 }
 
