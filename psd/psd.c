@@ -34,12 +34,13 @@ enum {
 typedef struct _psd_dev_t {
 	int type;
 	char name[MAX_NAME + 1];
-} psd_dev_t;
+} __attribute__((packed)) psd_dev_t;
 
 
 struct {
 	int (*rf)(int, char *, unsigned int, char **);
 	int (*sf)(int, const char *, unsigned int);
+	unsigned int currDev;
 	unsigned int devsn;
 	psd_dev_t devs[MAX_DEVS];
 } psd;
@@ -52,6 +53,7 @@ int psd_parseArgs(int argc, char **argv)
 	}
 
 	psd.devsn = 0;
+	psd.currDev = 0;
 	for (int i = 1; i < argc && psd.devsn < MAX_DEVS; i++) {
 		if (!strcmp("-f", argv[i])) {
 			memcpy(psd.devs[psd.devsn].name, argv[++i], MAX_NAME);
@@ -76,7 +78,7 @@ int psd_readRegister(sdp_cmd_t *cmd)
 	}
 
 	int offset = 0;
-	char* address = (char *)cmd->address;
+	char* address = cmd->address ? (char *)cmd->address : (char *)psd.devs;
 	int size = cmd->datasz * (cmd->format / 8); /* in readRegister datasz means register count not bytes */
 	buff[0] = 4;
 	while (offset < size) {
