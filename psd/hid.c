@@ -114,7 +114,21 @@ int hid_recv(int what, char *data, unsigned int len, char **outdata)
 }
 
 
-int hid_init(int (**rf)(int, char *, unsigned int, char **))
+int hid_send(int what, const char *data, unsigned int len)
+{
+	if (what == 3) {	/* HAB security configuration */
+		if (data[0] != 3 || len != 5)
+			return -1;
+	} else if (what == 4) {	/* SDP command response data */
+		if (data[0] != 4 || len > 65)
+			return -2;
+	}
+
+	return usbclient_send(&config.endpoint_list.endpoints[1], data, len);
+}
+
+
+int hid_init(int (**rf)(int, char *, unsigned int, char **), int (**sf)(int, const char *, unsigned int))
 {
 	int res;
 
@@ -143,6 +157,7 @@ int hid_init(int (**rf)(int, char *, unsigned int, char **))
 	}
 
 	*rf = hid_recv;
+	*sf = hid_send;
 	return EOK;
 }
 

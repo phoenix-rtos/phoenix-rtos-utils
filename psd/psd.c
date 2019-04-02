@@ -22,6 +22,7 @@
 
 struct {
 	int (*rf)(int, char *, unsigned int, char **);
+	int (*sf)(int, const char *, unsigned int);
 } psd;
 
 
