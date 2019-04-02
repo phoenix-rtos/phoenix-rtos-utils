@@ -53,8 +53,42 @@ int psd_readRegister(sdp_cmd_t *cmd)
 }
 
 
-int psd_writeRegister(void)
+int psd_writeRegister(sdp_cmd_t *cmd)
 {
+	int res;
+	char buff[BUF_SIZE] = { 3, 0x56, 0x78, 0x78, 0x56 };
+	if ((res = psd.sf(3, buff, 5)) < 0) {
+		return -1;
+	}
+
+	switch (cmd->format) {
+		case 8:
+			*((u8 *)cmd->address) = cmd->data & 0xff;
+			break;
+		case 16:
+			*((u16 *)cmd->address) = cmd->data & 0xffff;
+			break;
+		case 32:
+			*((u32 *)cmd->address) = cmd->data;
+			break;
+		default:
+			buff[1] = 0x12;
+			buff[2] = 0x34;
+			buff[3] = 0x34;
+			buff[4] = 0x12;
+			printf("Failed to write register contents\n");
+			return psd.sf(4, buff, BUF_SIZE);
+	}
+
+	buff[1] = 0x12;
+	buff[2] = 0x8a;
+	buff[3] = 0x8a;
+	buff[4] = 0x12;
+	if((res = psd.sf(4, buff, BUF_SIZE)) < 0) {
+		printf("Failed to send complete status\n");
+		return res;
+	}
+
 	return EOK;
 }
 
@@ -82,7 +116,7 @@ int main(int argc, char **argv)
 				psd_readRegister(cmd);
 				break;
 			case SDP_WRITE_REGISTER:
-				psd_writeRegister();
+				psd_writeRegister(cmd);
 			case SDP_WRITE_FILE:
 				psd_writeFile();
 		}
