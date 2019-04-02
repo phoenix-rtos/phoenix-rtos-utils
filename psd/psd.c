@@ -15,17 +15,56 @@
 #include <stdio.h>
 #include <usbclient.h>
 #include <fcntl.h>
+#include <string.h>
 
 #include "hid.h"
 #include "sdp.h"
 
 #define SEND_BUF_SIZE 65
 #define RECV_BUF_SIZE 1025
+#define MAX_DEVS 16
+#define MAX_NAME 128
+
+
+enum {
+	PSD_DEV_FLASH
+};
+
+
+typedef struct _psd_dev_t {
+	int type;
+	char name[MAX_NAME + 1];
+} psd_dev_t;
+
 
 struct {
 	int (*rf)(int, char *, unsigned int, char **);
 	int (*sf)(int, const char *, unsigned int);
+	unsigned int devsn;
+	psd_dev_t devs[MAX_DEVS];
 } psd;
+
+
+int psd_parseArgs(int argc, char **argv)
+{
+	if (argc < 2) {
+		return -1;
+	}
+
+	psd.devsn = 0;
+	for (int i = 1; i < argc && psd.devsn < MAX_DEVS; i++) {
+		if (!strcmp("-f", argv[i])) {
+			memcpy(psd.devs[psd.devsn].name, argv[++i], MAX_NAME);
+			psd.devs[psd.devsn].name[MAX_NAME] = '\0';
+			psd.devs[psd.devsn++].type = PSD_DEV_FLASH;
+		} else {
+			printf("Couldn't parse args '%s'\n", argv[i]);
+			return -1;
+		}
+	}
+
+	return EOK;
+}
 
 
 int psd_readRegister(sdp_cmd_t *cmd)
@@ -129,12 +168,17 @@ int psd_writeFile(sdp_cmd_t *cmd)
 
 int main(int argc, char **argv)
 {
+	if (psd_parseArgs(argc, argv))
+		return -1;
+
 	char data[1024];
 	sdp_cmd_t *cmd;
 
 	printf("Initializing USB transport\n");
-
-	hid_init(&psd.rf, &psd.sf);
+	if (hid_init(&psd.rf, &psd.sf)) {
+		printf("Couldn't initialize USB transport\n");
+		return -1;
+	}
 
 	while (1) {
 		psd.rf(0, (void *)data, sizeof(cmd) + 1, (void *)&cmd);
