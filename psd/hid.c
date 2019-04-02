@@ -95,7 +95,7 @@ int hid_recv(int what, char *data, unsigned int len, char **outdata)
 	int res;
 //	sdp_cmd_t *cmd;
 
-	if ((res = usbclient_receive(&config.endpoint_list.endpoints[1], data, len - 1)) < 0)
+	if ((res = usbclient_receive(&config.endpoint_list.endpoints[1], data, len)) < 0)
 		return -1;
 
 	if (!what) {

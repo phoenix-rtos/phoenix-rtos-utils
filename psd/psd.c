@@ -20,6 +20,7 @@
 #include "sdp.h"
 
 #define SEND_BUF_SIZE 65
+#define RECV_BUF_SIZE 1025
 
 struct {
 	int (*rf)(int, char *, unsigned int, char **);
@@ -93,8 +94,35 @@ int psd_writeRegister(sdp_cmd_t *cmd)
 }
 
 
-int psd_writeFile(void)
+int psd_writeFile(sdp_cmd_t *cmd)
 {
+	int res, n;
+	char buff[RECV_BUF_SIZE] = { 0 };
+	int offset = 0;
+	char *address = (char *)cmd->address;
+	char *outdata;
+	int size = cmd->datasz;
+
+	while (offset < size) {
+		n = (RECV_BUF_SIZE - 1 > size - offset) ? (size - offset) : (RECV_BUF_SIZE - 1);
+		if((res = psd.rf(1, buff, n, &outdata) < 0)) {
+			printf("Failed to receive file contents\n");
+			return -1;
+		}
+		memcpy(address + offset, outdata, res);
+		offset += n;
+	}
+
+	buff[0] = 4;
+	buff[1] = 0x88;
+	buff[2] = 0x88;
+	buff[3] = 0x88;
+	buff[4] = 0x88;
+	if((res = psd.sf(4, buff, 5)) < 0) {
+		printf("Failed to send write file status\n");
+		return res;
+	}
+
 	return EOK;
 }
 
@@ -119,7 +147,7 @@ int main(int argc, char **argv)
 				psd_writeRegister(cmd);
 				break;
 			case SDP_WRITE_FILE:
-				psd_writeFile();
+				psd_writeFile(cmd);
 				break;
 		}
 	}
