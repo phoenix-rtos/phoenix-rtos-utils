@@ -19,7 +19,7 @@
 #include "hid.h"
 #include "sdp.h"
 
-#define BUF_SIZE 65
+#define SEND_BUF_SIZE 65
 
 struct {
 	int (*rf)(int, char *, unsigned int, char **);
@@ -30,7 +30,7 @@ struct {
 int psd_readRegister(sdp_cmd_t *cmd)
 {
 	int res, n;
-	char buff[BUF_SIZE] = { 3, 0x56, 0x78, 0x78, 0x56 };
+	char buff[SEND_BUF_SIZE] = { 3, 0x56, 0x78, 0x78, 0x56 };
 	if ((res = psd.sf(3, buff, 5)) < 0) {
 		return -1;
 	}
@@ -40,7 +40,7 @@ int psd_readRegister(sdp_cmd_t *cmd)
 	int size = cmd->datasz * (cmd->format / 8); /* in readRegister datasz means register count not bytes */
 	buff[0] = 4;
 	while (offset < size) {
-		n = (BUF_SIZE - 1 > size - offset) ? (size - offset) : (BUF_SIZE - 1);
+		n = (SEND_BUF_SIZE - 1 > size - offset) ? (size - offset) : (SEND_BUF_SIZE - 1);
 		memcpy(buff + 1, address + offset, n);
 		offset += n;
 		if((res = psd.sf(4, buff, n)) < 0) {
@@ -56,7 +56,7 @@ int psd_readRegister(sdp_cmd_t *cmd)
 int psd_writeRegister(sdp_cmd_t *cmd)
 {
 	int res;
-	char buff[BUF_SIZE] = { 3, 0x56, 0x78, 0x78, 0x56 };
+	char buff[SEND_BUF_SIZE] = { 3, 0x56, 0x78, 0x78, 0x56 };
 	if ((res = psd.sf(3, buff, 5)) < 0) {
 		return -1;
 	}
@@ -77,14 +77,14 @@ int psd_writeRegister(sdp_cmd_t *cmd)
 			buff[3] = 0x34;
 			buff[4] = 0x12;
 			printf("Failed to write register contents\n");
-			return psd.sf(4, buff, BUF_SIZE);
+			return psd.sf(4, buff, SEND_BUF_SIZE);
 	}
 
 	buff[1] = 0x12;
 	buff[2] = 0x8a;
 	buff[3] = 0x8a;
 	buff[4] = 0x12;
-	if((res = psd.sf(4, buff, BUF_SIZE)) < 0) {
+	if((res = psd.sf(4, buff, SEND_BUF_SIZE)) < 0) {
 		printf("Failed to send complete status\n");
 		return res;
 	}
