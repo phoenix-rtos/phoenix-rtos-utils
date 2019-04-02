@@ -106,7 +106,7 @@ int main(int argc, char **argv)
 
 	printf("Initializing USB transport\n");
 
-	hid_init(&psd.rf);
+	hid_init(&psd.rf, &psd.sf);
 
 	while (1) {
 		psd.rf(0, (void *)data, sizeof(cmd) + 1, (void *)&cmd);
@@ -117,8 +117,10 @@ int main(int argc, char **argv)
 				break;
 			case SDP_WRITE_REGISTER:
 				psd_writeRegister(cmd);
+				break;
 			case SDP_WRITE_FILE:
 				psd_writeFile();
+				break;
 		}
 	}
 

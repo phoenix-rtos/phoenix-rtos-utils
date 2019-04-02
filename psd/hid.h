@@ -17,7 +17,7 @@
 #define _HID_H_
 
 
-extern int hid_init(int (**rf)(int, char *, unsigned int, char **));
+extern int hid_init(int (**rf)(int, char *, unsigned int, char **), int (**sf)(int, const char *, unsigned int));
 
 
 #endif
