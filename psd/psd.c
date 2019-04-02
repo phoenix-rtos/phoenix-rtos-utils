@@ -19,6 +19,7 @@
 #include "hid.h"
 #include "sdp.h"
 
+#define BUF_SIZE 65
 
 struct {
 	int (*rf)(int, char *, unsigned int, char **);
@@ -26,8 +27,27 @@ struct {
 } psd;
 
 
-int psd_readRegister(void)
+int psd_readRegister(sdp_cmd_t *cmd)
 {
+	int res, n;
+	char buff[BUF_SIZE] = { 3, 0x56, 0x78, 0x78, 0x56 };
+	if ((res = psd.sf(3, buff, 5)) < 0) {
+		return -1;
+	}
+
+	int offset = 0;
+	char* address = (char *)cmd->address;
+	buff[0] = 4;
+	while (offset < cmd->datasz) {
+		n = (BUF_SIZE - 1 > cmd->datasz - offset) ? (cmd->datasz - offset) : (BUF_SIZE - 1);
+		memcpy(buff + 1, address + offset, n);
+		offset += n;
+		if((res = psd.sf(4, buff, n)) < 0) {
+			printf("Failed to send image contents\n");
+			return res;
+		}
+	}
+
 	return EOK;
 }
 
@@ -58,7 +78,7 @@ int main(int argc, char **argv)
 
 		switch (cmd->type) {
 			case SDP_READ_REGISTER:
-				psd_readRegister();
+				psd_readRegister(cmd);
 				break;
 			case SDP_WRITE_REGISTER:
 				psd_writeRegister();
