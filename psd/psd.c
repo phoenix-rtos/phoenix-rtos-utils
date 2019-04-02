@@ -37,13 +37,14 @@ int psd_readRegister(sdp_cmd_t *cmd)
 
 	int offset = 0;
 	char* address = (char *)cmd->address;
+	int size = cmd->datasz * (cmd->format / 8); /* in readRegister datasz means register count not bytes */
 	buff[0] = 4;
-	while (offset < cmd->datasz) {
-		n = (BUF_SIZE - 1 > cmd->datasz - offset) ? (cmd->datasz - offset) : (BUF_SIZE - 1);
+	while (offset < size) {
+		n = (BUF_SIZE - 1 > size - offset) ? (size - offset) : (BUF_SIZE - 1);
 		memcpy(buff + 1, address + offset, n);
 		offset += n;
 		if((res = psd.sf(4, buff, n)) < 0) {
-			printf("Failed to send image contents\n");
+			printf("Failed to send register contents\n");
 			return res;
 		}
 	}
