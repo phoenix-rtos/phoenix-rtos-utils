@@ -103,25 +103,31 @@ int psd_writeRegister(sdp_cmd_t *cmd)
 		return -1;
 	}
 
-	switch (cmd->format) {
-		case 8:
-			*((u8 *)cmd->address) = cmd->data & 0xff;
-			break;
-		case 16:
-			*((u16 *)cmd->address) = cmd->data & 0xffff;
-			break;
-		case 32:
-			*((u32 *)cmd->address) = cmd->data;
-			break;
-		default:
-			buff[1] = 0x12;
-			buff[2] = 0x34;
-			buff[3] = 0x34;
-			buff[4] = 0x12;
-			printf("Failed to write register contents\n");
-			return psd.sf(4, buff, SEND_BUF_SIZE);
+	if (cmd->address) {
+		switch (cmd->format) {
+			case 8:
+				*((u8 *)cmd->address) = cmd->data & 0xff;
+				break;
+			case 16:
+				*((u16 *)cmd->address) = cmd->data & 0xffff;
+				break;
+			case 32:
+				*((u32 *)cmd->address) = cmd->data;
+				break;
+			default:
+				buff[0] = 4;
+				buff[1] = 0x12;
+				buff[2] = 0x34;
+				buff[3] = 0x34;
+				buff[4] = 0x12;
+				printf("Failed to write register contents\n");
+				return psd.sf(4, buff, SEND_BUF_SIZE);
+		}
+	} else {
+		psd.currDev = cmd->data % psd.devsn;
 	}
 
+	buff[0] = 4;
 	buff[1] = 0x12;
 	buff[2] = 0x8a;
 	buff[3] = 0x8a;
