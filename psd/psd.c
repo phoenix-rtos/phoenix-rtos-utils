@@ -43,6 +43,8 @@ struct {
 	unsigned int currDev;
 	unsigned int devsn;
 	psd_dev_t devs[MAX_DEVS];
+	FILE *f;
+	FILE *files[];
 } psd;
 
 
@@ -143,44 +145,55 @@ int psd_writeRegister(sdp_cmd_t *cmd)
 
 int psd_writeFile(sdp_cmd_t *cmd)
 {
-	int res, n;
-	char buff[RECV_BUF_SIZE] = { 0 };
-	int offset = 0;
-	char *address = (char *)cmd->address;
+	int res, err = 0;
+	offs_t offs, n, l;
+	char buff[1025];
 	char *outdata;
-	int size = cmd->datasz;
 
-	while (offset < size) {
-		n = (RECV_BUF_SIZE - 1 > size - offset) ? (size - offset) : (RECV_BUF_SIZE - 1);
-		if((res = psd.rf(1, buff, n, &outdata) < 0)) {
-			printf("Failed to receive file contents\n");
-			return -1;
+	if (fseek(psd.f, cmd->address, SEEK_SET) < 0)
+		err = -2;
+
+	for (offs = 0, n = 0; !err && (offs < cmd->datasz); offs += n) {
+		
+		if ((res = psd.rf(1, buff, sizeof(buff), &outdata) < 0)) {
+			err = -1;
+			break;
 		}
-		memcpy(address + offset, outdata, res);
-		offset += n;
+
+		n = min(cmd->datasz - offs, res);
+		for (l = 0; l < n;) {	
+			if ((res = fwrite(outdata + l, n, 1, psd.f)) < 0) {
+				err = -2;
+				break;
+			}
+			l += res;
+		}
 	}
 
-	buff[0] = 4;
-	buff[1] = 0x88;
-	buff[2] = 0x88;
-	buff[3] = 0x88;
-	buff[4] = 0x88;
-	if((res = psd.sf(4, buff, 5)) < 0) {
-		printf("Failed to send write file status\n");
-		return res;
+	if (!err) {
+		buff[0] = 4;
+		memset(buff, 0x88, 4);
+	}
+	else {
+		buff[0] = 4;
+		memset(buff, 0x88, 4);
 	}
 
-	return EOK;
+	/* Send write status */
+	if ((res = psd.sf(buff[0], buff, 5)) < 0)
+		err = -3;	
+
+	return err;
 }
 
 
 int main(int argc, char **argv)
 {
+	char data[11];
+	sdp_cmd_t *cmd;
+
 	if (psd_parseArgs(argc, argv))
 		return -1;
-
-	char data[1024];
-	sdp_cmd_t *cmd;
 
 	printf("Initializing USB transport\n");
 	if (hid_init(&psd.rf, &psd.sf)) {
