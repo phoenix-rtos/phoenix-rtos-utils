@@ -20,59 +20,20 @@
 #include "hid.h"
 #include "sdp.h"
 
-#define SEND_BUF_SIZE 65
-#define RECV_BUF_SIZE 1025
-#define MAX_DEVS 16
-#define MAX_NAME 128
-
-
-enum {
-	PSD_DEV_FLASH
-};
-
-
-typedef struct _psd_dev_t {
-	int type;
-	char name[MAX_NAME + 1];
-} __attribute__((packed)) psd_dev_t;
-
 
 struct {
 	int (*rf)(int, char *, unsigned int, char **);
 	int (*sf)(int, const char *, unsigned int);
-	unsigned int currDev;
-	unsigned int devsn;
-	psd_dev_t devs[MAX_DEVS];
+
+	unsigned int nfiles;
 	FILE *f;
 	FILE *files[];
 } psd;
 
 
-int psd_parseArgs(int argc, char **argv)
-{
-	if (argc < 2) {
-		return -1;
-	}
-
-	psd.devsn = 0;
-	psd.currDev = 0;
-	for (int i = 1; i < argc && psd.devsn < MAX_DEVS; i++) {
-		if (!strcmp("-f", argv[i])) {
-			memcpy(psd.devs[psd.devsn].name, argv[++i], MAX_NAME);
-			psd.devs[psd.devsn].name[MAX_NAME] = '\0';
-			psd.devs[psd.devsn++].type = PSD_DEV_FLASH;
-		} else {
-			printf("Couldn't parse args '%s'\n", argv[i]);
-			return -1;
-		}
-	}
-
-	return EOK;
-}
-
-
 int psd_readRegister(sdp_cmd_t *cmd)
 {
+#if 0
 	int res, n;
 	char buff[SEND_BUF_SIZE] = { 3, 0x56, 0x78, 0x78, 0x56 };
 	if ((res = psd.sf(3, buff, 5)) < 0) {
@@ -92,13 +53,14 @@ int psd_readRegister(sdp_cmd_t *cmd)
 			return res;
 		}
 	}
-
+#endif
 	return EOK;
 }
 
 
 int psd_writeRegister(sdp_cmd_t *cmd)
 {
+#if 0
 	int res;
 	char buff[SEND_BUF_SIZE] = { 3, 0x56, 0x78, 0x78, 0x56 };
 	if ((res = psd.sf(3, buff, 5)) < 0) {
@@ -138,7 +100,7 @@ int psd_writeRegister(sdp_cmd_t *cmd)
 		printf("Failed to send complete status\n");
 		return res;
 	}
-
+#endif
 	return EOK;
 }
 
@@ -154,12 +116,14 @@ int psd_writeFile(sdp_cmd_t *cmd)
 		err = -2;
 
 	for (offs = 0, n = 0; !err && (offs < cmd->datasz); offs += n) {
-		
+
+		/* Read data from serial device */		
 		if ((res = psd.rf(1, buff, sizeof(buff), &outdata) < 0)) {
 			err = -1;
 			break;
 		}
 
+		/* Write data to file */
 		n = min(cmd->datasz - offs, res);
 		for (l = 0; l < n;) {	
 			if ((res = fwrite(outdata + l, n, 1, psd.f)) < 0) {
@@ -170,6 +134,7 @@ int psd_writeFile(sdp_cmd_t *cmd)
 		}
 	}
 
+	/* Handle errors */
 	if (!err) {
 		buff[0] = 4;
 		memset(buff, 0x88, 4);
@@ -192,8 +157,14 @@ int main(int argc, char **argv)
 	char data[11];
 	sdp_cmd_t *cmd;
 
-	if (psd_parseArgs(argc, argv))
-		return -1;
+	/* Open files */
+	for (psd.nfiles = 1; psd.nfiles < argc; psd.nfiles++) {
+		if ((psd.files[psd.nfiles] = fopen(argv[psd.nfiles], "rwb")) == NULL) {
+			fprintf(stderr, "Can't open file '%s'!", argv[psd.nfiles]);
+			return -1;
+		}
+	}
+	psd.f = psd.files[0];
 
 	printf("Initializing USB transport\n");
 	if (hid_init(&psd.rf, &psd.sf)) {
