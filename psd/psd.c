@@ -20,6 +20,9 @@
 #include "hid.h"
 #include "sdp.h"
 
+#define SET_OPEN_HAB(b) (b)[0]=3;(b)[1]=0x56;(b)[2]=0x78;(b)[3]=0x78;(b)[4]=0x56;
+#define SET_CLOSED_HAB(b) (b)[0]=3;(b)[1]=0x12;(b)[2]=0x34;(b)[3]=0x34;(b)[4]=0x12;
+#define SET_COMPLETE(b) (b)[0]=4;(b)[1]=0x12;(b)[2]=0x8a;(b)[3]=0x8a;(b)[4]=0x12;
 
 struct {
 	int (*rf)(int, char *, unsigned int, char **);
@@ -58,50 +61,39 @@ int psd_readRegister(sdp_cmd_t *cmd)
 }
 
 
-int psd_writeRegister(sdp_cmd_t *cmd)
+int psd_dcdWrite(sdp_cmd_t *cmd)
 {
-#if 0
-	int res;
-	char buff[SEND_BUF_SIZE] = { 3, 0x56, 0x78, 0x78, 0x56 };
-	if ((res = psd.sf(3, buff, 5)) < 0) {
-		return -1;
+	int res, err = 0;
+	offs_t offs, n, l;
+	char buff[1025];
+	char *outdata;
+
+	/* Read DCD binary data */
+	if ((res = psd.rf(1, buff, sizeof(buff), &outdata) < 0)) {
+		err = -1;
 	}
 
-	if (cmd->address) {
-		switch (cmd->format) {
-			case 8:
-				*((u8 *)cmd->address) = cmd->data & 0xff;
-				break;
-			case 16:
-				*((u16 *)cmd->address) = cmd->data & 0xffff;
-				break;
-			case 32:
-				*((u32 *)cmd->address) = cmd->data;
-				break;
-			default:
-				buff[0] = 4;
-				buff[1] = 0x12;
-				buff[2] = 0x34;
-				buff[3] = 0x34;
-				buff[4] = 0x12;
-				printf("Failed to write register contents\n");
-				return psd.sf(4, buff, SEND_BUF_SIZE);
+	if (!err) {
+		/* Change file */
+		psd.f = psd.files[buff[1]];
+		/* Send HAB status */
+		SET_OPEN_HAB(buff);
+		if ((res = psd.sf(buff[0], buff, 5)) < 0) {
+			err = -2;
+		} else {
+			/* Send complete status */
+			SET_CLOSED_HAB(buff);
+			if ((res = psd.sf(buff[0], buff, 5)) < 0) {
+				err = -3;
+			}
 		}
 	} else {
-		psd.currDev = cmd->data % psd.devsn;
+		SET_COMPLETE(buff);
+		if ((res = psd.sf(buff[0], buff, 5)) < 0)
+			err = -4;
 	}
 
-	buff[0] = 4;
-	buff[1] = 0x12;
-	buff[2] = 0x8a;
-	buff[3] = 0x8a;
-	buff[4] = 0x12;
-	if((res = psd.sf(4, buff, SEND_BUF_SIZE)) < 0) {
-		printf("Failed to send complete status\n");
-		return res;
-	}
-#endif
-	return EOK;
+	return err;
 }
 
 
@@ -117,7 +109,7 @@ int psd_writeFile(sdp_cmd_t *cmd)
 
 	for (offs = 0, n = 0; !err && (offs < cmd->datasz); offs += n) {
 
-		/* Read data from serial device */		
+		/* Read data from serial device */
 		if ((res = psd.rf(1, buff, sizeof(buff), &outdata) < 0)) {
 			err = -1;
 			break;
@@ -125,7 +117,7 @@ int psd_writeFile(sdp_cmd_t *cmd)
 
 		/* Write data to file */
 		n = min(cmd->datasz - offs, res);
-		for (l = 0; l < n;) {	
+		for (l = 0; l < n;) {
 			if ((res = fwrite(outdata + l, n, 1, psd.f)) < 0) {
 				err = -2;
 				break;
@@ -137,16 +129,16 @@ int psd_writeFile(sdp_cmd_t *cmd)
 	/* Handle errors */
 	if (!err) {
 		buff[0] = 4;
-		memset(buff, 0x88, 4);
+		memset(buff + 1, 0x88, 4);
 	}
 	else {
 		buff[0] = 4;
-		memset(buff, 0x88, 4);
+		memset(buff + 1, 0x88, 4);
 	}
 
 	/* Send write status */
 	if ((res = psd.sf(buff[0], buff, 5)) < 0)
-		err = -3;	
+		err = -3;
 
 	return err;
 }
@@ -179,8 +171,8 @@ int main(int argc, char **argv)
 			case SDP_READ_REGISTER:
 				psd_readRegister(cmd);
 				break;
-			case SDP_WRITE_REGISTER:
-				psd_writeRegister(cmd);
+			case SDP_DCD_WRITE:
+				psd_dcdWrite(cmd);
 				break;
 			case SDP_WRITE_FILE:
 				psd_writeFile(cmd);
