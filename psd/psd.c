@@ -36,28 +36,38 @@ struct {
 
 int psd_readRegister(sdp_cmd_t *cmd)
 {
-#if 0
-	int res, n;
-	char buff[SEND_BUF_SIZE] = { 3, 0x56, 0x78, 0x78, 0x56 };
-	if ((res = psd.sf(3, buff, 5)) < 0) {
-		return -1;
+	int res, err = 0;
+	offs_t offs, n, l;
+	char buff[65];
+	char *outdata;
+
+	SET_OPEN_HAB(buff);
+	if ((res = psd.sf(buff[0], buff, 5)) < 0) {
+		err = -1;
 	}
 
-	int offset = 0;
-	char* address = cmd->address ? (char *)cmd->address : (char *)psd.devs;
-	int size = cmd->datasz * (cmd->format / 8); /* in readRegister datasz means register count not bytes */
-	buff[0] = 4;
-	while (offset < size) {
-		n = (SEND_BUF_SIZE - 1 > size - offset) ? (size - offset) : (SEND_BUF_SIZE - 1);
-		memcpy(buff + 1, address + offset, n);
-		offset += n;
-		if((res = psd.sf(4, buff, n)) < 0) {
-			printf("Failed to send register contents\n");
-			return res;
+	if (err || (fseek(psd.f, cmd->address, SEEK_SET) < 0))
+		err = -2;
+
+	for (offs = 0, n = 0; !err && (offs < cmd->datasz); offs += n) {
+
+		/* Read data from file */
+		n = min(cmd->datasz - offs, res);
+		for (l = 0; l < n;) {
+			if ((res = fread(buff, n, 1, psd.f)) < 0) {
+				err = -2;
+				break;
+			}
+			l += res;
+		}
+		/* Send data to serial device */
+		if ((res = psd.sf(1, buff, sizeof(buff)) < 0)) {
+			err = -1;
+			break;
 		}
 	}
-#endif
-	return EOK;
+
+	return err;
 }
 
 
