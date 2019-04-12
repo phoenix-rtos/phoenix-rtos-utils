@@ -34,12 +34,17 @@ struct {
 } psd;
 
 
+void usage(char *progname)
+{
+	printf("Usage: %s <device_1> [device_2] ... [device_n] \n", progname);
+}
+
+
 int psd_readRegister(sdp_cmd_t *cmd)
 {
 	int res, err = 0;
 	offs_t offs, n, l;
 	char buff[65];
-	char *outdata;
 
 	SET_OPEN_HAB(buff);
 	if ((res = psd.sf(buff[0], buff, 5)) < 0) {
@@ -74,7 +79,6 @@ int psd_readRegister(sdp_cmd_t *cmd)
 int psd_dcdWrite(sdp_cmd_t *cmd)
 {
 	int res, err = 0;
-	offs_t offs, n, l;
 	char buff[1025];
 	char *outdata;
 
@@ -85,7 +89,7 @@ int psd_dcdWrite(sdp_cmd_t *cmd)
 
 	if (!err) {
 		/* Change file */
-		psd.f = psd.files[buff[1]];
+		psd.f = psd.files[(int)buff[1]];
 		/* Send HAB status */
 		SET_OPEN_HAB(buff);
 		if ((res = psd.sf(buff[0], buff, 5)) < 0) {
@@ -157,12 +161,17 @@ int psd_writeFile(sdp_cmd_t *cmd)
 int main(int argc, char **argv)
 {
 	char data[11];
-	sdp_cmd_t *cmd;
+	sdp_cmd_t *pcmd = NULL;
+
+	if (argc < 2) {
+		usage(argv[0]);
+		return -1;
+	}
 
 	/* Open files */
 	for (psd.nfiles = 1; psd.nfiles < argc; psd.nfiles++) {
-		if ((psd.files[psd.nfiles] = fopen(argv[psd.nfiles], "rwb")) == NULL) {
-			fprintf(stderr, "Can't open file '%s'!", argv[psd.nfiles]);
+		if ((psd.files[psd.nfiles - 1] = fopen(argv[psd.nfiles], "r+")) == NULL) {
+			fprintf(stderr, "Can't open file '%s'! errno: (%d)", argv[psd.nfiles], errno);
 			return -1;
 		}
 	}
@@ -175,17 +184,20 @@ int main(int argc, char **argv)
 	}
 
 	while (1) {
-		psd.rf(0, (void *)data, sizeof(cmd) + 1, (void *)&cmd);
+		psd.rf(0, (void *)data, sizeof(*pcmd) + 1, (void **)&pcmd);
 
-		switch (cmd->type) {
+		switch (pcmd->type) {
 			case SDP_READ_REGISTER:
-				psd_readRegister(cmd);
+				psd_readRegister(pcmd);
 				break;
 			case SDP_DCD_WRITE:
-				psd_dcdWrite(cmd);
+				psd_dcdWrite(pcmd);
 				break;
 			case SDP_WRITE_FILE:
-				psd_writeFile(cmd);
+				psd_writeFile(pcmd);
+				break;
+			default:
+				printf("Unrecognized command (%d)\n", pcmd->type);
 				break;
 		}
 	}
