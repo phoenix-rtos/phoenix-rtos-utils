@@ -55,6 +55,14 @@ struct {
 } __attribute__((packed)) dhid = { 9, USBCLIENT_DESC_TYPE_HID, 0x0110, 0x0, 1, 0x22, 76 };
 
 
+/* String descriptor */
+typedef struct _usbclient_desc_str_t {
+	uint8_t	len;
+	uint8_t	desc_type;
+	uint8_t string[256];
+} __attribute__((packed)) usbclient_desc_str_t;
+
+
 usbclient_desc_intf_t diface = { .len = 9, .desc_type = USBCLIENT_DESC_TYPE_INTF, .intf_num = 0, .alt_set = 0,
 	.num_endpt = 1, .intf_class = 0x03, .intf_subclass = 0x00, .intf_prot = 0x00, .intf_str = 2
 };
@@ -75,7 +83,28 @@ usbclient_desc_dev_t ddev = {
 };
 
 
-usbclient_desc_list_t dev, conf, iface, hid, ep, hidreport;
+usbclient_desc_str_zr_t dstr0 = {
+	.len = sizeof(usbclient_desc_str_zr_t),
+	.desc_type = USBCLIENT_DESC_TYPE_STR,
+	.w_langid0 = 0x0409 /* English */
+};
+
+
+usbclient_desc_str_t dstrman = {
+	.len = 27 * 2 + 2,
+	.desc_type = USBCLIENT_DESC_TYPE_STR,
+	.string = { 'F', 0, 'r', 0, 'e', 0, 'e', 0, 's', 0, 'c', 0, 'a', 0, 'l', 0, 'e', 0, ' ', 0, 'S', 0, 'e', 0, 'm', 0, 'i', 0, 'c', 0, 'o', 0, 'n', 0, 'd', 0, 'u', 0, 'c', 0, 't', 0, 'o', 0, 'r', 0, ' ', 0, 'I', 0, 'n', 0, 'c', 0 }
+};
+
+
+usbclient_desc_str_t dstrprod = {
+	.len = 13 * 2 + 2,
+	.desc_type = USBCLIENT_DESC_TYPE_STR,
+	.string = { 'S', 0, 'E', 0, ' ', 0, 'B', 0, 'l', 0, 'a', 0, 'n', 0, 'k', 0, ' ', 0, '6', 0, 'U', 0, 'L', 0, 'L', 0 }
+};
+
+
+usbclient_desc_list_t dev, conf, iface, hid, ep, str0, strman, strprod, hidreport;
 
 
 static usbclient_conf_t config = {
@@ -150,7 +179,23 @@ int hid_init(int (**rf)(int, char *, unsigned int, char **), int (**sf)(int, con
 
 	ep.size = 1;
 	ep.descriptors = (usbclient_desc_gen_t *)&dep;
-	ep.next = NULL;
+	ep.next = &str0;
+
+	str0.size = 1;
+	str0.descriptors = (usbclient_desc_gen_t *)&dstr0;
+	str0.next = &strman;
+
+	strman.size = 1;
+	strman.descriptors = (usbclient_desc_gen_t *)&dstrman;
+	strman.next = &strprod;
+
+	strprod.size = 1;
+	strprod.descriptors = (usbclient_desc_gen_t *)&dstrprod;
+	strprod.next = &hidreport;
+
+	hidreport.size = 1;
+	hidreport.descriptors = (usbclient_desc_gen_t *)&dhidreport;
+	hidreport.next = NULL;
 
 	if ((res = usbclient_init(&config)) != EOK) {
 		return res;
