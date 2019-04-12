@@ -160,6 +160,9 @@ int psd_writeFile(sdp_cmd_t *cmd)
 
 int main(int argc, char **argv)
 {
+	/* Give flash driver time to start */
+	sleep(1);
+	printf("Started psd\n");
 	char data[11];
 	sdp_cmd_t *pcmd = NULL;
 
