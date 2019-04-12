@@ -30,7 +30,7 @@ struct {
 
 	unsigned int nfiles;
 	FILE *f;
-	FILE *files[];
+	FILE *files[16];
 } psd;
 
 
