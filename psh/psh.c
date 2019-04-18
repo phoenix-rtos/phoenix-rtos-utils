@@ -27,6 +27,7 @@
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <sys/reboot.h>
 
 #define PSH_SCRIPT_MAGIC ":{}:"
 
@@ -817,10 +818,8 @@ void psh_run(void)
 		else if (!strcmp(cmd, "exit"))
 			exit(EXIT_SUCCESS);
 
-		else if (!strcmp(cmd, "reboot")) {
-			priority(0);
-			for (;;);
-		}
+		else if (!strcmp(cmd, "reboot"))
+			reboot(PHOENIX_REBOOT_MAGIC);
 
 		else
 			printf("Unknown command!\n");
@@ -982,10 +981,8 @@ int main(int argc, char **argv)
 			psh_mount(argc - 1, argv + 1);
 		else if (!strcmp(base, "sync"))
 			psh_sync(argc - 1, argv + 1);
-		else if (!strcmp(base, "reboot")) {
-			priority(0);
-			for (;;) ;
-		}
+		else if (!strcmp(base, "reboot"))
+			reboot(PHOENIX_REBOOT_MAGIC);
 		else
 			printf("psh: %s: unknown command\n", argv[0]);
 	}
