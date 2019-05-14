@@ -17,6 +17,8 @@
 #include <stdio.h>
 #include <usbclient.h>
 
+#include <arpa/inet.h>
+
 #include "sdp.h"
 
 
@@ -122,23 +124,23 @@ static usbclient_conf_t config = {
 int hid_recv(int what, char *data, unsigned int len, char **outdata)
 {
 	int res;
-//	sdp_cmd_t *cmd;
+	sdp_cmd_t *cmd;
 
-	if ((res = usbclient_receive(&config.endpoint_list.endpoints[1], data, len)) < 0)
+	if ((res = usbclient_receive(&config.endpoint_list.endpoints[0], data, len)) < 0)
 		return -1;
 
 	if (!what) {
 		if (data[0] != 1)	/* HID report SDP CMD */
 			return -1;
-		//cmd = (sdp_cmd_t *)&data[1];
-		//cmd->type = ntohs(cmd->type);
-		//cmd->address = ntohl(cmd->address);
-		//cmd->len = ntohl(cmd->data_count);
+		cmd = (sdp_cmd_t *)&data[1];
+		cmd->address = ntohl(cmd->address);
+		cmd->datasz = ntohl(cmd->datasz);
 	}
 	else if (data[0] != 2)		/* HID report SDP CMD DATA */
 		return -2;
 
 	*outdata = data + 1;
+
 	return res - 1;
 }
 
