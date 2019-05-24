@@ -193,6 +193,7 @@ static int psh_mem(char *args)
 	entryinfo_t *e = NULL;
 	pageinfo_t *p = NULL;
 	char flags[8], prot[5], *f, *r;
+	void *map_re;
 
 	memset(&info, 0, sizeof(info));
 	arg = psh_nextString(args, &len);
@@ -225,10 +226,12 @@ static int psh_mem(char *args)
 
 			do {
 				mapsz = info.entry.kmapsz;
-				if ((info.entry.kmap = realloc(info.entry.kmap, mapsz * sizeof(entryinfo_t))) == NULL) {
+				if ((map_re = realloc(info.entry.kmap, mapsz * sizeof(entryinfo_t))) == NULL) {
 					printf("psh: out of memory\n");
+					free(info.entry.kmap);
 					return -ENOMEM;
 				}
+				info.entry.kmap = map_re;
 				meminfo(&info);
 			}
 			while (info.entry.kmapsz > mapsz);
@@ -255,10 +258,12 @@ static int psh_mem(char *args)
 
 			do {
 				mapsz = info.entry.mapsz;
-				if ((info.entry.map = realloc(info.entry.map, mapsz * sizeof(entryinfo_t))) == NULL) {
+				if ((map_re = realloc(info.entry.map, mapsz * sizeof(entryinfo_t))) == NULL) {
 					printf("psh: out of memory\n");
+					free(info.page.map);
 					return -ENOMEM;
 				}
+				info.entry.map = map_re;
 				meminfo(&info);
 			}
 			while (info.entry.mapsz > mapsz);
@@ -348,10 +353,12 @@ static int psh_mem(char *args)
 
 		do {
 			mapsz = info.page.mapsz;
-			if ((info.page.map = realloc(info.page.map, mapsz * sizeof(pageinfo_t))) == NULL) {
+			if ((map_re = realloc(info.page.map, mapsz * sizeof(pageinfo_t))) == NULL) {
 				printf("psh: out of memory\n");
+				free(info.page.map);
 				return -ENOMEM;
 			}
+			info.page.map = map_re;
 			meminfo(&info);
 		}
 		while (info.page.mapsz > mapsz);
@@ -484,7 +491,7 @@ static int psh_ps_cmp_cpu(const void *t1, const void *t2)
 
 static int psh_ps(char *arg)
 {
-	threadinfo_t *info;
+	threadinfo_t *info, *info_re;
 	int tcnt, i, j, n = 32;
 	unsigned len, ipart, fpart;
 	char unit;
@@ -497,10 +504,12 @@ static int psh_ps(char *arg)
 
 	while ((tcnt = threadsinfo(n, info)) >= n) {
 		n *= 2;
-		if ((info = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
+		if ((info_re = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
+			free(info);
 			printf("ps: out of memory\n");
 			return -ENOMEM;
 		}
+		info = info_re;
 	}
 
 	arg = psh_nextString(arg, &len);
@@ -601,16 +610,18 @@ int psh_exec(char *cmd)
 {
 	int exerr = 0;
 	int argc = 0;
-	char **argv = malloc(sizeof(char *));
+	char **argv = NULL, **argv_re;
 
 	char *arg = cmd;
 	unsigned int len;
 
 	while ((arg = psh_nextString(arg, &len)) && len) {
-		if ((argv = realloc(argv, (2 + argc) * sizeof(char *))) == NULL) {
+		if ((argv_re = realloc(argv, (2 + argc) * sizeof(char *))) == NULL) {
+			free(argv);
 			printf("psh: out of memory\n");
 			return -ENOMEM;
 		}
+		argv = argv_re;
 		argv[argc++] = arg;
 		arg += len + 1;
 	}
@@ -637,16 +648,18 @@ int psh_runfile(char *cmd)
 	volatile int exerr = EOK;
 	int pid;
 	int argc = 0;
-	char **argv = malloc(sizeof(char *));
+	char **argv = NULL, **argv_re;
 
 	char *arg = cmd;
 	unsigned int len;
 
 	while ((arg = psh_nextString(arg, &len)) && len) {
-		if ((argv = realloc(argv, (2 + argc) * sizeof(char *))) == NULL) {
+		if ((argv_re = realloc(argv, (2 + argc) * sizeof(char *))) == NULL) {
+			free(argv);
 			printf("psh: out of memory\n");
 			return -ENOMEM;
 		}
+		argv = argv_re;
 		argv[argc++] = arg;
 		arg += len + 1;
 	}
@@ -838,7 +851,7 @@ int psh_runscript(char *path)
 	size_t n = 0;
 	char *arg;
 	int argc = 0;
-	char **argv = NULL;;
+	char **argv = NULL, **argv_re;
 	char *bin;
 	int err;
 	pid_t pid;
@@ -884,15 +897,17 @@ int psh_runscript(char *path)
 				if (arg[strlen(arg) - 1] == '\n')
 					arg[strlen(arg) - 1] = 0;
 
-				argv = realloc(argv, (argc + 2) * sizeof(char *));
+				argv_re = realloc(argv, (argc + 2) * sizeof(char *));
 
-				if (argv == NULL) {
+				if (argv_re == NULL) {
 					printf("psh: Out of memory\n");
+					free(argv);
 					free(line);
 					fclose(stream);
 					return -1;
 				}
 
+				argv = argv_re;
 				argv[argc] = arg;
 				argc++;
 			}
