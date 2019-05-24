@@ -394,7 +394,7 @@ static int psh_perf(char *args)
 	perf_event_t *buffer;
 	const size_t bufsz = 4 << 20;
 	int bcount, tcnt, n = 32;
-	threadinfo_t *info;
+	threadinfo_t *info, *info_re;
 
 	if ((info = malloc(n * sizeof(threadinfo_t))) == NULL) {
 		fprintf(stderr, "perf: out of memory\n");
@@ -403,10 +403,13 @@ static int psh_perf(char *args)
 
 	while ((tcnt = threadsinfo(n, info)) >= n) {
 		n *= 2;
-		if ((info = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
+		if ((info_re = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
+			free(info);
 			fprintf(stderr, "perf: out of memory\n");
 			return -ENOMEM;
 		}
+
+		info = info_re;
 	}
 
 	if (fwrite(&tcnt, sizeof(tcnt), 1, stdout) != 1) {
