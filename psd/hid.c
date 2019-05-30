@@ -72,7 +72,7 @@ usbclient_desc_intf_t diface = { .len = 9, .desc_type = USBCLIENT_DESC_TYPE_INTF
 
 usbclient_desc_conf_t dconfig = { .len = 9, .desc_type = USBCLIENT_DESC_TYPE_CFG,
 	.total_len = sizeof(usbclient_desc_conf_t) + sizeof(usbclient_desc_intf_t) + sizeof(dhid) + sizeof(usbclient_desc_ep_t),
-	.num_intf = 1, .conf_val = 1, .conf_str = 1, .attr_bmp = 0xc0, .max_pow = 10
+	.num_intf = 1, .conf_val = 1, .conf_str = 1, .attr_bmp = 0xc0, .max_pow = 5
 };
 
 
@@ -95,7 +95,7 @@ usbclient_desc_str_zr_t dstr0 = {
 usbclient_desc_str_t dstrman = {
 	.len = 27 * 2 + 2,
 	.desc_type = USBCLIENT_DESC_TYPE_STR,
-	.string = { 'F', 0, 'r', 0, 'e', 0, 'e', 0, 's', 0, 'c', 0, 'a', 0, 'l', 0, 'e', 0, ' ', 0, 'S', 0, 'e', 0, 'm', 0, 'i', 0, 'c', 0, 'o', 0, 'n', 0, 'd', 0, 'u', 0, 'c', 0, 't', 0, 'o', 0, 'r', 0, ' ', 0, 'I', 0, 'n', 0, 'c', 0 }
+	.string = { 'F', 0, 'r', 0, 'e', 0, 'e', 0, 's', 0, 'c', 0, 'a', 0, 'l', 0, 'e', 0, ' ', 0, 'S', 0, 'e', 0, 'm', 0, 'i', 0, 'C', 0, 'o', 0, 'n', 0, 'd', 0, 'u', 0, 'c', 0, 't', 0, 'o', 0, 'r', 0, ' ', 0, 'I', 0, 'n', 0, 'c', 0 }
 };
 
 
@@ -113,8 +113,8 @@ static usbclient_conf_t config = {
 	.endpoint_list = {
 		.size = 2,
 		.endpoints = {
-			{ .type = USBCLIENT_ENDPT_TYPE_CONTROL, .direction = 0 /* for control endpoint it's ignored */},
-			{ .type = USBCLIENT_ENDPT_TYPE_INTR, .direction = USBCLIENT_ENDPT_DIR_IN } /* IN interrupt endpoint required for HID */
+			{ .id = 0, .type = USBCLIENT_ENDPT_TYPE_CONTROL, .direction = 0 /* for control endpoint it's ignored */},
+			{ .id = 1, .type = USBCLIENT_ENDPT_TYPE_INTR, .direction = USBCLIENT_ENDPT_DIR_IN } /* IN interrupt endpoint required for HID */
 		}
 	},
 	.descriptors_head = &dev
@@ -135,6 +135,7 @@ int hid_recv(int what, char *data, unsigned int len, char **outdata)
 		cmd = (sdp_cmd_t *)&data[1];
 		cmd->address = ntohl(cmd->address);
 		cmd->datasz = ntohl(cmd->datasz);
+		cmd->data = ntohl(cmd->data);
 	}
 	else if (data[0] != 2)		/* HID report SDP CMD DATA */
 		return -2;
