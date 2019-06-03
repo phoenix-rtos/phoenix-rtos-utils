@@ -6,7 +6,7 @@
  * Flash Server Manager.
  *
  * Copyright 2019 Phoenix Systems
- * Author: Hubert Buczyński
+ * Author: Hubert Buczynski
  *
  * This file is part of Phoenix-RTOS.
  *

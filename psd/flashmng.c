@@ -6,7 +6,7 @@
  * Flash Server Manager.
  *
  * Copyright 2019 Phoenix Systems
- * Author: Hubert Buczyński
+ * Author: Hubert Buczynski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -201,6 +201,11 @@ int flashmng_checkRange(oid_t oid, int start, int end, dbbt_t **dbbt)
 			break;
 		}
 	}
+
+	printf("Total blocks read: %d\n", i);
+	printf("Number of read errors: %d\n", err);
+	printf("Number of bad blocks:  %d\n", bad);
+	printf("------------------\n");
 
 	if (dbbt != NULL && bbtn < BB_MAX) {
 		dbbtsz = (sizeof(dbbt_t) + (sizeof(u32) * bbtn) + FLASH_PAGE_SIZE - 1) & ~(FLASH_PAGE_SIZE - 1);
