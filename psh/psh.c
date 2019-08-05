@@ -175,10 +175,11 @@ static void psh_touch(char *args)
 
 	while ((path = psh_nextString(path, &len)) && len) {
 		if ((f = fopen(path, "w")) == NULL) {
-			printf(path, ": fopen failed\n");
+			printf("%s: fopen failed\n", path);
 		}
-		else
+		else {
 			fclose(f);
+		}
 
 		path += len + 1;
 	}
@@ -709,9 +710,8 @@ int psh_cat(char *args)
 			printf("cat: %s no such file\n", arg);
 		}
 		else {
-			while ((rsz = fread(buf, 1, 1023, file))) {
-				buf[rsz] = 0;
-				printf(buf);
+			while ((rsz = fread(buf, 1, 1024, file)) > 0) {
+				fwrite(buf, 1, rsz, stdout);
 			}
 		}
 
