@@ -25,8 +25,8 @@
 #include <sys/mman.h>
 #include <sys/reboot.h>
 
-#include "hid.h"
-#include "sdp.h"
+#include "../common/hid.h"
+#include "../common/sdp.h"
 #include "bcb.h"
 #include "flashmng.h"
 
@@ -419,32 +419,32 @@ int main(int argc, char **argv)
 	char cmdBuff[HID_REPORT_1_SIZE];
 	sdp_cmd_t *pcmd = NULL;
 
-	if (argc < 2 || argc > FILES_SIZE) {
+    if (argc < 2 || argc > FILES_SIZE) {
 		printf("PSD: Wrong number of inputs arg\n");
 		usage(argv[0]);
 		return -1;
-	}
+    }
 
 	printf("PSD: Waiting on flash srv.\n");
-	for (i = 1; i < argc; ++i) {
+    /*for (i = 1; i < argc; ++i) {
 		while (lookup(argv[i], NULL, &psd.oids[i - 1]) < 0)
 			usleep(200);
-	}
+    }*/
 	printf("PSD: Started psd.\n");
 
 	/* Open files */
-	for (psd.nfiles = 1; psd.nfiles < argc; psd.nfiles++) {
+    /*for (psd.nfiles = 1; psd.nfiles < argc; psd.nfiles++) {
 		printf("PSD: Opened partition: %s\n", argv[psd.nfiles]);
 		if ((psd.files[psd.nfiles - 1] = fopen(argv[psd.nfiles], "r+")) == NULL) {
 			fprintf(stderr, "PSD: Can't open file '%s'! errno: (%d)", argv[psd.nfiles], errno);
 			return -1;
 		}
-	}
+    }*/
 
 	psd.run = 1;
-	psd.fcb = malloc(sizeof(fcb_t));
+    /*psd.fcb = malloc(sizeof(fcb_t));
 	psd.f = psd.files[0];
-	psd.oid = psd.oids[0];
+    psd.oid = psd.oids[0];*/
 
 	printf("PSD: Initializing USB transport\n");
 	if (hid_init(&psd.rf, &psd.sf)) {
