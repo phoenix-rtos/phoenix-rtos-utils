@@ -77,7 +77,7 @@ ifneq ($(filter clean,$(MAKECMDGOALS)),)
 	$(shell rm -rf $(BUILD_DIR))
 endif
 
-T1 := $(filter-out clean all,$(MAKECMDGOALS))
+T1 := $(filter-out clean all pfconf,$(MAKECMDGOALS))
 ifneq ($(T1),)
 	include $(T1)/Makefile
 .PHONY: $(T1)

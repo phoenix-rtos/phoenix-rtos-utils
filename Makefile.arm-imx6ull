@@ -8,3 +8,4 @@
 
 include psh/Makefile
 include psd/Makefile
+include pfconf/Makefile
