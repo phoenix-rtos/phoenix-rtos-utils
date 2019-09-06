@@ -435,7 +435,7 @@ int main(int argc, char **argv)
 	/* Write data to flash */
 	/* TODO: switch to raw flash writes instead of using filesystem */
 	if (result == 1) {
-		if (mkdir("/init", 0777) < 0) {
+		if (mkdir("/init", 0777) < 0 & errno != EEXIST) {
 			printf("Couldn't create directory\n");
 			return -1;
 		}
