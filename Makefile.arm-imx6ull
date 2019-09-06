@@ -6,5 +6,7 @@
 # Copyright 2019 Phoenix Systems
 #
 
+CFLAGS += -DTARGET_IMX6ULL
+
 include psh/Makefile
 include psd/Makefile

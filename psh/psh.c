@@ -28,6 +28,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <sys/reboot.h>
+#include <arch.h>
 
 #define PSH_SCRIPT_MAGIC ":{}:"
 
@@ -783,6 +784,24 @@ static int psh_sync(int argc, char **argv)
 }
 
 
+static void psh_reboot(char *arg)
+{
+	unsigned int len, magic = PHOENIX_REBOOT_MAGIC;
+
+#ifdef TARGET_IMX6ULL
+	if (arg != NULL) {
+		arg = psh_nextString(arg, &len);
+		if (len && !strcmp(arg, "-s"))
+			magic = ~magic;
+	}
+#else
+	(void)len;
+#endif
+
+	reboot(magic);
+}
+
+
 void psh_run(void)
 {
 	unsigned int n;
@@ -802,31 +821,31 @@ void psh_run(void)
 			psh_help();
 
 		else if (!strcmp(cmd, "ls"))
-			psh_ls(cmd + 3);
+			psh_ls(cmd + n + 1);
 
 		else if (!strcmp(cmd, "mem"))
-			psh_mem(cmd + 4);
+			psh_mem(cmd + n + 1);
 
 		else if (!strcmp(cmd, "ps"))
-			psh_ps(cmd + 3);
+			psh_ps(cmd + n + 1);
 
 		else if (!strcmp(cmd, "cat"))
-			psh_cat(cmd + 4);
+			psh_cat(cmd + n + 1);
 
 		else if (!strcmp(cmd, "touch"))
-			psh_touch(cmd + 6);
+			psh_touch(cmd + n + 1);
 
 		else if (!strcmp(cmd, "mkdir"))
-			psh_mkdir(cmd + 6);
+			psh_mkdir(cmd + n + 1);
 
 		else if (!strcmp(cmd, "exec"))
-			psh_exec(cmd + 5);
+			psh_exec(cmd + n + 1);
 
 		else if (!strcmp(cmd, "kill"))
-			psh_kill(cmd + 5);
+			psh_kill(cmd + n + 1);
 
 		else if (!strcmp(cmd, "perf"))
-			psh_perf(cmd + 5);
+			psh_perf(cmd + n + 1);
 
 		else if (cmd[0] == '/')
 			psh_runfile(cmd);
@@ -835,7 +854,7 @@ void psh_run(void)
 			exit(EXIT_SUCCESS);
 
 		else if (!strcmp(cmd, "reboot"))
-			reboot(PHOENIX_REBOOT_MAGIC);
+			psh_reboot(cmd + n + 1);
 
 		else
 			printf("Unknown command!\n");
@@ -1000,7 +1019,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(base, "sync"))
 			psh_sync(argc - 1, argv + 1);
 		else if (!strcmp(base, "reboot"))
-			reboot(PHOENIX_REBOOT_MAGIC);
+			psh_reboot(argv[1]);
 		else
 			printf("psh: %s: unknown command\n", argv[0]);
 	}
