@@ -1518,8 +1518,10 @@ int encode_bch_ecc(void *source_block, size_t source_size,
 	/* temp buffer to store data and ecc */
 	tmp_buf_size = b0 + (e0 * gf + 7)/8 + (bn + (en * gf + 7)/8) * 7;
 	tmp_buf = malloc(tmp_buf_size);
-	if(!tmp_buf)
+	if(!tmp_buf) {
+		free(ecc_buf);
 		return -EINVAL;
+	}
 	memset(tmp_buf, 0, tmp_buf_size);
 
 	/* generate ecc code for each data block and store in temp buffer */
