@@ -766,6 +766,44 @@ static int psh_mount(int argc, char **argv)
 }
 
 
+static int psh_bind(int argc, char **argv)
+{
+	struct stat buf;
+	oid_t soid, doid;
+	msg_t msg = {0};
+	int err;
+
+	if (argc != 2) {
+		printf("usage: bind source target %d\n", argc);
+		return -1;
+	}
+
+	if (lookup(argv[0], NULL, &soid) < EOK)
+		return -ENOENT;
+
+	if (lookup(argv[1], NULL, &doid) < EOK)
+		return -ENOENT;
+
+	if ((err = stat(argv[1], &buf)))
+		return err;
+
+	if (!S_ISDIR(buf.st_mode))
+		return -ENOTDIR;
+
+	msg.type = mtSetAttr;
+	msg.i.attr.oid = doid;
+	msg.i.attr.type = atDev;
+	msg.i.data = &soid;
+	msg.i.size = sizeof(oid_t);
+
+	if ((err = msgSend(doid.port, &msg)) < 0)
+		return err;
+
+	return msg.o.attr.val;
+
+}
+
+
 static int psh_sync(int argc, char **argv)
 {
 	oid_t oid;
@@ -1016,6 +1054,8 @@ int main(int argc, char **argv)
 			psh_perf(args);
 		else if (!strcmp(base, "mount"))
 			psh_mount(argc - 1, argv + 1);
+		else if (!strcmp(base, "bind"))
+			psh_bind(argc - 1, argv + 1);
 		else if (!strcmp(base, "sync"))
 			psh_sync(argc - 1, argv + 1);
 		else if (!strcmp(base, "reboot"))
