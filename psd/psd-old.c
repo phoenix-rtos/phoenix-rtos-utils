@@ -19,6 +19,7 @@
 #include <usbclient.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <string.h>
 #include <unistd.h>
 
 #define MAX_REPORT (128)

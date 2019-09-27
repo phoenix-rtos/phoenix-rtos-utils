@@ -14,6 +14,7 @@
 #ifndef _SDP_H_
 #define _SDP_H_
 
+#include <stdint.h>
 
 enum {
 	SDP_READ_REGISTER = 0x0101,
@@ -27,12 +28,12 @@ enum {
 
 
 typedef struct _sdp_cmd_t {
-	u16 type;
-	u32 address;
-	u8 format;
-	u32 datasz;
-	u32 data;
-	u8 reserved;
+	uint16_t type;
+	uint32_t address;
+	uint8_t format;
+	uint32_t datasz;
+	uint32_t data;
+	uint8_t reserved;
 } __attribute__((packed)) sdp_cmd_t;
 
 

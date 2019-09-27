@@ -18,8 +18,10 @@
 #include <flashsrv.h>
 
 #include <sys/mman.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <errno.h>
 
 
@@ -40,7 +42,7 @@ static const struct cleanmarker oob_cleanmarker =
 };
 
 
-int flashmng_readraw(oid_t oid, u32 paddr, void *data, int size)
+int flashmng_readraw(oid_t oid, uint32_t paddr, void *data, int size)
 {
 	msg_t msg;
 	flash_i_devctl_t *idevctl = NULL;
@@ -70,7 +72,7 @@ int flashmng_readraw(oid_t oid, u32 paddr, void *data, int size)
 }
 
 
-int flashmng_writedev(oid_t oid, u32 paddr, void *data, int size, int type)
+int flashmng_writedev(oid_t oid, uint32_t paddr, void *data, int size, int type)
 {
 	msg_t msg;
 	flash_i_devctl_t *idevctl = NULL;
@@ -169,8 +171,8 @@ int flashmng_checkRange(oid_t oid, int start, int end, dbbt_t **dbbt)
 	int i, ret = 0;
 	int bad = 0;
 	int err = 0;
-	u32 bbt[256] = { 0 };
-	u32 bbtn = 0;
+	uint32_t bbt[256] = { 0 };
+	uint32_t bbtn = 0;
 	int dbbtsz;
 	void *raw_data = malloc(2 * FLASH_PAGE_SIZE);
 
@@ -208,10 +210,10 @@ int flashmng_checkRange(oid_t oid, int start, int end, dbbt_t **dbbt)
 	printf("------------------\n");
 
 	if (dbbt != NULL && bbtn < BB_MAX) {
-		dbbtsz = (sizeof(dbbt_t) + (sizeof(u32) * bbtn) + FLASH_PAGE_SIZE - 1) & ~(FLASH_PAGE_SIZE - 1);
+		dbbtsz = (sizeof(dbbt_t) + (sizeof(uint32_t) * bbtn) + FLASH_PAGE_SIZE - 1) & ~(FLASH_PAGE_SIZE - 1);
 		*dbbt = malloc(dbbtsz);
 		memset(*dbbt, 0, dbbtsz);
-		memcpy(&((*dbbt)->bad_block), &bbt, sizeof(u32) * bbtn);
+		memcpy(&((*dbbt)->bad_block), &bbt, sizeof(uint32_t) * bbtn);
 		(*dbbt)->entries_num = bbtn;
 	}
 

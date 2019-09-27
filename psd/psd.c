@@ -15,8 +15,10 @@
 #include <flashsrv.h>
 
 #include <stdio.h>
+#include <stdint.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/msg.h>
@@ -147,7 +149,7 @@ int psd_hidResponse(int err, int type)
 }
 
 
-int psd_changePartition(u8 number)
+int psd_changePartition(uint8_t number)
 {
 	int err = hidOK;
 
@@ -165,7 +167,7 @@ int psd_changePartition(u8 number)
 }
 
 
-int psd_controlBlock(u32 block)
+int psd_controlBlock(uint32_t block)
 {
 	int err = hidOK;
 	if (block == FCB) {
@@ -187,7 +189,7 @@ int psd_controlBlock(u32 block)
 }
 
 
-int psd_eraseFS(u32 size)
+int psd_eraseFS(uint32_t size)
 {
 	int err = hidOK;
 
@@ -203,7 +205,7 @@ int psd_eraseFS(u32 size)
 }
 
 
-int psd_eraseAll(u32 size)
+int psd_eraseAll(uint32_t size)
 {
 	int err = hidOK;
 
@@ -239,7 +241,7 @@ int psd_blowFuses(void)
 {
 	int err = hidOK;
 
-	u32 *base = mmap(NULL, 0x1000, PROT_WRITE | PROT_READ, MAP_DEVICE, OID_PHYSMEM, OTP_BASE_ADDR);
+	uint32_t *base = mmap(NULL, 0x1000, PROT_WRITE | PROT_READ, MAP_DEVICE, OID_PHYSMEM, OTP_BASE_ADDR);
 
 	if (base == NULL) {
 		printf("OTP mmap failed\n");
@@ -301,7 +303,7 @@ int psd_writeRegister(sdp_cmd_t *cmd)
 {
 	int err = hidOK;
 	int address = (int)cmd->address;
-	u32 data = cmd->data;
+	uint32_t data = cmd->data;
 
 	if (address == CHANGE_PARTITION) {
 		err = psd_changePartition(data);
@@ -339,7 +341,7 @@ int psd_writeFile(sdp_cmd_t *cmd)
 {
 	int res, err = hidOK, buffOffset = 0;
 	offs_t writesz, fileOffs, partsz, partOffs;
-	u32 pagenum, blocknum;
+	uint32_t pagenum, blocknum;
 
 	char *outdata = NULL;
 

@@ -15,14 +15,15 @@
 
 #include <sys/types.h>
 #include <sys/msg.h>
+#include <stdint.h>
 
 #include "bcb.h"
 
 
-int flashmng_readraw(oid_t oid, u32 paddr, void *data, int size);
+int flashmng_readraw(oid_t oid, uint32_t paddr, void *data, int size);
 
 
-int flashmng_writedev(oid_t oid, u32 paddr, void *data, int size, int type);
+int flashmng_writedev(oid_t oid, uint32_t paddr, void *data, int size, int type);
 
 
 int flashmng_eraseBlock(oid_t oid, int start, int end);

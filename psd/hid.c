@@ -14,6 +14,7 @@
  */
 
 #include <errno.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <usbclient.h>
 
@@ -23,9 +24,9 @@
 
 
 struct {
-	u8 len;
-	u8 type;
-	u8 data[128];
+	uint8_t len;
+	uint8_t type;
+	uint8_t data[128];
 } __attribute__((packed)) dhidreport = { 2 + 76, USBCLIENT_DESC_TYPE_HID_REPORT,
 
 	/* Raw HID report descriptor - compatibile with IMX6ULL SDP protocol */
@@ -47,13 +48,13 @@ usbclient_desc_ep_t dep = { .len = 7, .desc_type = USBCLIENT_DESC_TYPE_ENDPT, .e
 
 /* HID descriptor */
 struct {
-	u8 bLength;
-	u8 bType;
-	u16 bcdHID;
-	u8 bCountryCode;
-	u8 bNumDescriptors;		/* number of descriptors (at least one) */
-	u8 bDescriptorType;		/* mandatory descriptor type */
-	u16 wDescriptorLength;
+	uint8_t bLength;
+	uint8_t bType;
+	uint16_t bcdHID;
+	uint8_t bCountryCode;
+	uint8_t bNumDescriptors;		/* number of descriptors (at least one) */
+	uint8_t bDescriptorType;		/* mandatory descriptor type */
+	uint16_t wDescriptorLength;
 } __attribute__((packed)) dhid = { 9, USBCLIENT_DESC_TYPE_HID, 0x0110, 0x0, 1, 0x22, 76 };
 
 
