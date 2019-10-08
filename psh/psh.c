@@ -21,6 +21,7 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/threads.h>
+#include <sys/minmax.h>
 #include <sys/mman.h>
 #include <sys/msg.h>
 #include <sys/mount.h>
