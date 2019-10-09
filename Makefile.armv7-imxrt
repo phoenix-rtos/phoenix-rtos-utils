@@ -7,3 +7,4 @@
 #
 
 include psh/Makefile
+include psd/imxrt/Makefile
