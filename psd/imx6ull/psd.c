@@ -27,8 +27,9 @@
 #include <sys/mman.h>
 #include <sys/reboot.h>
 
-#include "hid.h"
-#include "sdp.h"
+#include "../common/hid.h"
+#include "../common/sdp.h"
+
 #include "bcb.h"
 #include "flashmng.h"
 
@@ -58,7 +59,7 @@
 #define FILES_SIZE 16
 
 
-#define HID_REPORT_1_SIZE sizeof(sdp_cmd_t) + 1
+#define HID_REPORT_1_SIZE (sizeof(sdp_cmd_t) + 1)
 #define HID_REPORT_2_SIZE 1025
 #define HID_REPORT_3_SIZE 5
 #define HID_REPORT_4_SIZE 65
@@ -100,6 +101,27 @@ struct {
 	FILE *files[FILES_SIZE];
 	oid_t oids[FILES_SIZE];
 } psd;
+
+
+const hid_dev_setup_t hid_setup = {
+	.ddev = {
+		.len = sizeof(usbclient_desc_dev_t), .desc_type = USBCLIENT_DESC_TYPE_DEV, .bcd_usb = 0x200,
+		.dev_class = 0, .dev_subclass = 0, .dev_prot = 0, .max_pkt_sz0 = 64,
+		.vend_id = 0x15a2, .prod_id = 0x007d, .bcd_dev = 0x0001,
+		.man_str = 0, .prod_str = 0, .sn_str = 0,
+		.num_conf = 1
+	},
+	.dstrman = {
+		.len = 27 * 2 + 2,
+		.desc_type = USBCLIENT_DESC_TYPE_STR,
+		.string = { 'F', 0, 'r', 0, 'e', 0, 'e', 0, 's', 0, 'c', 0, 'a', 0, 'l', 0, 'e', 0, ' ', 0, 'S', 0, 'e', 0, 'm', 0, 'i', 0, 'C', 0, 'o', 0, 'n', 0, 'd', 0, 'u', 0, 'c', 0, 't', 0, 'o', 0, 'r', 0, ' ', 0, 'I', 0, 'n', 0, 'c', 0 }
+	},
+	.dstrprod = {
+		.len = 13 * 2 + 2,
+		.desc_type = USBCLIENT_DESC_TYPE_STR,
+		.string = { 'S', 0, 'E', 0, ' ', 0, 'B', 0, 'l', 0, 'a', 0, 'n', 0, 'k', 0, ' ', 0, '6', 0, 'U', 0, 'L', 0, 'L', 0 }
+	}
+};
 
 
 int psd_hidResponse(int err, int type)
@@ -432,6 +454,7 @@ int main(int argc, char **argv)
 		while (lookup(argv[i], NULL, &psd.oids[i - 1]) < 0)
 			usleep(200);
 	}
+
 	printf("PSD: Started psd.\n");
 
 	/* Open files */
@@ -449,7 +472,7 @@ int main(int argc, char **argv)
 	psd.oid = psd.oids[0];
 
 	printf("PSD: Initializing USB transport\n");
-	if (hid_init(&psd.rf, &psd.sf)) {
+	if (hid_init(&psd.rf, &psd.sf, &hid_setup)) {
 		printf("PSD: Couldn't initialize USB transport\n");
 		return -1;
 	}

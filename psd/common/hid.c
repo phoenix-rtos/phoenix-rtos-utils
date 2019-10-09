@@ -6,20 +6,20 @@
  * HID support
  *
  * Copyright 2019 Phoenix Systems
- * Author: Bartosz Ciesla, Pawel Pisarczyk
+ * Author: Bartosz Ciesla, Pawel Pisarczyk, Hubert Buczynski
  *
  * This file is part of Phoenix-RTOS.
  *
  * %LICENSE%
  */
 
+
 #include <errno.h>
-#include <stdint.h>
 #include <stdio.h>
-#include <usbclient.h>
 
 #include <arpa/inet.h>
 
+#include "hid.h"
 #include "sdp.h"
 
 
@@ -58,14 +58,6 @@ struct {
 } __attribute__((packed)) dhid = { 9, USBCLIENT_DESC_TYPE_HID, 0x0110, 0x0, 1, 0x22, 76 };
 
 
-/* String descriptor */
-typedef struct _usbclient_desc_str_t {
-	uint8_t	len;
-	uint8_t	desc_type;
-	uint8_t string[256];
-} __attribute__((packed)) usbclient_desc_str_t;
-
-
 usbclient_desc_intf_t diface = { .len = 9, .desc_type = USBCLIENT_DESC_TYPE_INTF, .intf_num = 0, .alt_set = 0,
 	.num_endpt = 1, .intf_class = 0x03, .intf_subclass = 0x00, .intf_prot = 0x00, .intf_str = 2
 };
@@ -77,15 +69,6 @@ usbclient_desc_conf_t dconfig = { .len = 9, .desc_type = USBCLIENT_DESC_TYPE_CFG
 };
 
 
-usbclient_desc_dev_t ddev = {
-	.len = sizeof(usbclient_desc_dev_t), .desc_type = USBCLIENT_DESC_TYPE_DEV, .bcd_usb = 0x200,
-	.dev_class = 0, .dev_subclass = 0, .dev_prot = 0, .max_pkt_sz0 = 64,
-	.vend_id = 0x15a2, .prod_id = 0x007d, .bcd_dev = 0x0001,
-	.man_str = 0, .prod_str = 0, .sn_str = 0,
-	.num_conf = 1
-};
-
-
 usbclient_desc_str_zr_t dstr0 = {
 	.len = sizeof(usbclient_desc_str_zr_t),
 	.desc_type = USBCLIENT_DESC_TYPE_STR,
@@ -93,33 +76,10 @@ usbclient_desc_str_zr_t dstr0 = {
 };
 
 
-usbclient_desc_str_t dstrman = {
-	.len = 27 * 2 + 2,
-	.desc_type = USBCLIENT_DESC_TYPE_STR,
-	.string = { 'F', 0, 'r', 0, 'e', 0, 'e', 0, 's', 0, 'c', 0, 'a', 0, 'l', 0, 'e', 0, ' ', 0, 'S', 0, 'e', 0, 'm', 0, 'i', 0, 'C', 0, 'o', 0, 'n', 0, 'd', 0, 'u', 0, 'c', 0, 't', 0, 'o', 0, 'r', 0, ' ', 0, 'I', 0, 'n', 0, 'c', 0 }
-};
-
-
-usbclient_desc_str_t dstrprod = {
-	.len = 13 * 2 + 2,
-	.desc_type = USBCLIENT_DESC_TYPE_STR,
-	.string = { 'S', 0, 'E', 0, ' ', 0, 'B', 0, 'l', 0, 'a', 0, 'n', 0, 'k', 0, ' ', 0, '6', 0, 'U', 0, 'L', 0, 'L', 0 }
-};
-
-
 usbclient_desc_list_t dev, conf, iface, hid, ep, str0, strman, strprod, hidreport;
 
 
-static usbclient_conf_t config = {
-	.endpoint_list = {
-		.size = 2,
-		.endpoints = {
-			{ .id = 0, .type = USBCLIENT_ENDPT_TYPE_CONTROL, .direction = 0 /* for control endpoint it's ignored */},
-			{ .id = 1, .type = USBCLIENT_ENDPT_TYPE_INTR, .direction = USBCLIENT_ENDPT_DIR_IN } /* IN interrupt endpoint required for HID */
-		}
-	},
-	.descriptors_head = &dev
-};
+static usbclient_conf_t config;
 
 
 int hid_recv(int what, char *data, unsigned int len, char **outdata)
@@ -131,7 +91,7 @@ int hid_recv(int what, char *data, unsigned int len, char **outdata)
 		return -1;
 
 	if (!what) {
-		if (data[0] != 1)	/* HID report SDP CMD */
+		if (data[0] != 1)       /* HID report SDP CMD */
 			return -1;
 		cmd = (sdp_cmd_t *)&data[1];
 		cmd->address = ntohl(cmd->address);
@@ -161,12 +121,20 @@ int hid_send(int what, const char *data, unsigned int len)
 }
 
 
-int hid_init(int (**rf)(int, char *, unsigned int, char **), int (**sf)(int, const char *, unsigned int))
+int hid_init(int (**rf)(int, char *, unsigned int, char **), int (**sf)(int, const char *, unsigned int), const hid_dev_setup_t* dev_setup)
 {
 	int res;
 
+	usbclient_ep_list_t endpoints = {
+		.size = 2,
+		.endpoints = {
+			{ .id = 0, .type = USBCLIENT_ENDPT_TYPE_CONTROL, .direction = 0                     /* for control endpoint it's ignored */},
+			{ .id = 1, .type = USBCLIENT_ENDPT_TYPE_INTR, .direction = USBCLIENT_ENDPT_DIR_IN } /* IN interrupt endpoint required for HID */
+		}
+	};
+
 	dev.size = 1;
-	dev.descriptors = (usbclient_desc_gen_t *)&ddev;;
+	dev.descriptors = (usbclient_desc_gen_t *)&dev_setup->ddev;
 	dev.next = &conf;
 
 	conf.size = 1;
@@ -190,16 +158,19 @@ int hid_init(int (**rf)(int, char *, unsigned int, char **), int (**sf)(int, con
 	str0.next = &strman;
 
 	strman.size = 1;
-	strman.descriptors = (usbclient_desc_gen_t *)&dstrman;
+	strman.descriptors = (usbclient_desc_gen_t *)&dev_setup->dstrman;
 	strman.next = &strprod;
 
 	strprod.size = 1;
-	strprod.descriptors = (usbclient_desc_gen_t *)&dstrprod;
+	strprod.descriptors = (usbclient_desc_gen_t *)&dev_setup->dstrprod;
 	strprod.next = &hidreport;
 
 	hidreport.size = 1;
 	hidreport.descriptors = (usbclient_desc_gen_t *)&dhidreport;
 	hidreport.next = NULL;
+
+	config.endpoint_list = endpoints;
+	config.descriptors_head = &dev;
 
 	if ((res = usbclient_init(&config)) != EOK) {
 		return res;
@@ -207,6 +178,6 @@ int hid_init(int (**rf)(int, char *, unsigned int, char **), int (**sf)(int, con
 
 	*rf = hid_recv;
 	*sf = hid_send;
+
 	return EOK;
 }
-
