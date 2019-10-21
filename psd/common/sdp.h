@@ -16,6 +16,16 @@
 
 #include <stdint.h>
 
+/* Addresses definitions for WRITE_REGISTER */
+#define CHANGE_PARTITION -1
+#define ERASE_ROOTFS_ADDRESS -2
+#define ERASE_ALL_ADDRESS -3
+#define CHECK_PRODUCTION -4
+#define CONTROL_BLOCK_ADDRESS -5
+#define BLOW_FUSES -6
+#define CLOSE_PSD -100
+
+
 enum {
 	SDP_READ_REGISTER = 0x0101,
 	SDP_WRITE_REGISTER = 0x0202,
