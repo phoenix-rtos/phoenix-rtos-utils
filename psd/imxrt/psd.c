@@ -26,6 +26,7 @@
 #include <sys/platform.h>
 #include <sys/reboot.h>
 
+#include <flashdrv.h>
 #include <phoenix/arch/imxrt.h>
 
 #include "../common/hid.h"
@@ -44,18 +45,18 @@
 #define HID_REPORT_3_SIZE 5
 #define HID_REPORT_4_SIZE 65
 
-
 #define LOG(str, ...) do { if (1) fprintf(stderr, "psd: " str "\n", ##__VA_ARGS__); } while (0)
 #define LOG_ERROR(str, ...) do { fprintf(stderr, __FILE__  ":%d error: " str "\n", __LINE__, ##__VA_ARGS__); } while (0)
 
 
 struct {
 	int run;
-	char buff[SIZE_PAGE];
+	char buff[HID_REPORT_2_SIZE];
 
 	int (*rf)(int, char *, unsigned int, char **);
 	int (*sf)(int, const char *, unsigned int);
 
+	flash_context_t flash_context;
 } psd;
 
 
@@ -95,6 +96,7 @@ int psd_hidResponse(int err, int type)
 		case SDP_WRITE_FILE :
 			SET_FILE_COMPLETE(psd.buff);
 			memset(psd.buff + 5, 0, HID_REPORT_4_SIZE - 5);
+
 			if ((res = psd.sf(psd.buff[0], psd.buff, HID_REPORT_4_SIZE)) < 0)
 				err = -eReport4;
 			break;
@@ -102,6 +104,7 @@ int psd_hidResponse(int err, int type)
 		case SDP_WRITE_REGISTER :
 			SET_COMPLETE(psd.buff);
 			memset(psd.buff + 5, 0, HID_REPORT_4_SIZE - 5);
+
 			if ((res = psd.sf(psd.buff[0], psd.buff, HID_REPORT_4_SIZE)) < 0)
 				err = -eReport4;
 			break;
@@ -131,9 +134,15 @@ int psd_writeRegister(sdp_cmd_t *cmd)
 {
 	int err = hidOK;
 	int address = (int)cmd->address;
-	uint32_t data = cmd->data;
 
-	LOG("Register: %d; data: %d", address, data);
+	if (address == CLOSE_PSD) {
+		psd.run = 0;
+	}
+	else {
+		LOG_ERROR("Unrecognized register address: %d.\n", address);
+		err = -eReport1;
+	}
+
 	err = psd_hidResponse(err, SDP_WRITE_REGISTER);
 
 	return err;
@@ -142,8 +151,35 @@ int psd_writeRegister(sdp_cmd_t *cmd)
 
 int psd_writeFile(sdp_cmd_t *cmd)
 {
-	int err = hidOK;
+	int res, err = hidOK, offset = 0;
+	offs_t writesz;
+	char *outdata = NULL;
 
+	offset = cmd->address;
+
+	/* Receive and write file */
+	for (writesz = 0; !err && (writesz < cmd->datasz);) {
+
+		memset(psd.buff, 0xff, HID_REPORT_2_SIZE - 1);
+
+		if ((res = psd.rf(1, psd.buff, HID_REPORT_2_SIZE, &outdata)) < 0 ) {
+			err = -eReport2;
+			break;
+		}
+
+		if (res % psd.flash_context.properties.page_size )
+			res = (res / psd.flash_context.properties.page_size + 1) * psd.flash_context.properties.page_size;
+
+		if (flash_writeDataPage(&psd.flash_context, offset, outdata, res) < res) {
+			err = -eReport2;
+			break;
+		}
+
+		writesz += res;
+		offset += res;
+	}
+
+	flash_sync(&psd.flash_context);
 	err = psd_hidResponse(err, SDP_WRITE_FILE);
 
 	return err;
@@ -169,13 +205,21 @@ int main(int argc, char **argv)
 	char cmdBuff[HID_REPORT_1_SIZE];
 
 	psd.run = 1;
+	psd.flash_context.address = FLEXSPI2_DATA_ADDRESS;
+
 	psd_enabelCache(0);
 
-	LOG("Initializing USB transport.");
+	if (flash_init(&psd.flash_context) < 0){
+		LOG_ERROR("Couldn't initialize FLEXSPI.");
+		return -1;
+	}
+
 	if (hid_init(&psd.rf, &psd.sf, &hid_setup)) {
 		LOG_ERROR("Couldn't initialize USB transport.");
 		return -1;
 	}
+
+	LOG("Initialized USB transport.");
 
 	while (psd.run)
 	{
@@ -189,21 +233,24 @@ int main(int argc, char **argv)
 					return err;
 				}
 				break;
+
 			case SDP_WRITE_FILE:
 				if ((err = psd_writeFile(pcmd)) != hidOK) {
 					LOG_ERROR("Error during sdp write file, err: %d.", err);
 					return err;
 				}
 				break;
+
 			default:
 				LOG_ERROR("Unrecognized command (%#x)", pcmd->type);
 				break;
 		}
-
 		usleep(200);
 	}
 
+	flash_contextDestroy(&psd.flash_context);
 	psd_enabelCache(1);
+
 	LOG("Closing PSD. Device is rebooting.");
 
 	return EOK;

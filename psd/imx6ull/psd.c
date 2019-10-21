@@ -41,23 +41,11 @@
 #define SET_HAB_ERROR(b, err) (b)[0]=4;(b)[1]=err;(b)[2]=0xaa;b[3]=0xaa;(b)[4]=0xaa;
 
 
-/* Addresses definitions for WRITE_REGISTER */
-#define CHANGE_PARTITION -1
-#define ERASE_ROOTFS_ADDRESS -2
-#define ERASE_ALL_ADDRESS -3
-#define CHECK_PRODUCTION -4
-#define CONTROL_BLOCK_ADDRESS -5
-#define BLOW_FUSES -6
-#define CLOSE_PSD -100
-
-
 /* Control blocks */
 #define FCB 1
 #define DBBT 2
 
-
 #define FILES_SIZE 16
-
 
 #define HID_REPORT_1_SIZE (sizeof(sdp_cmd_t) + 1)
 #define HID_REPORT_2_SIZE 1025
