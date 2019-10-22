@@ -25,7 +25,7 @@ static int runServer(const char *name, unsigned port)
 	argv[0] = name;
 	argv[1] = NULL;
 
-	if ((pfd = portCreate(&port)) == -1)
+	if ((pfd = portCreate(port)) == -1)
 		return -1;
 
 	if (dup2(pfd, PORT_DESCRIPTOR) != PORT_DESCRIPTOR) {
