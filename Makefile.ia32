@@ -8,8 +8,6 @@
 
 CROSS ?= i386-pc-phoenix-
 
-SUBDIRS = tty/libtty tty/pc-tty tty/pc-uart storage/pc-ata
-
 MKDEP = $(CROSS)gcc -MM
 MKDEPFLAGS = $(CFLAGS)
 

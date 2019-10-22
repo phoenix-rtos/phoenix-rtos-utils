@@ -745,7 +745,7 @@ static int psh_kill(char *arg)
 		return -EINVAL;
 	}
 
-	return signalPost(pid, -1, signal_kill);
+	return signalPost(pid, -1, 0);
 }
 
 
@@ -790,18 +790,17 @@ static int psh_bind(int argc, char **argv)
 
 	if (!S_ISDIR(buf.st_mode))
 		return -ENOTDIR;
-
+/*
 	msg.type = mtSetAttr;
-	msg.i.attr.oid = doid;
-	msg.i.attr.type = atDev;
+	msg.object = doid.id;
+	msg.i.attr = atDev;
 	msg.i.data = &soid;
 	msg.i.size = sizeof(oid_t);
 
 	if ((err = msgSend(doid.port, &msg)) < 0)
 		return err;
-
-	return msg.o.attr.val;
-
+*/
+	return 0;
 }
 
 
