@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <sysexits.h>
 #include <unistd.h>
+#include <errno.h>
 #include <sys/msg.h>
 #include <sys/debug.h>
 #include <sys/stat.h>
@@ -11,7 +12,7 @@
 
 #define LOG_ERROR(msg, ...) do { \
 	char buf[128]; \
-	sprintf(buf, "pinit:%d - " msg "\n", __LINE__, ##__VA_ARGS__ ); \
+	sprintf(buf, __FILE__ ":%d - " msg "\n", __LINE__, ##__VA_ARGS__ ); \
 	debug(buf); \
 } while (0)
 
@@ -96,8 +97,9 @@ static int runInit(const char *name)
 
 static int pinitSetRoot(int fd, int id, mode_t mode)
 {
-	if (SetRoot(fd, id, 0755)) {
-		LOG_ERROR("Failed to set root");
+	LOG_ERROR("Seting root fd %d id %d mode 0x%x", fd, id, mode);
+	if (SetRoot(fd, id, mode)) {
+		LOG_ERROR("Failed to set root", fd, id, mode);
 		return -1;
 	}
 	close(fd);
@@ -108,18 +110,18 @@ static int pinitSetRoot(int fd, int id, mode_t mode)
 int main(int argc, char **argv)
 {
 	int id;
-
+	debug("PINIT START\n");
 	id = runServer("dummyfs", 1);
 	if (id < 0)
 		return -1;
 
-	if (pinitSetRoot(PORT_DESCRIPTOR, id, 0755)) {
+	if (pinitSetRoot(PORT_DESCRIPTOR, id, S_IFDIR | 0755)) {
 		LOG_ERROR("Failed to set root");
 		exit(EX_OSERR);
 	}
 
 	if (mkdir("/dev", 0555)) {
-		LOG_ERROR("Failed to create /dev");
+		LOG_ERROR("Failed to create /dev - %d", errno);
 		exit(EX_CANTCREAT);
 	}
 
