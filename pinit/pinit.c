@@ -95,6 +95,8 @@ static int runInit(const char *name)
 }
 
 
+extern int SetRoot(int port, id_t id, mode_t mode);
+
 static int pinitSetRoot(int fd, int id, mode_t mode)
 {
 	LOG_ERROR("Seting root fd %d id %d mode 0x%x", fd, id, mode);
