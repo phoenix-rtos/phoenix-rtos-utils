@@ -63,19 +63,8 @@ static int openStd(void)
 {
 	int i, fd;
 
-	for (i = 0; i < 3; ++i) {
-		fd = open("/dev/console", i ? O_WRONLY : O_RDONLY);
-
-		if (fd < 0)
-			return -1;
-
-		if (dup2(fd, i) != i) {
-			close(fd);
-			return -1;
-		}
-		close(fd);
-	}
-
+	for (i = 0; i < 3; ++i)
+		fd = open("/dev/ttyS0", i ? O_WRONLY : O_RDONLY);
 	return 0;
 }
 
@@ -97,9 +86,8 @@ static int runInit(const char *name)
 
 extern int SetRoot(int port, id_t id, mode_t mode);
 
-static int pinitSetRoot(int fd, int id, mode_t mode)
+static int pinitSetRoot(int fd, id_t id, mode_t mode)
 {
-	LOG_ERROR("Seting root fd %d id %d mode 0x%x", fd, id, mode);
 	if (SetRoot(fd, id, mode)) {
 		LOG_ERROR("Failed to set root", fd, id, mode);
 		return -1;
@@ -112,7 +100,7 @@ static int pinitSetRoot(int fd, int id, mode_t mode)
 int main(int argc, char **argv)
 {
 	int id;
-	debug("PINIT START\n");
+
 	id = runServer("dummyfs", 1);
 	if (id < 0)
 		return -1;
@@ -127,7 +115,7 @@ int main(int argc, char **argv)
 		exit(EX_CANTCREAT);
 	}
 
-	if (runServer("pc-uart", 2) || runServer("pc-tty", 3))
+	if (runServer("pc-uart", 2))// || runServer("pc-tty", 3))
 		_exit(EX_OSERR);
 
 	runInit("psh");

@@ -1007,13 +1007,6 @@ int main(int argc, char **argv)
 	splitname(argv[0], &base, &dir);
 
 	if (!strcmp(base, "psh")) {
-		/* Wait for filesystem */
-		while (lookup("/", NULL, &oid) < 0)
-			usleep(10000);
-
-		/* Wait for console */
-		while (write(1, "", 0) < 0)
-			usleep(50000);
 
 		if (argc > 0 && (c = getopt(argc, argv, "i:")) != -1) {
 			if (psh_runscript(optarg) != EOK)
