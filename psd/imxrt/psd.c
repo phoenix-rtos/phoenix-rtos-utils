@@ -11,7 +11,6 @@
  * %LICENSE%
  */
 
-//#include <usbclient.h>
 
 #include <stdio.h>
 #include <errno.h>
@@ -26,7 +25,7 @@
 #include <sys/platform.h>
 #include <sys/reboot.h>
 
-#include <flashdrv.h>
+#include <flashsrv.h>
 #include <phoenix/arch/imxrt.h>
 
 #include "../common/hid.h"
@@ -45,18 +44,24 @@
 #define HID_REPORT_3_SIZE 5
 #define HID_REPORT_4_SIZE 65
 
+#define INTERNAL_FLASH_NAME "/dev/flash2"
+
 #define LOG(str, ...) do { if (1) fprintf(stderr, "psd: " str "\n", ##__VA_ARGS__); } while (0)
 #define LOG_ERROR(str, ...) do { fprintf(stderr, __FILE__  ":%d error: " str "\n", __LINE__, ##__VA_ARGS__); } while (0)
 
 
 struct {
+	oid_t oid;
+
+	uint32_t flash_size;
+	uint32_t page_size;
+	uint32_t sector_size;
+
 	int run;
 	char buff[HID_REPORT_2_SIZE];
 
 	int (*rf)(int, char *, unsigned int, char **);
 	int (*sf)(int, const char *, unsigned int);
-
-	flash_context_t flash_context;
 } psd;
 
 
@@ -79,6 +84,88 @@ const hid_dev_setup_t hid_setup = {
 		.string = { 'S', 0, 'E', 0, ' ', 0, 'B', 0, 'l', 0, 'a', 0, 'n', 0, 'k', 0, ' ', 0, 'R', 0, 'T', 0 }
 	}
 };
+
+static int psd_syncFlash(oid_t oid)
+{
+	msg_t msg;
+	flash_i_devctl_t *idevctl = NULL;
+	flash_o_devctl_t *odevctl = NULL;
+
+	msg.type = mtDevCtl;
+	msg.i.data = NULL;
+	msg.i.size = 0;
+	msg.o.data = NULL;
+	msg.o.size = 0;
+
+	idevctl = (flash_i_devctl_t *)msg.i.raw;
+	idevctl->type = flashsrv_devctl_sync;
+	idevctl->oid = psd.oid;
+
+	odevctl = (flash_o_devctl_t *)msg.o.raw;
+
+	if (msgSend(oid.port, &msg) < 0)
+		return -1;
+
+	if (odevctl->err < 0)
+		return -1;
+
+	return 0;
+}
+
+
+static int psd_write2Flash(oid_t oid, uint32_t paddr, void *data, int size)
+{
+	msg_t msg;
+
+	msg.type = mtWrite;
+	msg.i.io.oid = oid;
+	msg.i.io.offs = paddr;
+	msg.i.data = data;
+	msg.i.size = size;
+	msg.o.data = NULL;
+	msg.o.size = 0;
+
+	if (msgSend(oid.port, &msg) < 0)
+		return -1;
+
+	if (msg.o.io.err < size)
+		return -1;
+
+	return size;
+}
+
+
+static int psd_getFlashProperties(oid_t oid)
+{
+	int res;
+	msg_t msg;
+	flash_i_devctl_t *idevctl = NULL;
+	flash_o_devctl_t *odevctl = NULL;
+
+	msg.type = mtDevCtl;
+	msg.i.data = NULL;
+	msg.i.size = 0;
+	msg.o.data = NULL;
+	msg.o.size = 0;
+
+	idevctl = (flash_i_devctl_t *)msg.i.raw;
+	idevctl->type = flashsrv_devctl_properties;
+	idevctl->oid = oid;
+
+	odevctl = (flash_o_devctl_t *)msg.o.raw;
+
+	if ((res = msgSend(psd.oid.port, &msg)) < 0)
+		return -1;
+
+	if (odevctl->err < 0)
+		return -1;
+
+	psd.flash_size = odevctl->properties.fsize;
+	psd.page_size = odevctl->properties.psize;
+	psd.sector_size = odevctl->properties.ssize;
+
+	return 0;
+}
 
 
 int psd_hidResponse(int err, int type)
@@ -161,16 +248,15 @@ int psd_writeFile(sdp_cmd_t *cmd)
 	for (writesz = 0; !err && (writesz < cmd->datasz);) {
 
 		memset(psd.buff, 0xff, HID_REPORT_2_SIZE - 1);
-
 		if ((res = psd.rf(1, psd.buff, HID_REPORT_2_SIZE, &outdata)) < 0 ) {
 			err = -eReport2;
 			break;
 		}
 
-		if (res % psd.flash_context.properties.page_size )
-			res = (res / psd.flash_context.properties.page_size + 1) * psd.flash_context.properties.page_size;
+		if (res % psd.page_size )
+			res = (res / psd.page_size + 1) * psd.page_size;
 
-		if (flash_writeDataPage(&psd.flash_context, offset, outdata, res) < res) {
+		if (psd_write2Flash(psd.oid, offset, outdata, res) < res) {
 			err = -eReport2;
 			break;
 		}
@@ -179,7 +265,9 @@ int psd_writeFile(sdp_cmd_t *cmd)
 		offset += res;
 	}
 
-	flash_sync(&psd.flash_context);
+	if (psd_syncFlash(psd.oid) != 0)
+		err = -eReport2;
+
 	err = psd_hidResponse(err, SDP_WRITE_FILE);
 
 	return err;
@@ -205,21 +293,22 @@ int main(int argc, char **argv)
 	char cmdBuff[HID_REPORT_1_SIZE];
 
 	psd.run = 1;
-	psd.flash_context.address = FLEXSPI2_DATA_ADDRESS;
-
 	psd_enabelCache(0);
 
-	if (flash_init(&psd.flash_context) < 0){
-		LOG_ERROR("Couldn't initialize FLEXSPI.");
-		return -1;
-	}
-
 	if (hid_init(&psd.rf, &psd.sf, &hid_setup)) {
-		LOG_ERROR("Couldn't initialize USB transport.");
+		LOG_ERROR("couldn't initialize USB transport.");
 		return -1;
 	}
 
-	LOG("Initialized USB transport.");
+	while (lookup(INTERNAL_FLASH_NAME, NULL, &psd.oid) < 0)
+		usleep(100000);
+
+	if (psd_getFlashProperties(psd.oid) < 0 ) {
+		LOG_ERROR("couldn't get flash properties.");
+		return -1;
+	}
+
+	LOG("initialized.");
 
 	while (psd.run)
 	{
@@ -227,31 +316,31 @@ int main(int argc, char **argv)
 
 		switch (pcmd->type) {
 			case SDP_WRITE_REGISTER:
-
 				if ((err = psd_writeRegister(pcmd)) != hidOK) {
-					LOG_ERROR("Error during sdp write register, err: %d.", err);
+					LOG_ERROR("error sdp write register, err: %d.", err);
 					return err;
 				}
 				break;
 
 			case SDP_WRITE_FILE:
 				if ((err = psd_writeFile(pcmd)) != hidOK) {
-					LOG_ERROR("Error during sdp write file, err: %d.", err);
+					LOG_ERROR("error sdp write file, err: %d.", err);
 					return err;
 				}
 				break;
 
 			default:
-				LOG_ERROR("Unrecognized command (%#x)", pcmd->type);
+				LOG_ERROR("unrecognized command (%#x)", pcmd->type);
 				break;
 		}
 		usleep(200);
 	}
 
-	flash_contextDestroy(&psd.flash_context);
 	psd_enabelCache(1);
+	hid_destroy();
 
-	LOG("Closing PSD. Device is rebooting.");
+	LOG("closing PSD. Device is rebooting.");
+	reboot(PHOENIX_REBOOT_MAGIC);
 
 	return EOK;
 }

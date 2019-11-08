@@ -39,4 +39,6 @@ typedef struct _hid_dev_conf_t {
 extern int hid_init(int (**rf)(int, char *, unsigned int, char **), int (**sf)(int, const char *, unsigned int), const hid_dev_setup_t* dev_setup);
 
 
+extern void hid_destroy(void);
+
 #endif

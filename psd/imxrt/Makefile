@@ -4,7 +4,7 @@
 # Copyright 2018, 2019 Phoenix Systems
 #
 
-$(PREFIX_PROG)psd: $(addprefix $(PREFIX_O)psd/common/, hid.o) $(PREFIX_A)libusb.a $(PREFIX_A)libflash.a 
+$(PREFIX_PROG)psd: $(addprefix $(PREFIX_O)psd/common/, hid.o) $(PREFIX_A)libusb.a $(PREFIX_A)libflashdrv.a 
 
 $(PREFIX_PROG)psd:  $(addprefix $(PREFIX_O)psd/imxrt/, psd.o) 
 	$(LINK)

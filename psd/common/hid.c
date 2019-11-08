@@ -121,6 +121,12 @@ int hid_send(int what, const char *data, unsigned int len)
 }
 
 
+void hid_destroy(void)
+{
+	usbclient_destroy();
+}
+
+
 int hid_init(int (**rf)(int, char *, unsigned int, char **), int (**sf)(int, const char *, unsigned int), const hid_dev_setup_t* dev_setup)
 {
 	int res;
@@ -172,9 +178,8 @@ int hid_init(int (**rf)(int, char *, unsigned int, char **), int (**sf)(int, con
 	config.endpoint_list = endpoints;
 	config.descriptors_head = &dev;
 
-	if ((res = usbclient_init(&config)) != EOK) {
+	if ((res = usbclient_init(&config)) != EOK)
 		return res;
-	}
 
 	*rf = hid_recv;
 	*sf = hid_send;
