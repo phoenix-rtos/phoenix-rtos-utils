@@ -27,7 +27,6 @@
 #include <sys/mman.h>
 #include <sys/reboot.h>
 
-#include "../common/hid.h"
 #include "../common/sdp.h"
 
 #include "bcb.h"
@@ -73,8 +72,6 @@ enum { ocotp_ctrl, ocotp_ctrl_set, ocotp_ctrl_clr, ocotp_ctrl_tog, ocotp_timing,
 
 struct {
 	int run;
-	int (*rf)(int, char *, unsigned int, char **);
-	int (*sf)(int, const char *, unsigned int);
 
 	dbbt_t* dbbt;
 	fcb_t *fcb;
@@ -119,7 +116,7 @@ int psd_hidResponse(int err, int type)
 	if (!err) {
 		/* Report 3 device to host */
 		SET_OPEN_HAB(psd.buff);
-		if ((res = psd.sf(psd.buff[0], psd.buff, HID_REPORT_3_SIZE)) < 0)
+		if ((res = sdp_send(psd.buff[0], psd.buff, HID_REPORT_3_SIZE)) < 0)
 			err = -eReport3;
 
 		/* Report 4 device to host */
@@ -127,14 +124,14 @@ int psd_hidResponse(int err, int type)
 		case SDP_WRITE_FILE :
 			SET_FILE_COMPLETE(psd.buff);
 			memset(psd.buff + 5, 0, HID_REPORT_4_SIZE - 5);
-			if ((res = psd.sf(psd.buff[0], psd.buff, HID_REPORT_4_SIZE)) < 0)
+			if ((res = sdp_send(psd.buff[0], psd.buff, HID_REPORT_4_SIZE)) < 0)
 				err = -eReport4;
 			break;
 
 		case SDP_WRITE_REGISTER :
 			SET_COMPLETE(psd.buff);
 			memset(psd.buff + 5, 0, HID_REPORT_4_SIZE - 5);
-			if ((res = psd.sf(psd.buff[0], psd.buff, HID_REPORT_4_SIZE)) < 0)
+			if ((res = sdp_send(psd.buff[0], psd.buff, HID_REPORT_4_SIZE)) < 0)
 				err = -eReport4;
 			break;
 
@@ -145,13 +142,13 @@ int psd_hidResponse(int err, int type)
 	else {
 		/* Report 3 device to host */
 		SET_CLOSED_HAB(psd.buff);
-		if ((res = psd.sf(psd.buff[0], psd.buff, HID_REPORT_3_SIZE)) < 0)
+		if ((res = sdp_send(psd.buff[0], psd.buff, HID_REPORT_3_SIZE)) < 0)
 			err = -eReport3;
 
 		/* Report 4 device to host */
 		SET_HAB_ERROR(psd.buff, err);
 		memset(psd.buff + 5, 0, HID_REPORT_4_SIZE - 5);
-		if ((res = psd.sf(psd.buff[0], psd.buff, HID_REPORT_4_SIZE)) < 0)
+		if ((res = sdp_send(psd.buff[0], psd.buff, HID_REPORT_4_SIZE)) < 0)
 			err = -eReport4;
 	}
 
@@ -382,7 +379,7 @@ int psd_writeFile(sdp_cmd_t *cmd)
 		buffOffset = 0;
 
 		while ((buffOffset < FLASH_PAGE_SIZE) && (res == (HID_REPORT_2_SIZE - 1))) {
-			if ((res = psd.rf(1, psd.rcvBuff, HID_REPORT_2_SIZE, &outdata)) < 0 ) {
+			if ((res = sdp_recv(1, psd.rcvBuff, HID_REPORT_2_SIZE, &outdata)) < 0 ) {
 				err = -eReport2;
 				break;
 			}
@@ -460,13 +457,13 @@ int main(int argc, char **argv)
 	psd.oid = psd.oids[0];
 
 	printf("PSD: Initializing USB transport\n");
-	if (hid_init(&psd.rf, &psd.sf, &hid_setup)) {
+	if (sdp_init(&hid_setup)) {
 		printf("PSD: Couldn't initialize USB transport\n");
 		return -1;
 	}
 
 	while (psd.run) {
-		psd.rf(0, (void *)cmdBuff, sizeof(*pcmd) + 1, (void **)&pcmd);
+		sdp_recv(0, (char *)cmdBuff, sizeof(*pcmd) + 1, (char **)&pcmd);
 
 		switch (pcmd->type) {
 			case SDP_WRITE_REGISTER:

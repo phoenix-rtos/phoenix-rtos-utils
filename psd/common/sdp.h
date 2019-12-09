@@ -4,7 +4,7 @@
  * psd - Serial Download Protocol client
  *
  * Copyright 2019 Phoenix Systems
- * Author: Bartosz Ciesla, Pawel Pisarczyk
+ * Author: Bartosz Ciesla, Pawel Pisarczyk, Hubert Buczynski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -15,6 +15,7 @@
 #define _SDP_H_
 
 #include <stdint.h>
+#include <hid.h>
 
 /* Addresses definitions for WRITE_REGISTER */
 #define CHANGE_PARTITION -1
@@ -45,6 +46,18 @@ typedef struct _sdp_cmd_t {
 	uint32_t data;
 	uint8_t reserved;
 } __attribute__((packed)) sdp_cmd_t;
+
+
+int sdp_init(const hid_dev_setup_t* dev_setup);
+
+
+int sdp_send(int report, const char *data, unsigned int len);
+
+
+int sdp_recv(int report, char *data, unsigned int len, char **outdata);
+
+
+void sdp_destroy(void);
 
 
 #endif
