@@ -28,7 +28,6 @@
 #include <flashsrv.h>
 #include <phoenix/arch/imxrt.h>
 
-#include "../common/hid.h"
 #include "../common/sdp.h"
 
 
@@ -59,9 +58,6 @@ struct {
 
 	int run;
 	char buff[HID_REPORT_2_SIZE];
-
-	int (*rf)(int, char *, unsigned int, char **);
-	int (*sf)(int, const char *, unsigned int);
 } psd;
 
 
@@ -175,7 +171,7 @@ int psd_hidResponse(int err, int type)
 	if (!err) {
 		/* Report 3 device to host */
 		SET_OPEN_HAB(psd.buff);
-		if ((res = psd.sf(psd.buff[0], psd.buff, HID_REPORT_3_SIZE)) < 0)
+		if ((res = sdp_send(psd.buff[0], psd.buff, HID_REPORT_3_SIZE)) < 0)
 			err = -eReport3;
 
 		/* Report 4 device to host */
@@ -184,7 +180,7 @@ int psd_hidResponse(int err, int type)
 			SET_FILE_COMPLETE(psd.buff);
 			memset(psd.buff + 5, 0, HID_REPORT_4_SIZE - 5);
 
-			if ((res = psd.sf(psd.buff[0], psd.buff, HID_REPORT_4_SIZE)) < 0)
+			if ((res = sdp_send(psd.buff[0], psd.buff, HID_REPORT_4_SIZE)) < 0)
 				err = -eReport4;
 			break;
 
@@ -192,7 +188,7 @@ int psd_hidResponse(int err, int type)
 			SET_COMPLETE(psd.buff);
 			memset(psd.buff + 5, 0, HID_REPORT_4_SIZE - 5);
 
-			if ((res = psd.sf(psd.buff[0], psd.buff, HID_REPORT_4_SIZE)) < 0)
+			if ((res = sdp_send(psd.buff[0], psd.buff, HID_REPORT_4_SIZE)) < 0)
 				err = -eReport4;
 			break;
 
@@ -203,13 +199,13 @@ int psd_hidResponse(int err, int type)
 	else {
 		/* Report 3 device to host */
 		SET_CLOSED_HAB(psd.buff);
-		if ((res = psd.sf(psd.buff[0], psd.buff, HID_REPORT_3_SIZE)) < 0)
+		if ((res = sdp_send(psd.buff[0], psd.buff, HID_REPORT_3_SIZE)) < 0)
 			err = -eReport3;
 
 		/* Report 4 device to host */
 		SET_HAB_ERROR(psd.buff, err);
 		memset(psd.buff + 5, 0, HID_REPORT_4_SIZE - 5);
-		if ((res = psd.sf(psd.buff[0], psd.buff, HID_REPORT_4_SIZE)) < 0)
+		if ((res = sdp_send(psd.buff[0], psd.buff, HID_REPORT_4_SIZE)) < 0)
 			err = -eReport4;
 	}
 
@@ -248,7 +244,7 @@ int psd_writeFile(sdp_cmd_t *cmd)
 	for (writesz = 0; !err && (writesz < cmd->datasz);) {
 
 		memset(psd.buff, 0xff, HID_REPORT_2_SIZE - 1);
-		if ((res = psd.rf(1, psd.buff, HID_REPORT_2_SIZE, &outdata)) < 0 ) {
+		if ((res = sdp_recv(1, psd.buff, HID_REPORT_2_SIZE, &outdata)) < 0 ) {
 			err = -eReport2;
 			break;
 		}
@@ -293,9 +289,10 @@ int main(int argc, char **argv)
 	char cmdBuff[HID_REPORT_1_SIZE];
 
 	psd.run = 1;
+
 	psd_enabelCache(0);
 
-	if (hid_init(&psd.rf, &psd.sf, &hid_setup)) {
+	if (sdp_init(&hid_setup)) {
 		LOG_ERROR("couldn't initialize USB transport.");
 		return -1;
 	}
@@ -312,7 +309,7 @@ int main(int argc, char **argv)
 
 	while (psd.run)
 	{
-		psd.rf(0, (void *)cmdBuff, sizeof(*pcmd) + 1, (void **)&pcmd);
+		sdp_recv(0, (char *)cmdBuff, sizeof(*pcmd) + 1, (char **)&pcmd);
 
 		switch (pcmd->type) {
 			case SDP_WRITE_REGISTER:
@@ -337,7 +334,7 @@ int main(int argc, char **argv)
 	}
 
 	psd_enabelCache(1);
-	hid_destroy();
+	sdp_destroy();
 
 	LOG("closing PSD. Device is rebooting.");
 	reboot(PHOENIX_REBOOT_MAGIC);
