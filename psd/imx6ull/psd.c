@@ -11,7 +11,6 @@
  * %LICENSE%
  */
 
-#include <usbclient.h>
 #include <flashsrv.h>
 
 #include <stdio.h>
