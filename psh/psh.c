@@ -367,7 +367,7 @@ static int psh_mem(char *args)
 		while (info.page.mapsz > mapsz);
 
 		for (i = 0, p = info.page.map; i < info.page.mapsz; ++i, ++p) {
-			if (p != info.page.map && (n = (p->addr - (p - 1)->addr) / SIZE_PAGE - (p - 1)->count)) {
+			if (p != info.page.map && (n = (p->addr - (p - 1)->addr) / _PAGE_SIZE - (p - 1)->count)) {
 				if (n > 3) {
 					printf("[%ux]", n);
 				}
