@@ -61,23 +61,23 @@ struct {
 } psd;
 
 
-const hid_dev_setup_t hid_setup = {
-	 .ddev = {
-		.len = sizeof(usbclient_desc_dev_t), .desc_type = USBCLIENT_DESC_TYPE_DEV, .bcd_usb = 0x200,
-		.dev_class = 0, .dev_subclass = 0, .dev_prot = 0, .max_pkt_sz0 = 64,
-		.vend_id = 0x1FC9, .prod_id = 0x0135, .bcd_dev = 0x0001,
-		.man_str = 0, .prod_str = 0, .sn_str = 0,
-		.num_conf = 1
+const usb_hid_dev_setup_t hid_setup = {
+	 .dDevice = {
+		.bLength = sizeof(usb_device_desc_t), .bDescriptorType = USB_DESC_DEVICE, .bcdUSB = 0x200,
+		.bDeviceClass = 0, .bDeviceSubClass = 0, .bDeviceProtocol = 0, .bMaxPacketSize0 = 64,
+		.idVendor = 0x1FC9, .idProduct = 0x0135, .bcdDevice = 0x0001,
+		.iManufacturer = 0, .iProduct = 0, .iSerialNumber = 0,
+		.bNumConfigurations = 1
 	},
-	.dstrman = {
-		.len = 27 * 2 + 2,
-		.desc_type = USBCLIENT_DESC_TYPE_STR,
-		.string = { 'F', 0, 'r', 0, 'e', 0, 'e', 0, 's', 0, 'c', 0, 'a', 0, 'l', 0, 'e', 0, ' ', 0, 'S', 0, 'e', 0, 'm', 0, 'i', 0, 'C', 0, 'o', 0, 'n', 0, 'd', 0, 'u', 0, 'c', 0, 't', 0, 'o', 0, 'r', 0, ' ', 0, 'I', 0, 'n', 0, 'c', 0 }
+	.dStrMan = {
+		.bLength = 27 * 2 + 2,
+		.bDescriptorType = USB_DESC_STRING,
+		.wData = { 'F', 0, 'r', 0, 'e', 0, 'e', 0, 's', 0, 'c', 0, 'a', 0, 'l', 0, 'e', 0, ' ', 0, 'S', 0, 'e', 0, 'm', 0, 'i', 0, 'C', 0, 'o', 0, 'n', 0, 'd', 0, 'u', 0, 'c', 0, 't', 0, 'o', 0, 'r', 0, ' ', 0, 'I', 0, 'n', 0, 'c', 0 }
 	},
-	.dstrprod = {
-		.len = 11 * 2 + 2,
-		.desc_type = USBCLIENT_DESC_TYPE_STR,
-		.string = { 'S', 0, 'E', 0, ' ', 0, 'B', 0, 'l', 0, 'a', 0, 'n', 0, 'k', 0, ' ', 0, 'R', 0, 'T', 0 }
+	.dStrProd = {
+		.bLength = 11 * 2 + 2,
+		.bDescriptorType = USB_DESC_STRING,
+		.wData = { 'S', 0, 'E', 0, ' ', 0, 'B', 0, 'l', 0, 'a', 0, 'n', 0, 'k', 0, ' ', 0, 'R', 0, 'T', 0 }
 	}
 };
 

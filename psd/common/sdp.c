@@ -17,7 +17,7 @@
 #include <arpa/inet.h>
 
 
-int sdp_init(const hid_dev_setup_t* dev_setup)
+int sdp_init(const usb_hid_dev_setup_t *dev_setup)
 {
 	return hid_init(dev_setup);
 }

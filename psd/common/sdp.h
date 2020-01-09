@@ -15,7 +15,9 @@
 #define _SDP_H_
 
 #include <stdint.h>
-#include <hid.h>
+
+#include <hid_client.h>
+
 
 /* Addresses definitions for WRITE_REGISTER */
 #define CHANGE_PARTITION -1
@@ -48,7 +50,7 @@ typedef struct _sdp_cmd_t {
 } __attribute__((packed)) sdp_cmd_t;
 
 
-int sdp_init(const hid_dev_setup_t* dev_setup);
+int sdp_init(const usb_hid_dev_setup_t* dev_setup);
 
 
 int sdp_send(int report, const char *data, unsigned int len);
