@@ -11,7 +11,7 @@ $(PREFIX_PROG)psd: $(addprefix $(PREFIX_O)psd/imx6ull/, bch.o bcb.o flashmng.o p
 	$(LINK)
 
 
-$(PREFIX_PROG)psd-old: $(PREFIX_O)psd/imx6ull/psd-old.o $(PREFIX_A)libusbclass.a $(PREFIX_A)libusbclient.a
+$(PREFIX_PROG)psd-old: $(PREFIX_O)psd/imx6ull/psd-old.o $(PREFIX_A)libusbclient.a
 	$(LINK)
 
 all: $(PREFIX_PROG_STRIPPED)psd-old $(PREFIX_PROG_STRIPPED)psd
