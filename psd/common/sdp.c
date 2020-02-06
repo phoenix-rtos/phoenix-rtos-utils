@@ -16,6 +16,8 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 
+#define CONTROL_ENDPOINT 0
+#define INTERRUPT_ENPOINT 1
 
 int sdp_init(const usb_hid_dev_setup_t *dev_setup)
 {
@@ -33,7 +35,7 @@ int sdp_send(int report, const char *data, unsigned int len)
 			return -2;
 	}
 
-	return hid_send(data, len);
+	return hid_send(INTERRUPT_ENPOINT, data, len);
 }
 
 
@@ -42,7 +44,7 @@ int sdp_recv(int report, char *data, unsigned int len, char **outdata)
 	int res;
 	sdp_cmd_t *cmd;
 
-	if ((res = hid_recv(data, len)) < 0)
+	if ((res = hid_recv(CONTROL_ENDPOINT, data, len)) < 0)
 		return -1;
 
 	if (!report) {

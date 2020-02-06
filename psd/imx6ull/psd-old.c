@@ -22,6 +22,10 @@
 #include <sys/stat.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/list.h>
+
+#define CONTROL_ENDPOINT 0
+#define INTERRUPT_ENPOINT 1
 
 #define MAX_REPORT (128)
 #define MAX_STRING (128)
@@ -155,44 +159,41 @@ usb_endpoint_desc_t endpoint_desc = {
 };
 
 usb_string_desc_t string_zero_desc = {
-	.bLength = sizeof(usb_string_desc_t),
+	.bLength = 4,
 	.bDescriptorType = USB_DESC_STRING,
 	.wData = {0x04, 0x09} /* English */
 };
 
-usbclient_descriptor_string_t string_man_desc = {
-	.len = 27 * 2 + 2,
-	.desc_type = USB_DESC_STRING,
-	.string = { 'F', 0, 'r', 0, 'e', 0, 'e', 0, 's', 0, 'c', 0, 'a', 0, 'l', 0, 'e', 0, ' ', 0, 'S', 0, 'e', 0, 'm', 0, 'i', 0, 'c', 0, 'o', 0, 'n', 0, 'd', 0, 'u', 0, 'c', 0, 't', 0, 'o', 0, 'r', 0, ' ', 0, 'I', 0, 'n', 0, 'c', 0 }
+usb_string_desc_t string_man_desc = {
+	.bLength = 27 * 2 + 2,
+	.bDescriptorType = USB_DESC_STRING,
+	.wData = { 'F', 0, 'r', 0, 'e', 0, 'e', 0, 's', 0, 'c', 0, 'a', 0, 'l', 0, 'e', 0, ' ', 0, 'S', 0, 'e', 0, 'm', 0, 'i', 0, 'c', 0, 'o', 0, 'n', 0, 'd', 0, 'u', 0, 'c', 0, 't', 0, 'o', 0, 'r', 0, ' ', 0, 'I', 0, 'n', 0, 'c', 0 }
 };
 
-usbclient_descriptor_string_t string_prod_desc = {
-	.len = 13 * 2 + 2,
-	.desc_type = USB_DESC_STRING,
-	.string = { 'S', 0, 'E', 0, ' ', 0, 'B', 0, 'l', 0, 'a', 0, 'n', 0, 'k', 0, ' ', 0, '6', 0, 'U', 0, 'L', 0, 'L', 0 }
+usb_string_desc_t string_prod_desc = {
+	.bLength = 13 * 2 + 2,
+	.bDescriptorType = USB_DESC_STRING,
+	.wData = { 'S', 0, 'E', 0, ' ', 0, 'B', 0, 'l', 0, 'a', 0, 'n', 0, 'k', 0, ' ', 0, '6', 0, 'U', 0, 'L', 0, 'L', 0 }
 };
 
 
-usb_desc_list_t hid_report_el = { .size = 1, .descriptors = (usb_functional_desc_t*)&string_prod_desc, .next = NULL };
-usb_desc_list_t string_prod_el = { .size = 1, .descriptors = (usb_functional_desc_t*)&hid_report_desc, .next = &hid_report_el };
-usb_desc_list_t string_man_el = { .size = 1, .descriptors = (usb_functional_desc_t*)&string_man_desc, .next = &string_prod_el };
-usb_desc_list_t string_zero_el = { .size = 1, .descriptors = (usb_functional_desc_t*)&string_zero_desc, .next = &string_man_el };
-usb_desc_list_t endpoint_el = { .size = 1, .descriptors = (usb_functional_desc_t*)&endpoint_desc, .next = &string_zero_el };
-usb_desc_list_t hid_el = { .size = 1, .descriptors = (usb_functional_desc_t*)&hid_desc, .next = &endpoint_el };
-usb_desc_list_t interface_el = { .size = 1, .descriptors = (usb_functional_desc_t*)&interface_desc, .next = &hid_el };
-usb_desc_list_t config_el = { .size = 1, .descriptors = (usb_functional_desc_t*)&config_desc, .next = &interface_el };
-usb_desc_list_t device_el = { .size = 1, .descriptors = (usb_functional_desc_t*)&device_desc , .next = &config_el };
+struct {
+	usb_desc_list_t *descList;
 
-static usb_conf_t config = {
-	.endpoint_list = {
-		.size = 2,
-		.endpoints = {
-			{ .type = USB_ENDPT_TYPE_CONTROL, .direction = 0 /* for control endpoint it's ignored */},
-			{ .type = USB_ENDPT_TYPE_INTR, .direction = USB_ENDPT_DIR_IN } /* IN interrupt endpoint required for HID */
-		}
-	},
-	.descriptors_head = &device_el
-};
+	usb_desc_list_t dev;
+	usb_desc_list_t conf;
+	usb_desc_list_t iface;
+
+	usb_desc_list_t hid;
+	usb_desc_list_t ep;
+
+	usb_desc_list_t str0;
+	usb_desc_list_t strman;
+	usb_desc_list_t strprod;
+
+	usb_desc_list_t hidreport;
+} hid_common;
+
 
 /* SDP command */
 typedef struct _sdp_command {
@@ -246,13 +247,13 @@ int send_hab_security(void)
 {
 	//const uint8_t send_data[] = { HID_REPORT_HAB_SECURITY, 0x12, 0x34, 0x34, 0x12 };
 	const uint8_t send_data[] = { HID_REPORT_HAB_SECURITY, 0x56, 0x78, 0x78, 0x56 };
-	return usbclient_send(&config.endpoint_list.endpoints[1], send_data, sizeof(send_data));
+	return usbclient_send(INTERRUPT_ENPOINT, send_data, sizeof(send_data));
 }
 
 int send_complete_status(void)
 {
 	const uint8_t send_data[] = { HID_REPORT_SDP_RESPONSE_DATA, 0x88, 0x88, 0x88, 0x88 };
-	return usbclient_send(&config.endpoint_list.endpoints[1], send_data, sizeof(send_data));
+	return usbclient_send(INTERRUPT_ENPOINT, send_data, sizeof(send_data));
 }
 
 void decode_sdp_command(sdp_command_t *cmd, uint8_t *data, uint32_t len)
@@ -296,7 +297,7 @@ int receive_name(mod_t *mod)
 	uint8_t recv_data[MAX_RECV_DATA] = { 0 };
 
 	/* Receive command */
-	int32_t result = usbclient_receive(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+	int32_t result = usbclient_receive(CONTROL_ENDPOINT, recv_data, MAX_RECV_DATA);
 	if (decode_incoming_report(&command, recv_data, result) != HID_REPORT_SDP_COMMAND ||
 			command.type != SDP_CMD_WRITE_FILE) {
 		printf("Did not receive proper command. Exiting...\n");
@@ -309,7 +310,7 @@ int receive_name(mod_t *mod)
 		return 1;
 	}
 
-	result = usbclient_receive(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+	result = usbclient_receive(CONTROL_ENDPOINT, recv_data, MAX_RECV_DATA);
 	if (recv_data[0] == HID_REPORT_SDP_COMMAND_DATA) {
 		int to_copy = result - 1 > MAX_STRING ? MAX_STRING - 1 : result - 1;
 		memcpy(mod->name, recv_data + 1, to_copy);
@@ -330,7 +331,7 @@ int receive_args(mod_t *mod)
 	uint8_t recv_data[MAX_RECV_DATA] = { 0 };
 
 	/* Receive command */
-	int32_t result = usbclient_receive(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+	int32_t result = usbclient_receive(CONTROL_ENDPOINT, recv_data, MAX_RECV_DATA);
 	if (decode_incoming_report(&command, recv_data, result) != HID_REPORT_SDP_COMMAND ||
 			command.type != SDP_CMD_WRITE_FILE) {
 		printf("Did not receive proper command. Exiting...\n");
@@ -343,7 +344,7 @@ int receive_args(mod_t *mod)
 		return 0;
 	}
 
-	result = usbclient_receive(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+	result = usbclient_receive(CONTROL_ENDPOINT, recv_data, MAX_RECV_DATA);
 	if (recv_data[0] == HID_REPORT_SDP_COMMAND_DATA) {
 		int to_copy = result - 1 > MAX_STRING ? MAX_STRING - 1 : result - 1;
 		memcpy(mod->args, recv_data + 1, to_copy);
@@ -363,7 +364,7 @@ int receive_content(mod_t *mod)
 	sdp_command_t command;
 	uint8_t recv_data[MAX_RECV_DATA] = { 0 };
 	/* Receive command */
-	int32_t result = usbclient_receive(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+	int32_t result = usbclient_receive(CONTROL_ENDPOINT, recv_data, MAX_RECV_DATA);
 	if (decode_incoming_report(&command, recv_data, result) != HID_REPORT_SDP_COMMAND ||
 			command.type != SDP_CMD_WRITE_FILE) {
 		printf("Did not receive proper command. Exiting...\n");
@@ -379,7 +380,7 @@ int receive_content(mod_t *mod)
 	printf("Reading module\n");
 	while (read_data < mod->size) {
 		/* Receive command */
-		result = usbclient_receive(&config.endpoint_list.endpoints[1], recv_data, MAX_RECV_DATA);
+		result = usbclient_receive(CONTROL_ENDPOINT, recv_data, MAX_RECV_DATA);
 		if (recv_data[0] == HID_REPORT_SDP_COMMAND_DATA) {
 			memcpy(mod->data + read_data, recv_data + 1, result - 1);
 			read_data += result - 1; /* substract 1 byte for report ID */
@@ -396,9 +397,40 @@ int main(int argc, char **argv)
 {
 	printf("Started psd\n");
 
+	/* Initialize descriptor list */
+	hid_common.dev.descriptor = (usb_functional_desc_t *)&device_desc;
+	LIST_ADD(&hid_common.descList, (usb_desc_list_t *)&hid_common.dev);
+
+	hid_common.conf.descriptor = (usb_functional_desc_t *)&config_desc;
+	LIST_ADD(&hid_common.descList, (usb_desc_list_t *)&hid_common.conf);
+
+	hid_common.iface.descriptor = (usb_functional_desc_t *)&interface_desc;
+	LIST_ADD(&hid_common.descList, &hid_common.iface);
+
+	hid_common.hid.descriptor = (usb_functional_desc_t *)&hid_desc;
+	LIST_ADD(&hid_common.descList, &hid_common.hid);
+
+	hid_common.ep.descriptor = (usb_functional_desc_t *)&endpoint_desc;
+	LIST_ADD(&hid_common.descList, &hid_common.ep);
+
+	hid_common.str0.descriptor = (usb_functional_desc_t *)&string_zero_desc;
+	LIST_ADD(&hid_common.descList, &hid_common.str0);
+
+	hid_common.strman.descriptor = (usb_functional_desc_t *)&string_man_desc;
+	LIST_ADD(&hid_common.descList, &hid_common.strman);
+
+	hid_common.strprod.descriptor = (usb_functional_desc_t *)&string_prod_desc;
+	LIST_ADD(&hid_common.descList, &hid_common.strprod);
+
+	hid_common.hidreport.descriptor = (usb_functional_desc_t *)&hid_report_desc;
+	LIST_ADD(&hid_common.descList, &hid_common.hidreport);
+
+	hid_common.hidreport.next = NULL;
+
+
 	/* Initialize USB library */
 	int32_t result = 0;
-	if((result = usbclient_init(&config)) != EOK) {
+	if((result = usbclient_init(hid_common.descList)) != EOK) {
 		printf("Couldn't initialize USB library (%d)\n", result);
 	}
 	printf("Initialized USB library\n");
