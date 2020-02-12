@@ -56,7 +56,11 @@ static int runServer(const char *name, unsigned port, ...)
 	}
 	else if (pid == 0) {
 		/* child */
-		ProcExec(AT_FDSYSPAGE, name, argv, NULL);
+		if (name[0] != '/')
+			ProcExec(AT_FDSYSPAGE, name, argv, NULL);
+		else
+			ProcExec(-1, name, argv, NULL);
+
 		LOG_ERROR("Failed to exec %s", name);
 		_exit(EX_OSERR);
 	}
@@ -130,36 +134,10 @@ int main(int argc, char **argv)
 	if (mknod("/dev/zero", S_IFCHR, 1) == -1)
 		LOG_ERROR("Failed to create zero device node: %s", strerror(errno));
 
-	if (runServer("pc-tty", 2, NULL)) {
-		LOG_ERROR("Failed to run pc-tty");
-		_exit(EX_OSERR);
-	}
-
 	if (runServer("pc-ata", 3, NULL)) {
 		LOG_ERROR("Failed to run pc-ata");
 		_exit(EX_OSERR);
 	}
-
-	if (runServer("ptysrv", 13, NULL)) {
-		LOG_ERROR("Failed to run ptysrv");
-		_exit(EX_OSERR);
-	}
-
-	if (openStd()) {
-		LOG_ERROR("openStd");
-		return -1;
-	}
-
-
-	if (runServer("lwip", 12, "virtio", NULL))
-		_exit(EX_OSERR);
-
-	close(PORT_DESCRIPTOR);
-
-	close(0);
-	close(1);
-	close(2);
-
 
 	mkdir("/mnt", 0777);
 	int dev = open("/dev", O_RDWR);
@@ -192,6 +170,33 @@ int main(int argc, char **argv)
 	close(dev);
 	close(sp);
 	close(mfd);
+
+
+
+	if (runServer("/sbin/pc-tty", 2, NULL)) {
+		LOG_ERROR("Failed to run pc-tty");
+		_exit(EX_OSERR);
+	}
+
+	if (runServer("/sbin/ptysrv", 13, NULL)) {
+		LOG_ERROR("Failed to run ptysrv");
+		_exit(EX_OSERR);
+	}
+
+	if (openStd()) {
+		LOG_ERROR("openStd");
+		return -1;
+	}
+
+	if (runServer("/sbin/lwip", 12, "virtio", NULL))
+		_exit(EX_OSERR);
+
+	close(PORT_DESCRIPTOR);
+
+	close(0);
+	close(1);
+	close(2);
+
 
 
 	chdir("/");
