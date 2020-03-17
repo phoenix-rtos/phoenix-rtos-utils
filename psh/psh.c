@@ -5,8 +5,8 @@
  *
  * test/psh
  *
- * Copyright 2017, 2018 Phoenix Systems
- * Author: Pawel Pisarczyk, Jan Sikorski
+ * Copyright 2017, 2018, 2020 Phoenix Systems
+ * Author: Pawel Pisarczyk, Jan Sikorski, Lukasz Kosinski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -20,6 +20,7 @@
 #include <stdarg.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <stdint.h>
 #include <sys/threads.h>
 #include <sys/minmax.h>
 #include <sys/mman.h>
@@ -32,6 +33,52 @@
 #include <arch.h>
 
 #define PSH_SCRIPT_MAGIC ":{}:"
+
+
+static int psh_mod(int x, int y)
+{
+	int res = x % y;
+
+	if (res < 0)
+		res += abs(y);
+
+	return res;
+}
+
+
+static int psh_div(int x, int y)
+{
+	return (x - psh_mod(x, y)) / y;
+}
+
+
+static int psh_log(unsigned int base, unsigned int x)
+{
+	int res = 0;
+
+	while (x /= base)
+		res++;
+
+	return res;
+}
+
+
+static int psh_pow(int x, unsigned int y)
+{
+	int res = 1;
+
+	while (y) {
+		if (y & 1)
+			res *= x;
+		y >>= 1;
+		if (!y)
+			break;
+		x *= x;
+	}
+
+	return res;
+}
+
 
 static int psh_isNewline(char c)
 {
@@ -94,6 +141,149 @@ static int psh_readln(char *line, int size)
 	memset(&line[count], '\0', size - count);
 
 	return count;
+}
+
+
+static char *psh_BP(int exp)
+{
+	#define PSH_BP_OFFSET     0
+	#define PSH_BP_EXP_OFFSET 10
+
+	/* Binary prefixes */
+	static char *BP[] = {
+		"",   /* 2^0       */
+		"K",  /* 2^10   kibi */
+		"M",  /* 2^20   mebi */
+		"G",  /* 2^30   gibi */
+		"T",  /* 2^40   tebi */
+		"P",  /* 2^50   pebi */
+		"E",  /* 2^60   exbi */
+		"Z",  /* 2^70   zebi */
+		"Y"   /* 2^80   yobi */
+	};
+
+	exp = psh_div(exp, PSH_BP_EXP_OFFSET) + PSH_BP_OFFSET;
+
+	if (exp < 0 || exp >= sizeof(BP) / sizeof(char *))
+		return NULL;
+	
+	return BP[exp];
+}
+
+
+static char *psh_SI(int exp)
+{
+	#define PSH_SI_OFFSET     8
+	#define PSH_SI_EXP_OFFSET 3
+
+	/* SI prefixes */
+	static char* SI[] = {
+		"y",  /* 10^-24 yocto */
+		"z",  /* 10^-21 zepto */
+		"a",  /* 10^-18 atto  */
+		"f",  /* 10^-15 femto */
+		"p",  /* 10^-12 pico  */
+		"n",  /* 10^-9  nano  */
+		"u",  /* 10^-6  micro */
+		"m",  /* 10^-3  milli */
+		"",   /* 10^0         */
+		"k",  /* 10^3   kilo  */
+		"M",  /* 10^6   mega  */
+		"G",  /* 10^9   giga  */
+		"T",  /* 10^12  tera  */
+		"P",  /* 10^15  peta  */
+		"E",  /* 10^18  exa   */
+		"Z",  /* 10^21  zetta */
+		"Y",  /* 10^24  yotta */
+	};
+
+	exp = psh_div(exp, PSH_SI_EXP_OFFSET) + PSH_SI_OFFSET;
+
+	if (exp < 0 || exp >= sizeof(SI) / sizeof(char *))
+		return NULL;
+
+	return SI[exp];
+}
+
+
+/* Prefix base */
+enum { BP = 2, SI = 10 };
+
+/* Convert n = x * base^y to a short binary(base 2)/SI(base 10) prefix notation */
+/* (value of n gets rounded to prec decimal places, trailing zeros get cut), e.g. */
+/* psh_convert(SI, -15496, 3, 2, buff) saves "-15.5M" in buff */
+/* psh_convert(BP, 2000, 10, 3, buff) saves "1.953M" in buff */
+static int psh_convert(unsigned int base, int x, int y, unsigned int prec, char *buff)
+{
+	char *(*fp)(int);
+	char *prefix;
+	char fmt[11];
+	int offset, ipart, fpart;
+	int div = psh_log(base, abs(x));
+	int exp = div + y;
+
+	/* Support precision for up to 8 decimal places */
+	if (prec > 8)
+		return -1;
+
+	switch (base) {
+	/* Binary prefix */
+	case BP:
+		fp = psh_BP;
+		offset = PSH_BP_EXP_OFFSET;
+		break;
+
+	/* SI prefix */
+	case SI:
+		fp = psh_SI;
+		offset = PSH_SI_EXP_OFFSET;
+		break;
+
+	default:
+		return -1;
+	}
+
+	/* div < 0 => accumulate extra exponents in x */
+	if ((div -= psh_mod(exp, offset)) < 0) {
+		x *= psh_pow(base, -div);
+		div = 0;
+	}
+	div = psh_pow(base, div);
+
+	/* Save integer part */
+	ipart = abs(x) / div;	
+	/* Save fractional part as percentage */
+	fpart = (int)((uint64_t)psh_pow(10, prec + 1) * (abs(x) % div) / div);
+	/* Round the result */
+	if ((fpart = (fpart + 5) / 10) == psh_pow(10, prec)) {
+		ipart++;
+		fpart = 0;
+		if (ipart == psh_pow(base, offset)) {
+			ipart = 1;
+			exp += offset;
+		}
+	}
+	/* Remove trailing zeros */
+	while (fpart && !(fpart % 10)) {
+		fpart /= 10;
+		prec--;
+	}
+	/* Get the prefix */
+	if (!(prefix = fp(exp)))
+		return -1;
+
+	if (x < 0)
+		*buff++ = '-';
+
+	if (fpart) {
+		sprintf(fmt, "%%d.%%0%ud%%s", prec);
+		sprintf(buff, fmt, ipart, fpart, prefix);
+	}
+	else {
+		sprintf(buff, "%d%s", ipart, prefix);
+	}
+
+	return 0;
 }
 
 
@@ -496,9 +686,9 @@ static int psh_ps(char *arg)
 {
 	threadinfo_t *info, *info_re;
 	int tcnt, i, j, n = 32;
-	unsigned len, ipart, fpart;
-	char unit;
-	int collapse_threads = 0;
+	unsigned len;
+	char buff[8];
+	int collapse_threads = 1;
 
 	if ((info = malloc(n * sizeof(threadinfo_t))) == NULL) {
 		printf("ps: out of memory\n");
@@ -515,10 +705,8 @@ static int psh_ps(char *arg)
 		info = info_re;
 	}
 
-	arg = psh_nextString(arg, &len);
-
-	if (len) {
-		if (!strcmp(arg, "-i"))
+	while ((arg = psh_nextString(arg, &len)) && len) {
+		if (!strcmp(arg, "-p"))
 			qsort(info, tcnt, sizeof(threadinfo_t), psh_ps_cmp_pid);
 
 		else if (!strcmp(arg, "-n"))
@@ -527,20 +715,21 @@ static int psh_ps(char *arg)
 		else if (!strcmp(arg, "-c"))
 			qsort(info, tcnt, sizeof(threadinfo_t), psh_ps_cmp_cpu);
 
-		else if (!strcmp(arg, "-p"))
-			collapse_threads = 1;
+		else if (!strcmp(arg, "-t"))
+			collapse_threads = 0;
 
 		else
 			printf("ps: unknown option '%s'\n", arg);
+
+		arg += len + 1;
 	}
 
 	if (collapse_threads) {
 		qsort(info, tcnt, sizeof(threadinfo_t), psh_ps_cmp_pid);
-		printf("%9s %9s %4s  %5s %5s %12s %6s %7s  THR  %s\n", "PID", "PPID", "PRI", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "CMD");
-
+		printf("%6s %6s %2s %5s %5s %7s %6s %7s %3s %-24s\n", "PID", "PPID", "PR", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "THR", "CMD");
 	}
 	else {
-		printf("%9s %9s %4s  %5s %5s %12s %6s %7s  %s\n", "PID", "PPID", "PRI", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "CMD");
+		printf("%6s %6s %2s %5s %5s %7s %6s %7s %-28s\n", "PID", "PPID", "PR", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "CMD");
 	}
 
 	for (i = 0; i < tcnt; i = j) {
@@ -558,50 +747,20 @@ static int psh_ps(char *arg)
 		if (!info[i].state)
 			printf("\e[30m\e[47m");
 
-		printf("%9d %9d %4d  %5s %3d.%d %12llu %3u:%02u", info[i].pid, info[i].ppid, info[i].priority, info[i].state ? "sleep" : "ready",
-			info[i].load / 10, info[i].load % 10, info[i].wait,
+		psh_convert(SI, info[i].wait, -6, 1, buff);
+		printf("%6d %6d %2d %5s %3d.%d %6ss %3u:%02u", info[i].pid, info[i].ppid, info[i].priority, info[i].state ? "sleep" : "ready",
+			info[i].load / 10, info[i].load % 10, buff,
 			info[i].cpu_time / 60, info[i].cpu_time % 60);
 
-		info[i].vmem /= 1024;
-
-		if (info[i].vmem < 1000) {
-			ipart = info[i].vmem;
-			fpart = 0;
-			unit = 'K';
-		}
-		else {
-			ipart = info[i].vmem / 1024;
-			fpart = ((info[i].vmem % 1024) * 100) / 1024;
-			fpart = ((fpart % 10 >= 5) ? fpart + 10 : fpart) / 10;
-			unit = 'M';
-
-			if (fpart >= 10) {
-				++ipart;
-				fpart = 0;
-			}
-
-			if (ipart >= 1000) {
-				fpart = ((ipart % 1024) * 100) / 1024;
-				fpart = ((fpart % 10 >= 5) ? fpart + 10 : fpart) / 10;
-				ipart /= 1024;
-				unit = 'G';
-			}
-
-			if (fpart >= 10) {
-				++ipart;
-				fpart = 0;
-			}
-		}
-
-		if (fpart)
-			printf(" %3u.%1u %c", ipart, fpart, unit);
-		else
-			printf("  %4u %c", ipart, unit);
+		psh_convert(BP, info[i].vmem, 0, 1, buff);
+		printf(" %7s", buff);
 
 		if (collapse_threads)
-			printf("  %3d", j-i);
+			printf(" %3d %-24s", j-i, info[i].name);
+		else
+			printf(" %-28s", info[i].name);
 
-		printf("  %s\033[0m\n", info[i].name);
+		printf("\033[0m\n");
 	}
 
 	free(info);
