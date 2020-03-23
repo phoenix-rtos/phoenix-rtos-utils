@@ -9,4 +9,5 @@
 CFLAGS += -DTARGET_IMX6ULL
 
 include psh/Makefile
-include psd/imx6ull/Makefile
+include pinit/Makefile
+#include psd/imx6ull/Makefile
