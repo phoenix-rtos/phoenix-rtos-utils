@@ -82,7 +82,7 @@ static int psh_readln(char *line, int size)
 			continue;
 
 		/* Check, if line has maximum size. */
-		if (count >= size - 1 && c != 0x7f && !psh_isNewline(c))
+		if (count >= size - 2 && c != 0x7f && !psh_isNewline(c))
 			continue;
 
 		if (psh_isNewline(c))
@@ -186,6 +186,7 @@ static void psh_touch(char *args)
 		path += len + 1;
 	}
 }
+
 
 static int psh_mem(char *args)
 {
@@ -627,6 +628,10 @@ int psh_exec(char *cmd)
 		argv = argv_re;
 		argv[argc++] = arg;
 		arg += len + 1;
+	}
+	if (argc == 0) {
+		printf("psh: exec empty agument\n");
+		return -EINVAL;
 	}
 
 	argv[argc] = NULL;
