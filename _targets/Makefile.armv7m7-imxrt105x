@@ -6,5 +6,4 @@
 # Copyright 2019 Phoenix Systems
 #
 
-include psh/Makefile
-include psd/imxrt/Makefile
+include core/psd/imxrt/Makefile
