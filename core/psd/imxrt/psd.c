@@ -43,7 +43,7 @@
 #define HID_REPORT_3_SIZE 5
 #define HID_REPORT_4_SIZE 65
 
-#define INTERNAL_FLASH_NAME "/dev/flash2"
+#define INTERNAL_FLASH_NAME "/dev/flash1"
 
 #define LOG(str, ...) do { if (1) fprintf(stderr, "psd: " str "\n", ##__VA_ARGS__); } while (0)
 #define LOG_ERROR(str, ...) do { fprintf(stderr, __FILE__  ":%d error: " str "\n", __LINE__, ##__VA_ARGS__); } while (0)
@@ -156,7 +156,7 @@ static int psd_getFlashProperties(oid_t oid)
 	if (odevctl->err < 0)
 		return -1;
 
-	psd.flash_size = odevctl->properties.fsize;
+	psd.flash_size = odevctl->properties.size;
 	psd.page_size = odevctl->properties.psize;
 	psd.sector_size = odevctl->properties.ssize;
 
