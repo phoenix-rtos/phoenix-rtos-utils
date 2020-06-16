@@ -32,13 +32,6 @@
 #include "flashmng.h"
 
 
-#define SET_OPEN_HAB(b) (b)[0]=3;(b)[1]=0x56;(b)[2]=0x78;(b)[3]=0x78;(b)[4]=0x56;
-#define SET_CLOSED_HAB(b) (b)[0]=3;(b)[1]=0x12;(b)[2]=0x34;(b)[3]=0x34;(b)[4]=0x12;
-#define SET_COMPLETE(b) (b)[0]=4;(b)[1]=0x12;(b)[2]=0x8a;(b)[3]=0x8a;(b)[4]=0x12;
-#define SET_FILE_COMPLETE(b) (b)[0]=4;(b)[1]=0x88;(b)[2]=0x88;(b)[3]=0x88;(b)[4]=0x88;
-#define SET_HAB_ERROR(b, err) (b)[0]=4;(b)[1]=err;(b)[2]=0xaa;b[3]=0xaa;(b)[4]=0xaa;
-
-
 /* Control blocks */
 #define FCB 1
 #define DBBT 2
@@ -84,7 +77,7 @@ struct {
 
 	FILE *files[FILES_SIZE];
 	oid_t oids[FILES_SIZE];
-} psd;
+} psd_common;
 
 
 const usb_hid_dev_setup_t hid_setup = {
@@ -114,23 +107,23 @@ int psd_hidResponse(int err, int type)
 
 	if (!err) {
 		/* Report 3 device to host */
-		SET_OPEN_HAB(psd.buff);
-		if ((res = sdp_send(psd.buff[0], psd.buff, HID_REPORT_3_SIZE)) < 0)
+		SET_OPEN_HAB(psd_common.buff);
+		if ((res = sdp_send(psd_common.buff[0], psd_common.buff, HID_REPORT_3_SIZE)) < 0)
 			err = -eReport3;
 
 		/* Report 4 device to host */
 		switch (type) {
 		case SDP_WRITE_FILE :
-			SET_FILE_COMPLETE(psd.buff);
-			memset(psd.buff + 5, 0, HID_REPORT_4_SIZE - 5);
-			if ((res = sdp_send(psd.buff[0], psd.buff, HID_REPORT_4_SIZE)) < 0)
+			SET_FILE_COMPLETE(psd_common.buff);
+			memset(psd_common.buff + 5, 0, HID_REPORT_4_SIZE - 5);
+			if ((res = sdp_send(psd_common.buff[0], psd_common.buff, HID_REPORT_4_SIZE)) < 0)
 				err = -eReport4;
 			break;
 
 		case SDP_WRITE_REGISTER :
-			SET_COMPLETE(psd.buff);
-			memset(psd.buff + 5, 0, HID_REPORT_4_SIZE - 5);
-			if ((res = sdp_send(psd.buff[0], psd.buff, HID_REPORT_4_SIZE)) < 0)
+			SET_COMPLETE(psd_common.buff);
+			memset(psd_common.buff + 5, 0, HID_REPORT_4_SIZE - 5);
+			if ((res = sdp_send(psd_common.buff[0], psd_common.buff, HID_REPORT_4_SIZE)) < 0)
 				err = -eReport4;
 			break;
 
@@ -140,14 +133,14 @@ int psd_hidResponse(int err, int type)
 	}
 	else {
 		/* Report 3 device to host */
-		SET_CLOSED_HAB(psd.buff);
-		if ((res = sdp_send(psd.buff[0], psd.buff, HID_REPORT_3_SIZE)) < 0)
+		SET_CLOSED_HAB(psd_common.buff);
+		if ((res = sdp_send(psd_common.buff[0], psd_common.buff, HID_REPORT_3_SIZE)) < 0)
 			err = -eReport3;
 
 		/* Report 4 device to host */
-		SET_HAB_ERROR(psd.buff, err);
-		memset(psd.buff + 5, 0, HID_REPORT_4_SIZE - 5);
-		if ((res = sdp_send(psd.buff[0], psd.buff, HID_REPORT_4_SIZE)) < 0)
+		SET_HAB_ERROR(psd_common.buff, err);
+		memset(psd_common.buff + 5, 0, HID_REPORT_4_SIZE - 5);
+		if ((res = sdp_send(psd_common.buff[0], psd_common.buff, HID_REPORT_4_SIZE)) < 0)
 			err = -eReport4;
 	}
 
@@ -159,14 +152,14 @@ int psd_changePartition(uint8_t number)
 {
 	int err = hidOK;
 
-	if (number > psd.nfiles) {
+	if (number > psd_common.nfiles) {
 		err = -eReport1;
 	}
 	else {
 		/* Change file */
 		printf("PSD: Changed current partition to flash%d.\n", number);
-		psd.f = psd.files[number];
-		psd.oid = psd.oids[number];
+		psd_common.f = psd_common.files[number];
+		psd_common.oid = psd_common.oids[number];
 	}
 
 	return err;
@@ -178,14 +171,14 @@ int psd_controlBlock(uint32_t block)
 	int err = hidOK;
 	if (block == FCB) {
 		printf("PSD: Flash fcb.\n");
-		err = fcb_flash(psd.oid, psd.fcb);
+		err = fcb_flash(psd_common.oid, psd_common.fcb);
 	}
 	else if (block == DBBT) {
 		printf("PSD: Flash dbbt.\n");
-		if (psd.dbbt == NULL)
+		if (psd_common.dbbt == NULL)
 			return -eControlBlock;
 
-		err = dbbt_flash(psd.oid, psd.f, psd.dbbt);
+		err = dbbt_flash(psd_common.oid, psd_common.f, psd_common.dbbt);
 	}
 	else {
 		return -eReport1;
@@ -200,11 +193,11 @@ int psd_eraseFS(uint32_t size)
 	int err = hidOK;
 
 	printf("PSD: Erase FS - start: %d end: %d.\n", 0, 64 + (2 * size));
-	if ((err = flashmng_eraseBlock(psd.oid, 0, 64 + (2 * size))) < 0)
+	if ((err = flashmng_eraseBlock(psd_common.oid, 0, 64 + (2 * size))) < 0)
 		return err;
 
 	printf("PSD: Check dbbt - start: %d end: %d.\n", 0, 64 + (2 * size));
-	if ((err = flashmng_checkRange(psd.oid, 0, 64 + (2 * size), &psd.dbbt)) < 0)
+	if ((err = flashmng_checkRange(psd_common.oid, 0, 64 + (2 * size), &psd_common.dbbt)) < 0)
 		return err;
 
 	return err;
@@ -216,15 +209,15 @@ int psd_eraseAll(uint32_t size)
 	int err = hidOK;
 
 	printf("PSD: Erase all - start: %d end: %d.\n", 0, BLOCKS_CNT);
-	if ((err = flashmng_eraseBlock(psd.oid, 0, BLOCKS_CNT)) < 0)
+	if ((err = flashmng_eraseBlock(psd_common.oid, 0, BLOCKS_CNT)) < 0)
 		return err;
 
 	printf("PSD: Check dbbt - start: %d end: %d.\n", 0, BLOCKS_CNT);
-	if ((err = flashmng_checkRange(psd.oid, 0, BLOCKS_CNT, &psd.dbbt)) < 0)
+	if ((err = flashmng_checkRange(psd_common.oid, 0, BLOCKS_CNT, &psd_common.dbbt)) < 0)
 		return err;
 
 	printf("PSD: CleanMakers.\n");
-	if ((err = flashmng_cleanMakers(psd.oid, 64 + (2 * size), BLOCKS_CNT)) < 0)
+	if ((err = flashmng_cleanMakers(psd_common.oid, 64 + (2 * size), BLOCKS_CNT)) < 0)
 		return err;
 
 	return err;
@@ -236,7 +229,7 @@ int psd_checkProduction(void)
 	int err = hidOK;
 
 	printf("PSD: Check dbbt - start: %d end: %d.\n", 0, BLOCKS_CNT);
-	if ((err = flashmng_checkRange(psd.oid, 0, BLOCKS_CNT, &psd.dbbt)) < 0)
+	if ((err = flashmng_checkRange(psd_common.oid, 0, BLOCKS_CNT, &psd_common.dbbt)) < 0)
 		return err;
 
 	return err;
@@ -330,7 +323,7 @@ int psd_writeRegister(sdp_cmd_t *cmd)
 		err = psd_blowFuses();
 	}
 	else if (address == CLOSE_PSD) {
-		psd.run = 0;
+		psd_common.run = 0;
 	}
 	else {
 		printf("PSD: Unrecognized register address: %d.\n", address);
@@ -353,19 +346,19 @@ int psd_writeFile(sdp_cmd_t *cmd)
 
 	/* Check command parameters */
 	fileOffs = cmd->address * FLASH_PAGE_SIZE;
-	if (flashmng_getAttr(atSize, &partsz, psd.oid) < 0)
+	if (flashmng_getAttr(atSize, &partsz, psd_common.oid) < 0)
 		err = -eReport1;
 
-	if (!err && flashmng_getAttr(atDev, &partOffs, psd.oid) < 0)
+	if (!err && flashmng_getAttr(atDev, &partOffs, psd_common.oid) < 0)
 		err = -eReport1;
 
 	if (!err && (cmd->datasz + fileOffs) > partsz)
 		err = -eReport1;
 
-	if (!err && (fseek(psd.f, fileOffs, SEEK_SET) < 0))
+	if (!err && (fseek(psd_common.f, fileOffs, SEEK_SET) < 0))
 		err = -eReport1;
 
-	if (!err && (psd.dbbt == NULL))
+	if (!err && (psd_common.dbbt == NULL))
 		err = -eReport1;
 
 	printf("PSD: Writing file.\n");
@@ -373,16 +366,16 @@ int psd_writeFile(sdp_cmd_t *cmd)
 	/* Receive and write file */
 	for (writesz = 0; !err && (writesz < cmd->datasz); writesz += buffOffset) {
 
-		memset(psd.buff, 0xff, FLASH_PAGE_SIZE);
+		memset(psd_common.buff, 0xff, FLASH_PAGE_SIZE);
 		res = HID_REPORT_2_SIZE - 1;
 		buffOffset = 0;
 
 		while ((buffOffset < FLASH_PAGE_SIZE) && (res == (HID_REPORT_2_SIZE - 1))) {
-			if ((res = sdp_recv(1, psd.rcvBuff, HID_REPORT_2_SIZE, &outdata)) < 0 ) {
+			if ((res = sdp_recv(1, psd_common.rcvBuff, HID_REPORT_2_SIZE, &outdata)) < 0 ) {
 				err = -eReport2;
 				break;
 			}
-			memcpy(psd.buff + buffOffset, outdata, res);
+			memcpy(psd_common.buff + buffOffset, outdata, res);
 			buffOffset += res;
 		}
 
@@ -392,12 +385,12 @@ int psd_writeFile(sdp_cmd_t *cmd)
 			blocknum = pagenum / PAGES_PER_BLOCK;
 
 			/* If the current block is bad, the block should be omitted. */
-			if (!(pagenum % PAGES_PER_BLOCK) && dbbt_block_is_bad(psd.dbbt, blocknum)) {
-				if (fseek(psd.f, FLASH_PAGE_SIZE * PAGES_PER_BLOCK, SEEK_SET) < 0)
+			if (!(pagenum % PAGES_PER_BLOCK) && dbbt_block_is_bad(psd_common.dbbt, blocknum)) {
+				if (fseek(psd_common.f, FLASH_PAGE_SIZE * PAGES_PER_BLOCK, SEEK_SET) < 0)
 					err = -eReport2;
 			}
 
-			if (!err && ((res = fwrite(psd.buff, sizeof(char), FLASH_PAGE_SIZE, psd.f)) != FLASH_PAGE_SIZE)) {
+			if (!err && ((res = fwrite(psd_common.buff, sizeof(char), FLASH_PAGE_SIZE, psd_common.f)) != FLASH_PAGE_SIZE)) {
 				err = -eReport2;
 				break;
 			}
@@ -435,25 +428,25 @@ int main(int argc, char **argv)
 
 	printf("PSD: Waiting on flash srv.\n");
 	for (i = 1; i < argc; ++i) {
-		while (lookup(argv[i], NULL, &psd.oids[i - 1]) < 0)
+		while (lookup(argv[i], NULL, &psd_common.oids[i - 1]) < 0)
 			usleep(200);
 	}
 
 	printf("PSD: Started psd.\n");
 
 	/* Open files */
-	for (psd.nfiles = 1; psd.nfiles < argc; psd.nfiles++) {
-		printf("PSD: Opened partition: %s\n", argv[psd.nfiles]);
-		if ((psd.files[psd.nfiles - 1] = fopen(argv[psd.nfiles], "r+")) == NULL) {
-			fprintf(stderr, "PSD: Can't open file '%s'! errno: (%d)", argv[psd.nfiles], errno);
+	for (psd_common.nfiles = 1; psd_common.nfiles < argc; psd_common.nfiles++) {
+		printf("PSD: Opened partition: %s\n", argv[psd_common.nfiles]);
+		if ((psd_common.files[psd_common.nfiles - 1] = fopen(argv[psd_common.nfiles], "r+")) == NULL) {
+			fprintf(stderr, "PSD: Can't open file '%s'! errno: (%d)", argv[psd_common.nfiles], errno);
 			return -1;
 		}
 	}
 
-	psd.run = 1;
-	psd.fcb = malloc(sizeof(fcb_t));
-	psd.f = psd.files[0];
-	psd.oid = psd.oids[0];
+	psd_common.run = 1;
+	psd_common.fcb = malloc(sizeof(fcb_t));
+	psd_common.f = psd_common.files[0];
+	psd_common.oid = psd_common.oids[0];
 
 	printf("PSD: Initializing USB transport\n");
 	if (sdp_init(&hid_setup)) {
@@ -461,7 +454,7 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	while (psd.run) {
+	while (psd_common.run) {
 		sdp_recv(0, (char *)cmdBuff, sizeof(*pcmd) + 1, (char **)&pcmd);
 
 		switch (pcmd->type) {
@@ -486,12 +479,12 @@ int main(int argc, char **argv)
 	printf("\n------------------\n");
 	printf("Close PSD. Device is rebooting.\n");
 
-	for (i = 0; i < psd.nfiles; ++i) {
-		fclose(psd.files[i]);
+	for (i = 0; i < psd_common.nfiles; ++i) {
+		fclose(psd_common.files[i]);
 	}
 
-	free(psd.fcb);
-	free(psd.dbbt);
+	free(psd_common.fcb);
+	free(psd_common.dbbt);
 
 	reboot(PHOENIX_REBOOT_MAGIC);
 

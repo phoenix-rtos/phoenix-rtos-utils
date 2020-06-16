@@ -30,35 +30,37 @@
 
 #include "../common/sdp.h"
 
-
-#define SET_OPEN_HAB(b) (b)[0]=3;(b)[1]=0x56;(b)[2]=0x78;(b)[3]=0x78;(b)[4]=0x56;
-#define SET_CLOSED_HAB(b) (b)[0]=3;(b)[1]=0x12;(b)[2]=0x34;(b)[3]=0x34;(b)[4]=0x12;
-#define SET_COMPLETE(b) (b)[0]=4;(b)[1]=0x12;(b)[2]=0x8a;(b)[3]=0x8a;(b)[4]=0x12;
-#define SET_FILE_COMPLETE(b) (b)[0]=4;(b)[1]=0x88;(b)[2]=0x88;(b)[3]=0x88;(b)[4]=0x88;
-#define SET_HAB_ERROR(b, err) (b)[0]=4;(b)[1]=err;(b)[2]=0xaa;b[3]=0xaa;(b)[4]=0xaa;
-
-
 #define HID_REPORT_1_SIZE (sizeof(sdp_cmd_t) + 1)
 #define HID_REPORT_2_SIZE 1025
 #define HID_REPORT_3_SIZE 5
 #define HID_REPORT_4_SIZE 65
 
+#define FLASH_CNT 2
+
 #define INTERNAL_FLASH_NAME "/dev/flash1"
+#define EXTERNAL_FLASH_NAME "/dev/flash0"
 
 #define LOG(str, ...) do { if (1) fprintf(stderr, "psd: " str "\n", ##__VA_ARGS__); } while (0)
 #define LOG_ERROR(str, ...) do { fprintf(stderr, __FILE__  ":%d error: " str "\n", __LINE__, ##__VA_ARGS__); } while (0)
 
 
-struct {
+typedef struct _flash_properties_ {
 	oid_t oid;
 
-	uint32_t flash_size;
-	uint32_t page_size;
-	uint32_t sector_size;
+	uint32_t flashSize;
+	uint32_t pageSize;
+	uint32_t sectorSize;
+
+} flash_properties_t;
+
+
+struct {
+	flash_properties_t flashMems[FLASH_CNT];
 
 	int run;
+	uint8_t flashID;
 	char buff[HID_REPORT_2_SIZE];
-} psd;
+} psd_common;
 
 
 const usb_hid_dev_setup_t hid_setup = {
@@ -81,6 +83,7 @@ const usb_hid_dev_setup_t hid_setup = {
 	}
 };
 
+
 static int psd_syncFlash(oid_t oid)
 {
 	msg_t msg;
@@ -95,7 +98,7 @@ static int psd_syncFlash(oid_t oid)
 
 	idevctl = (flash_i_devctl_t *)msg.i.raw;
 	idevctl->type = flashsrv_devctl_sync;
-	idevctl->oid = psd.oid;
+	idevctl->oid = oid;
 
 	odevctl = (flash_o_devctl_t *)msg.o.raw;
 
@@ -131,7 +134,7 @@ static int psd_write2Flash(oid_t oid, uint32_t paddr, void *data, int size)
 }
 
 
-static int psd_getFlashProperties(oid_t oid)
+static int psd_getFlashProperties(uint8_t flashID)
 {
 	int res;
 	msg_t msg;
@@ -146,19 +149,19 @@ static int psd_getFlashProperties(oid_t oid)
 
 	idevctl = (flash_i_devctl_t *)msg.i.raw;
 	idevctl->type = flashsrv_devctl_properties;
-	idevctl->oid = oid;
+	idevctl->oid = psd_common.flashMems[flashID].oid;
 
 	odevctl = (flash_o_devctl_t *)msg.o.raw;
 
-	if ((res = msgSend(psd.oid.port, &msg)) < 0)
+	if ((res = msgSend(psd_common.flashMems[flashID].oid.port, &msg)) < 0)
 		return -1;
 
 	if (odevctl->err < 0)
 		return -1;
 
-	psd.flash_size = odevctl->properties.size;
-	psd.page_size = odevctl->properties.psize;
-	psd.sector_size = odevctl->properties.ssize;
+	psd_common.flashMems[flashID].flashSize = odevctl->properties.size;
+	psd_common.flashMems[flashID].pageSize = odevctl->properties.psize;
+	psd_common.flashMems[flashID].sectorSize = odevctl->properties.ssize;
 
 	return 0;
 }
@@ -170,25 +173,25 @@ int psd_hidResponse(int err, int type)
 
 	if (!err) {
 		/* Report 3 device to host */
-		SET_OPEN_HAB(psd.buff);
-		if ((res = sdp_send(psd.buff[0], psd.buff, HID_REPORT_3_SIZE)) < 0)
+		SET_OPEN_HAB(psd_common.buff);
+		if ((res = sdp_send(psd_common.buff[0], psd_common.buff, HID_REPORT_3_SIZE)) < 0)
 			err = -eReport3;
 
 		/* Report 4 device to host */
 		switch (type) {
 		case SDP_WRITE_FILE :
-			SET_FILE_COMPLETE(psd.buff);
-			memset(psd.buff + 5, 0, HID_REPORT_4_SIZE - 5);
+			SET_FILE_COMPLETE(psd_common.buff);
+			memset(psd_common.buff + 5, 0, HID_REPORT_4_SIZE - 5);
 
-			if ((res = sdp_send(psd.buff[0], psd.buff, HID_REPORT_4_SIZE)) < 0)
+			if ((res = sdp_send(psd_common.buff[0], psd_common.buff, HID_REPORT_4_SIZE)) < 0)
 				err = -eReport4;
 			break;
 
 		case SDP_WRITE_REGISTER :
-			SET_COMPLETE(psd.buff);
-			memset(psd.buff + 5, 0, HID_REPORT_4_SIZE - 5);
+			SET_COMPLETE(psd_common.buff);
+			memset(psd_common.buff + 5, 0, HID_REPORT_4_SIZE - 5);
 
-			if ((res = sdp_send(psd.buff[0], psd.buff, HID_REPORT_4_SIZE)) < 0)
+			if ((res = sdp_send(psd_common.buff[0], psd_common.buff, HID_REPORT_4_SIZE)) < 0)
 				err = -eReport4;
 			break;
 
@@ -198,15 +201,37 @@ int psd_hidResponse(int err, int type)
 	}
 	else {
 		/* Report 3 device to host */
-		SET_CLOSED_HAB(psd.buff);
-		if ((res = sdp_send(psd.buff[0], psd.buff, HID_REPORT_3_SIZE)) < 0)
+		SET_CLOSED_HAB(psd_common.buff);
+		if ((res = sdp_send(psd_common.buff[0], psd_common.buff, HID_REPORT_3_SIZE)) < 0)
 			err = -eReport3;
 
 		/* Report 4 device to host */
-		SET_HAB_ERROR(psd.buff, err);
-		memset(psd.buff + 5, 0, HID_REPORT_4_SIZE - 5);
-		if ((res = sdp_send(psd.buff[0], psd.buff, HID_REPORT_4_SIZE)) < 0)
+		SET_HAB_ERROR(psd_common.buff, err);
+		memset(psd_common.buff + 5, 0, HID_REPORT_4_SIZE - 5);
+		if ((res = sdp_send(psd_common.buff[0], psd_common.buff, HID_REPORT_4_SIZE)) < 0)
 			err = -eReport4;
+	}
+
+	return err;
+}
+
+
+int psd_changeFlash(uint8_t flashID)
+{
+	int err = hidOK;
+	flash_properties_t *flash = (flash_properties_t *)&psd_common.flashMems[psd_common.flashID];
+
+	if (flashID >= FLASH_CNT) {
+		err = -eReport1;
+	}
+	else {
+		if (psd_syncFlash(flash->oid) != 0) {
+			err = -eReport2;
+			return err;
+		}
+
+		LOG("changed current flash to flash_%d", flashID);
+		psd_common.flashID = flashID;
 	}
 
 	return err;
@@ -217,9 +242,13 @@ int psd_writeRegister(sdp_cmd_t *cmd)
 {
 	int err = hidOK;
 	int address = (int)cmd->address;
+	uint32_t data = cmd->data;
 
 	if (address == CLOSE_PSD) {
-		psd.run = 0;
+		psd_common.run = 0;
+	}
+	else if (address == CHANGE_FLASH) {
+		err = psd_changeFlash(data);
 	}
 	else {
 		LOG_ERROR("Unrecognized register address: %d.\n", address);
@@ -238,21 +267,23 @@ int psd_writeFile(sdp_cmd_t *cmd)
 	offs_t writesz;
 	char *outdata = NULL;
 
+	flash_properties_t *flash = (flash_properties_t *)&psd_common.flashMems[psd_common.flashID];
+
 	offset = cmd->address;
 
 	/* Receive and write file */
 	for (writesz = 0; !err && (writesz < cmd->datasz);) {
 
-		memset(psd.buff, 0xff, HID_REPORT_2_SIZE - 1);
-		if ((res = sdp_recv(1, psd.buff, HID_REPORT_2_SIZE, &outdata)) < 0 ) {
+		memset(psd_common.buff, 0xff, HID_REPORT_2_SIZE - 1);
+		if ((res = sdp_recv(1, psd_common.buff, HID_REPORT_2_SIZE, &outdata)) < 0 ) {
 			err = -eReport2;
 			break;
 		}
 
-		if (res % psd.page_size )
-			res = (res / psd.page_size + 1) * psd.page_size;
+		if (res % flash->pageSize )
+			res = (res / flash->pageSize + 1) * flash->pageSize;
 
-		if (psd_write2Flash(psd.oid, offset, outdata, res) < res) {
+		if (psd_write2Flash(flash->oid, offset, outdata, res) < res) {
 			err = -eReport2;
 			break;
 		}
@@ -261,7 +292,7 @@ int psd_writeFile(sdp_cmd_t *cmd)
 		offset += res;
 	}
 
-	if (psd_syncFlash(psd.oid) != 0)
+	if (psd_syncFlash(flash->oid) != 0)
 		err = -eReport2;
 
 	err = psd_hidResponse(err, SDP_WRITE_FILE);
@@ -284,11 +315,15 @@ static void psd_enabelCache(unsigned char enable)
 
 int main(int argc, char **argv)
 {
-	int err;
+	int i, err;
 	sdp_cmd_t *pcmd = NULL;
 	char cmdBuff[HID_REPORT_1_SIZE];
 
-	psd.run = 1;
+	const char *const flashesNames[] = { EXTERNAL_FLASH_NAME, INTERNAL_FLASH_NAME };
+
+	psd_common.run = 1;
+	/* Set internal flash */
+	psd_common.flashID = 1;
 
 	psd_enabelCache(0);
 
@@ -297,17 +332,20 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	while (lookup(INTERNAL_FLASH_NAME, NULL, &psd.oid) < 0)
-		usleep(100000);
+	for (i = 0; i < FLASH_CNT; ++i) {
+		while (lookup(flashesNames[i], NULL, &psd_common.flashMems[i].oid) < 0)
+			usleep(1000);
 
-	if (psd_getFlashProperties(psd.oid) < 0 ) {
-		LOG_ERROR("couldn't get flash properties.");
-		return -1;
+		if (psd_getFlashProperties(i) < 0 ) {
+			LOG_ERROR("couldn't get flash properties.");
+			return -1;
+		}
 	}
+
 
 	LOG("initialized.");
 
-	while (psd.run)
+	while (psd_common.run)
 	{
 		sdp_recv(0, (char *)cmdBuff, sizeof(*pcmd) + 1, (char **)&pcmd);
 

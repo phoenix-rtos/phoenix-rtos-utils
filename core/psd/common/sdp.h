@@ -19,6 +19,13 @@
 #include <hid_client.h>
 
 
+#define SET_OPEN_HAB(b) (b)[0]=3;(b)[1]=0x56;(b)[2]=0x78;(b)[3]=0x78;(b)[4]=0x56;
+#define SET_CLOSED_HAB(b) (b)[0]=3;(b)[1]=0x12;(b)[2]=0x34;(b)[3]=0x34;(b)[4]=0x12;
+#define SET_COMPLETE(b) (b)[0]=4;(b)[1]=0x12;(b)[2]=0x8a;(b)[3]=0x8a;(b)[4]=0x12;
+#define SET_FILE_COMPLETE(b) (b)[0]=4;(b)[1]=0x88;(b)[2]=0x88;(b)[3]=0x88;(b)[4]=0x88;
+#define SET_HAB_ERROR(b, err) (b)[0]=4;(b)[1]=err;(b)[2]=0xaa;b[3]=0xaa;(b)[4]=0xaa;
+
+
 /* Addresses definitions for WRITE_REGISTER */
 #define CHANGE_PARTITION -1
 #define ERASE_ROOTFS_ADDRESS -2
@@ -26,6 +33,7 @@
 #define CHECK_PRODUCTION -4
 #define CONTROL_BLOCK_ADDRESS -5
 #define BLOW_FUSES -6
+#define CHANGE_FLASH -7
 #define CLOSE_PSD -100
 
 
