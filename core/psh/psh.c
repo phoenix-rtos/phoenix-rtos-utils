@@ -30,6 +30,8 @@
 #include <sys/wait.h>
 #include <sys/reboot.h>
 #include <arch.h>
+#include "top.h"
+#include "psh.h"
 
 #define PSH_SCRIPT_MAGIC ":{}:"
 
@@ -97,7 +99,7 @@ static int psh_isAcceptable(char c)
 }
 
 
-static char *psh_nextString(char *buff, unsigned int *size)
+char *psh_nextString(char *buff, unsigned int *size)
 {
 	char *s, *p;
 
@@ -205,14 +207,11 @@ static char *psh_SI(int exp)
 }
 
 
-/* Prefix base */
-enum { BP = 2, SI = 10 };
-
 /* Convert n = x * base^y to a short binary(base 2)/SI(base 10) prefix notation */
 /* (value of n gets rounded to prec decimal places, trailing zeros get cut), e.g. */
 /* psh_convert(SI, -15496, 3, 2, buff) saves "-15.5M" in buff */
 /* psh_convert(BP, 2000, 10, 3, buff) saves "1.953M" in buff */
-static int psh_convert(unsigned int base, int x, int y, unsigned int prec, char *buff)
+int psh_convert(unsigned int base, int x, int y, unsigned int prec, char *buff)
 {
 	char *(*fp)(int);
 	char *prefix;
@@ -743,7 +742,7 @@ static int psh_ps(char *arg)
 			for (j = i + 1; j < tcnt && info[j].pid == info[i].pid; j++) {
 				info[i].tid++;
 				info[i].load += info[j].load;
-				info[i].cpu_time += info[j].cpu_time;
+				info[i].cpuTime += info[j].cpuTime;
 				info[i].priority = min(info[i].priority, info[j].priority);
 				info[i].state = min(info[i].state, info[j].state);
 				info[i].wait = max(info[i].wait, info[j].wait);
@@ -764,8 +763,9 @@ static int psh_ps(char *arg)
 
 	for (i = 0; i < tcnt; i++) {
 		psh_convert(SI, info[i].wait, -6, 1, buff);
-		h = info[i].cpu_time / 3600;
-		m = (info[i].cpu_time - h * 3600) / 60;
+		info[i].cpuTime /= 10000;
+		h = info[i].cpuTime / 3600;
+		m = (info[i].cpuTime - h * 3600) / 60;
 		printf("%5u %5u %2d %5s %3u.%u %4ss %4u:%02u ", info[i].pid, info[i].ppid, info[i].priority, (info[i].state) ? "sleep" : "ready",
 			info[i].load / 10, info[i].load % 10, buff, h, m);
 
@@ -1064,6 +1064,9 @@ void psh_run(void)
 		else if (!strcmp(cmd, "perf"))
 			psh_perf(cmd + n + 1);
 
+		else if (!strcmp(cmd, "top"))
+			psh_top(cmd + n + 1);
+
 		else if (cmd[0] == '/')
 			psh_runfile(cmd);
 
@@ -1239,6 +1242,8 @@ int main(int argc, char **argv)
 			psh_sync(argc - 1, argv + 1);
 		else if (!strcmp(base, "reboot"))
 			psh_reboot(argv[1]);
+		else if(!strcmp(base, "top"))
+			psh_top(args);
 		else
 			printf("psh: %s: unknown command\n", argv[0]);
 	}

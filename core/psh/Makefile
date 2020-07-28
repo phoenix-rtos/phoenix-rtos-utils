@@ -4,7 +4,7 @@
 # Copyright 2018, 2019 Phoenix Systems
 #
 
-$(PREFIX_PROG)psh: $(PREFIX_O)core/psh/psh.o
+$(PREFIX_PROG)psh: $(PREFIX_O)core/psh/psh.o $(PREFIX_O)core/psh/top.o
 	$(LINK)
 
 all: $(PREFIX_PROG_STRIPPED)psh
