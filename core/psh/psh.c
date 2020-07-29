@@ -167,7 +167,7 @@ static char *psh_BP(int exp)
 
 	if (exp < 0 || exp >= sizeof(BP) / sizeof(char *))
 		return NULL;
-	
+
 	return BP[exp];
 }
 
@@ -249,7 +249,7 @@ int psh_convert(unsigned int base, int x, int y, unsigned int prec, char *buff)
 	div = psh_pow(base, div);
 
 	/* Save integer part */
-	ipart = abs(x) / div;	
+	ipart = abs(x) / div;
 	/* Save fractional part as percentage */
 	fpart = (int)((uint64_t)psh_pow(10, prec + 1) * (abs(x) % div) / div);
 	/* Round the result */
@@ -295,15 +295,16 @@ int psh_convert(unsigned int base, int x, int y, unsigned int prec, char *buff)
 static void psh_help(void)
 {
 	printf("Available commands:\n");
-	printf("  help   - prints this help\n");
-	printf("  ls     - lists files in the namespace\n");
-	printf("  mkdir  - creates directory\n");
-	printf("  touch  - changes file timestamp\n");
 	printf("  cat    - concatenates files\n");
 	printf("  exec   - executes a file\n");
-	printf("  mem    - prints memory map\n");
-	printf("  ps     - prints list of processes and threads\n");
 	printf("  exit   - exits the shell\n");
+	printf("  help   - prints this help\n");
+	printf("  ls     - lists files in the namespace\n");
+	printf("  mem    - prints memory map\n");
+	printf("  mkdir  - creates directory\n");
+	printf("  ps     - prints list of processes and threads\n");
+	printf("  top    - top utility\n");
+	printf("  touch  - changes file timestamp\n");
 }
 
 
