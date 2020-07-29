@@ -303,6 +303,7 @@ static void psh_help(void)
 	printf("  exec   - executes a file\n");
 	printf("  mem    - prints memory map\n");
 	printf("  ps     - prints list of processes and threads\n");
+	printf("  top    - tracks processes and threads\n");
 	printf("  exit   - exits the shell\n");
 }
 
