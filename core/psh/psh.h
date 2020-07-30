@@ -19,5 +19,6 @@ enum { BP = 2, SI = 10 };
 
 int psh_convert(unsigned int base, int x, int y, unsigned int prec, char *buff);
 char *psh_nextString(char *buff, unsigned int *size);
+int psh_ls(char *args);
 
 #endif

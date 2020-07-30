@@ -308,48 +308,6 @@ static void psh_help(void)
 }
 
 
-static void psh_ls(char *args)
-{
-	char *path = args;
-	unsigned int len, n = 0;
-	DIR *stream;
-	struct dirent *dir;
-	char cwd[] = ".";
-
-	path = psh_nextString(path, &len);
-
-	if (!len)
-		path = cwd;
-
-	do {
-		stream = opendir(path);
-
-		if (stream == NULL) {
-			printf("%s: no such directory\n", path);
-			break;
-		}
-
-		while ((dir = readdir(stream)) != NULL) {
-			if (strcmp(dir->d_name, ".") && strcmp(dir->d_name, "..")) {
-				if (!dir->d_type)
-					printf("\033[34m%-20s\033[0m",dir->d_name);
-				else
-					printf("%-20s",dir->d_name);
-
-				if (!(++n % 7))
-					printf("\n");
-			}
-		}
-
-		putchar('\n');
-
-		closedir(stream);
-		path += len + 1;
-	}
-	while ((path = psh_nextString(path, &len)) && len);
-}
-
-
 static void psh_mkdir(char *args)
 {
 	char *path = args;
