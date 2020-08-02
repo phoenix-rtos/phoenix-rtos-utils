@@ -42,10 +42,10 @@ static int top_cmpcpu(const void *t1, const void *t2)
 
 static int top_cmppid(const void *t1, const void *t2)
 {
-    if (threads_mode)
-	    return ((int)((threadinfo_t *)t1)->tid - (int)((threadinfo_t *)t2)->tid) * sortdir;
-    else
-        return ((int)((threadinfo_t *)t1)->pid - (int)((threadinfo_t *)t2)->pid) * sortdir;
+	if (threads_mode)
+		return ((int)((threadinfo_t *)t1)->tid - (int)((threadinfo_t *)t2)->tid) * sortdir;
+	else
+		return ((int)((threadinfo_t *)t1)->pid - (int)((threadinfo_t *)t2)->pid) * sortdir;
 }
 
 static int top_cmptime(const void *t1, const void *t2)
@@ -60,94 +60,92 @@ static int top_cmpmem(const void *t1, const void *t2)
 
 static void top_printHelp(void)
 {
-    const char help[] = "Command line arguments:\n"
-                        "  -h:  Prints help.\n"
-                        "  -H:  Starts with threads mode.\n"
-                        "  -d:  Set refresh rate. Real number greater than 0.\n"
-                        "  -n:  Set number of iterations. By default its infinity.\n\n"
-                        "Interactive commands:\n"
-                        "  H:  Toggle threads mode\n"
-                        "  q:  Quit\n"
-                        "  \\n: Refresh\n"
-                        "  P:  Sort by CPU\n"
-                        "  M:  Sort by MEM\n"
-                        "  T:  Sort by TIME\n"
-                        "  N:  Sort by PID\n"
-                        "  R:  Reverse sorting\n";
+	const char help[] = "Command line arguments:\n"
+			    "  -h:  Prints help.\n"
+			    "  -H:  Starts with threads mode.\n"
+			    "  -d:  Set refresh rate. Real number greater than 0.\n"
+			    "  -n:  Set number of iterations. By default its infinity.\n\n"
+			    "Interactive commands:\n"
+			    "  H:  Toggle threads mode\n"
+			    "  q:  Quit\n"
+			    "  \n: Refresh\n"
+			    "  P:  Sort by CPU\n"
+			    "  M:  Sort by MEM\n"
+			    "  T:  Sort by TIME\n"
+			    "  N:  Sort by PID\n"
+			    "  R:  Reverse sorting\n";
 
-    printf(help);
+	printf(help);
 }
 
 /* Enables/disables canon mode and echo */
 static void top_termSwitchMode(int canon)
 {
-    struct termios ttystate;
+	struct termios ttystate;
 
-    tcgetattr(STDIN_FILENO, &ttystate);
-    if (canon) {
-        ttystate.c_lflag |= ICANON;
-        ttystate.c_lflag |= ECHO;
-    } else {
-        ttystate.c_lflag &= ~ICANON;
-        ttystate.c_lflag &= ~ECHO;
-        ttystate.c_cc[VMIN] = 1;
-    }
+	tcgetattr(STDIN_FILENO, &ttystate);
+	if (canon) {
+		ttystate.c_lflag |= ICANON;
+		ttystate.c_lflag |= ECHO;
+	} else {
+		ttystate.c_lflag &= ~ICANON;
+		ttystate.c_lflag &= ~ECHO;
+		ttystate.c_cc[VMIN] = 1;
+	}
 
-    tcsetattr(STDIN_FILENO, TCSANOW, &ttystate);
+	tcsetattr(STDIN_FILENO, TCSANOW, &ttystate);
 }
 
 /* Interruptible wait for command */
 static int top_cmdwait(double secs)
 {
-    struct timeval left;
-    fd_set fds;
-    double integral;
-    double fractional = modf(secs, &integral);
+	struct timeval left;
+	fd_set fds;
+	double integral;
+	double fractional = modf(secs, &integral);
 
-    left.tv_sec = (time_t) integral;
-    left.tv_usec = (time_t) fractional * 1000000;
-    fflush(stdout);
-    FD_ZERO(&fds);
-    FD_SET(STDIN_FILENO, &fds);
-    select(STDIN_FILENO + 1, &fds, NULL, NULL, &left);
+	left.tv_sec = (time_t) integral;
+	left.tv_usec = (time_t) fractional * 1000000;
+	fflush(stdout);
+	FD_ZERO(&fds);
+	FD_SET(STDIN_FILENO, &fds);
+	select(STDIN_FILENO + 1, &fds, NULL, NULL, &left);
 
-    if (FD_ISSET(STDIN_FILENO, &fds))
-        return getchar();
-    else
-        return 0;
+	if (FD_ISSET(STDIN_FILENO, &fds))
+		return getchar();
+	return 0;
 }
 
 static void top_refresh(char cmd, threadinfo_t *info, threadinfo_t *prev_info,
-                        unsigned int totcnt, time_t delta)
+			unsigned int totcnt, time_t delta)
 {
-    static unsigned int prevlines = 0;
-    unsigned int lines = 3;
-    unsigned int runcnt = 0, waitcnt = 0;
-    unsigned int i, j;
-    unsigned int m, s, hs;
-    char buff[8];
+	static unsigned int prevlines = 0;
+	unsigned int lines = 3;
+	unsigned int runcnt = 0, waitcnt = 0;
+	unsigned int i, j;
+	unsigned int m, s, hs;
+	char buff[8];
 
-    /* Calculate load */
-    for (i = 0; i < totcnt; i++) {
-        threadinfo_t *p = NULL;
-        for (j = 0; j < totcnt; j++) {
-            if (info[i].tid == prev_info[j].tid) {
-                p = &prev_info[j];
-                break;
-            }
-        }
-        if (p) {
-            /* Prevent negative load, if a new thread with
-             * the same tid has occured */
-            if (info[i].cpuTime >= p->cpuTime)
-                info[i].load = ((info[i].cpuTime - p->cpuTime)) * 1000 /
-                                delta;
-        }
-    }
+	/* Calculate load */
+	for (i = 0; i < totcnt; i++) {
+		threadinfo_t *p = NULL;
+		for (j = 0; j < totcnt; j++) {
+			if (info[i].tid == prev_info[j].tid) {
+				p = &prev_info[j];
+				break;
+			}
+		}
+		if (p) {
+			/* Prevent negative load, if a new thread with
+			 * the same tid has occured */
+			if (info[i].cpuTime >= p->cpuTime)
+				info[i].load = ((info[i].cpuTime - p->cpuTime)) * 1000 / delta;
+		}
+	}
 
-    memcpy(prev_info, info, totcnt * sizeof(threadinfo_t));
+	memcpy(prev_info, info, totcnt * sizeof(threadinfo_t));
 
-    if (!threads_mode) {
+	if (!threads_mode) {
 		qsort(info, totcnt, sizeof(threadinfo_t), top_cmppid);
 		for (i = 0; i < totcnt; i++) {
 			info[i].tid = 1;
@@ -167,222 +165,221 @@ static void top_refresh(char cmd, threadinfo_t *info, threadinfo_t *prev_info,
 			}
 		}
 	}
-    qsort(info, totcnt, sizeof(threadinfo_t), cmp);
+	qsort(info, totcnt, sizeof(threadinfo_t), cmp);
 
-    for (i = 0; i < totcnt; i++) {
-        if (info[i].state == 0)
-            runcnt++;
-        else
-            waitcnt++;
-    }
+	for (i = 0; i < totcnt; i++) {
+		if (info[i].state == 0)
+			runcnt++;
+		else
+			waitcnt++;
+	}
 
-    /* Move cursor to beginning */
-    printf("\033[0;0f");
-    printf("\033[K");
-    if (threads_mode)
-        printf("Threads: ");
-    else
-        printf("Tasks:    ");
+	/* Move cursor to beginning */
+	printf("\033[0;0f");
+	printf("\033[K");
+	if (threads_mode)
+		printf("Threads: ");
+	else
+		printf("Tasks:    ");
 
-    printf("%d total, running: %d, sleeping: %d\n", totcnt, runcnt, waitcnt);
+	printf("%d total, running: %d, sleeping: %d\n", totcnt, runcnt, waitcnt);
 
-    if (cmd)
-        printf("Unknown command: %c\n", cmd);
-    else
-        printf("\033[K\n");
+	if (cmd)
+		printf("Unknown command: %c\n", cmd);
+	else
+		printf("\033[K\n");
 
-    /* Set header style */
-    printf("\033[0;30;47m");
+	/* Set header style */
+	printf("\033[0;30;47m");
 	printf("%5s %5s %2s %5s %5s %5s %7s %8s %-30s\n", "PID", "PPID", "PR", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "CMD");
 
-    /* Reset style */
-    printf("\033[0m");
-    for (i = 0; i < totcnt; i++) {
+	/* Reset style */
+	printf("\033[0m");
+	for (i = 0; i < totcnt; i++) {
 		psh_convert(SI, info[i].wait, -6, 1, buff);
-        /* Print running process in bold */
-        if (!info[i].state)
-            printf("\033[1m");
+		/* Print running process in bold */
+		if (!info[i].state)
+			printf("\033[1m");
 
-        /* cpuTime is in usces */
-        m = info[i].cpuTime / (60 * 1000000);
-        s = info[i].cpuTime / 1000000 - 60 * m;
-        hs = info[i].cpuTime / 10000 - 60 * 100 * m - 100 * s;
-        printf("%5u %5u %2d %5s %3u.%u %4ss %3u:%02u.%02u ", (threads_mode) ? info[i].tid : info[i].pid,
-                    info[i].ppid, info[i].priority, (info[i].state) ? "sleep" : "ready",
-			        info[i].load / 10, info[i].load % 10, buff, m, s, hs);
+		/* cpuTime is in usces */
+		m = info[i].cpuTime / (60 * 1000000);
+		s = info[i].cpuTime / 1000000 - 60 * m;
+		hs = info[i].cpuTime / 10000 - 60 * 100 * m - 100 * s;
+		printf("%5u %5u %2d %5s %3u.%u %4ss %3u:%02u.%02u ", (threads_mode) ? info[i].tid : info[i].pid,
+			info[i].ppid, info[i].priority, (info[i].state) ? "sleep" : "ready",
+			info[i].load / 10, info[i].load % 10, buff, m, s, hs);
 
 		psh_convert(BP, info[i].vmem, 0, 1, buff);
 		printf("%6s ", buff);
 		printf("%-30s\n", info[i].name);
 
-        printf("\033[0m");
-        lines++;
-        if (lines == w.ws_col)
-            break;
+		printf("\033[0m");
+		lines++;
+		if (lines == w.ws_col)
+			break;
 	}
 
-    /* Clear pending lines */
-    while (lines < prevlines) {
-        printf("\033[K\n");
-        prevlines--;
-    }
-    prevlines = lines;
+	/* Clear pending lines */
+	while (lines < prevlines) {
+		printf("\033[K\n");
+		prevlines--;
+	}
+	prevlines = lines;
 }
 
 
 int psh_top(char *arg)
 {
-    int err = 0;
-    int cmd = 0;
-    unsigned int totcnt, n = 32;
-    int itermode = 1;
-    threadinfo_t *info, *info_re, *prev_info;
-    unsigned int len;
-    double delay = 3.0;
-    unsigned int niter = 0;
-    int ret;
-    time_t prev_time;
-    struct timespec ts;
+	int err = 0;
+	int cmd = 0;
+	unsigned int totcnt, n = 32;
+	int itermode = 1;
+	threadinfo_t *info, *info_re, *prev_info;
+	unsigned int len;
+	double delay = 3.0;
+	unsigned int niter = 0;
+	int ret = EOK;
+	time_t prev_time;
+	struct timespec ts;
 
 
-    threads_mode = 0;
-    sortdir = DESC;
-    cmp = top_cmpcpu;
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-    prev_time = 0;
+	threads_mode = 0;
+	sortdir = DESC;
+	cmp = top_cmpcpu;
+	ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+	prev_time = 0;
 
-    /* Parse arguments */
-    while ((arg = psh_nextString(arg, &len)) && len) {
+	/* Parse arguments */
+	while ((arg = psh_nextString(arg, &len)) && len) {
 		if (!strcmp(arg, "-H")) {
 			threads_mode = 1;
 		} else if (!strcmp(arg, "-d")) {
-            arg += len + 1;
-            if ((arg = psh_nextString(arg, &len)) && len) {
-                delay = strtod(arg, NULL);
-                if (delay == 0.0) {
-                    printf("top: '%s' requires double greater than 0\n", arg);
-			        return EOK;
-                }
-            } else {
-                printf("top: '%s' requires argument\n", arg);
-			    return EOK;
-            }
-        } else if (!strcmp(arg, "-n")) {
-            arg += len + 1;
-            if ((arg = psh_nextString(arg, &len)) && len) {
-                niter = strtoul(arg, NULL, 10);
-                if (niter == 0) {
-                    printf("top: '%s' requires integer greater than 0\n", arg);
-			        return EOK;
-                }
-                itermode = 1;
-            } else {
-                printf("top: '%s' requires argument\n", arg);
-			    return EOK;
-            }
-        } else if (!strcmp(arg, "-h")) {
+			arg += len + 1;
+			if ((arg = psh_nextString(arg, &len)) && len) {
+				delay = strtod(arg, NULL);
+				if (delay <= 0.0) {
+					printf("top: '%s' requires double greater than 0\n", arg);
+					return EOK;
+				}
+			} else {
+				printf("top: '%s' requires argument\n", arg);
+				return EOK;
+			}
+		} else if (!strcmp(arg, "-n")) {
+			arg += len + 1;
+			if ((arg = psh_nextString(arg, &len)) && len) {
+				niter = strtoul(arg, NULL, 10);
+				if (niter == 0) {
+					printf("top: '%s' requires integer greater than 0\n", arg);
+					return EOK;
+				}
+			itermode = 1;
+			} else {
+				printf("top: '%s' requires argument\n", arg);
+				return EOK;
+			}
+		} else if (!strcmp(arg, "-h")) {
 			top_printHelp();
-            return 0;
-        } else {
+			return EOK;
+		} else {
 			printf("top: unknown option '%s'\n", arg);
 			return EOK;
 		}
 
-        arg += len + 1;
+		arg += len + 1;
 	}
 
-    if ((info = malloc(n * sizeof(threadinfo_t))) == NULL) {
+	info = malloc(n * sizeof(threadinfo_t));
+	prev_info = calloc(n, sizeof(threadinfo_t));
+	if ((info == NULL) || (prev_info == NULL)) {
 		printf("top: out of memory\n");
+		free(info);
+		free(prev_info);
 		return -ENOMEM;
 	}
 
-    if ((prev_info = calloc(n, sizeof(threadinfo_t))) == NULL) {
-        printf("top: out of memory\n");
-        return -ENOMEM;
-    }
+	/* To refresh all tasks at once, flush stdout on fflush only */
+	setvbuf(stdout, NULL,_IOFBF, 0);
+	top_termSwitchMode(0);
 
-    /* To refresh all tasks at once, flush stdout on fflush only */
-    setvbuf(stdout, NULL,_IOFBF, 0);
-    top_termSwitchMode(0);
+	/* Clear terminal */
+	printf("\033[2J");
 
-    /* Clear terminal */
-    printf("\033[2J");
+	/* Disable cursor */
+	printf("\033[?25l");
 
-    /* Disable cursor */
-    printf("\033[?25l");
+	while (1) {
+		time_t delta, now;
 
-    while (1) {
-        time_t delta, now;
+		clock_gettime(CLOCK_MONOTONIC, &ts);
+		/* Reallocate buffers if number of threads exceeds n */
+		while ((totcnt = threadsinfo(n, info)) >= n) {
+			n *= 2;
+			if ((info_re = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
+				goto out_mem;
+			}
+			info = info_re;
 
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        /* Reallocate buffers if number of threads exceeds n */
-	    while ((totcnt = threadsinfo(n, info)) >= n) {
-		    n *= 2;
-		    if ((info_re = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
-			    free(info);
-			    printf("ps: out of memory\n");
-			    ret = -ENOMEM;
-                goto restore;
-		    }
-            info = info_re;
+			if ((info_re = realloc(prev_info, n * sizeof(threadinfo_t))) == NULL) {
+				goto out_mem;
+			}
+			prev_info = info_re;
+		}
 
-            if ((info_re = realloc(prev_info, n * sizeof(threadinfo_t))) == NULL) {
-			    free(prev_info);
-			    printf("ps: out of memory\n");
-			    ret = -ENOMEM;
-                goto restore;
-		    }
-            prev_info = info_re;
-	    }
+		now = ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+		delta = now - prev_time;
+		prev_time = now;
 
-        now = ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
-        delta = now - prev_time;
-        prev_time = now;
+		top_refresh(err, info, prev_info, totcnt, delta);
+		fflush(stdout);
+		err = 0;
 
-        top_refresh(err, info, prev_info, totcnt, delta);
-        fflush(stdout);
-        err = 0;
+		if (itermode) {
+			niter--;
+			if (niter <= 0)
+				break;
+		}
 
-        if (itermode) {
-            niter--;
-            if (niter <= 0)
-                break;
-        }
+		cmd = top_cmdwait(delay);
+		switch (cmd) {
+		case '\n':
+		case 0:
+			continue;
+		case 'q':
+			goto restore;
+		case 'H':
+			threads_mode = !threads_mode;
+			break;
+		case 'N':
+			cmp = top_cmppid;
+			break;
+		case 'P':
+			cmp = top_cmpcpu;
+			break;
+		case 'M':
+			cmp = top_cmpmem;
+			break;
+		case 'T':
+			cmp =  top_cmptime;
+			break;
+		case 'R':
+			sortdir *= -1;
+			break;
+		default:
+			err = cmd;
+		}
+	}
 
-        cmd = top_cmdwait(delay);
-        switch (cmd) {
-            case '\n':
-            case 0:
-                continue;
-            case 'q':
-                goto restore;
-            case 'H':
-                threads_mode = !threads_mode;
-                break;
-            case 'N':
-                cmp = top_cmppid;
-                break;
-            case 'P':
-                cmp = top_cmpcpu;
-                break;
-            case 'M':
-                cmp = top_cmpmem;
-                break;
-            case 'T':
-                cmp =  top_cmptime;
-                break;
-            case 'R':
-                sortdir *= -1;
-                break;
-            default:
-                err = cmd;
-        }
-    }
+out_mem:
+	printf("top: out of memory\n");
+	ret = -ENOMEM;
 
 restore:
-    printf("\033[?25h");
-    top_termSwitchMode(1);
-    setvbuf(stdout, NULL, _IOLBF, 0);
+	printf("\033[?25h");
+	top_termSwitchMode(1);
+	setvbuf(stdout, NULL, _IOLBF, 0);
+	free(info);
+	free(prev_info);
 
-    return ret;
+	return ret;
 }
