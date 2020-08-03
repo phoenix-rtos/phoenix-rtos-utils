@@ -214,13 +214,13 @@ static int ls_readEntry(struct fileinfo *f, struct dirent *dir, const char *path
 			return -1;
 		}
 
-		f->d_type = dir->d_type;
-
 		free(fullname);
 
 		f->pw = getpwuid(f->stat.st_uid);
 		f->gr = getgrgid(f->stat.st_gid);
 	}
+
+	f->d_type = dir->d_type;
 
 	return 0;
 }
