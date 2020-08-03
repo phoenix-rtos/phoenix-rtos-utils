@@ -1,7 +1,7 @@
 /*
  * Phoenix-RTOS
  *
- * Phoenix Shell top
+ * Phoenix Shell ls
  *
  * Copyright 2020 Phoenix Systems
  * Author: Maciej Purski
@@ -265,12 +265,12 @@ static void ls_printLong(size_t nfiles)
 	for (i = 0; i < nfiles; i++) {
 		unsigned int j;
 		char fmt[8];
-		char perms[10];
+		char perms[11];
 		char buf[80];
 
 		for (j = 0; j < 9; j++)
 			perms[j] = '-';
-		perms[9] = '\0';
+		perms[10] = '\0';
 
 		if (S_ISREG(files[i].stat.st_mode)) {
 			perms[0] = '-';
