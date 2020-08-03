@@ -49,19 +49,20 @@
 #define EXECCOLOR	"\033[32m" /* Green */
 #define SYMCOLOR	"\033[36m" /* Cyan */
 #define DEVCOLOR	"\033[33;40m" /* Yellow with black bg */
-#define GRAPHCOLOR	"\033[35m" /* Magenta */
-#define ARCHCOLOR	"\033[31m" /* Red */
+#define FILECOLOR	"\033[37m"	  /* White */
+
 
 /* Minimum column width for 1 char file name and 2 spaces */
 #define MIN_COL_WIDTH 3
 #define BUFFER_INIT_SIZE 32
 
 struct fileinfo {
-	/* TODO: dynamic name */
 	char *name;
 	size_t namelen;
 	size_t memlen;
 	struct stat stat;
+	struct passwd *pw;
+	struct group  *gr;
 	uint32_t d_type;
 };
 
@@ -150,10 +151,7 @@ static void ls_colorPrint(struct fileinfo *file, size_t width)
 		break;
 	case dtUnknown:
 	case dtFile:
-		if (file->stat.st_mode & S_IXUSR ||
-			file->stat.st_mode & S_IXGRP ||
-			file->stat.st_mode & S_IXOTH)
-				printf(EXECCOLOR);
+		printf(FILECOLOR);
 		break;
 	}
 	printf(fmt, file->name);
@@ -167,7 +165,7 @@ static int ls_cmpname(const void *t1, const void *t2)
 }
 
 
-static int ls_readEntry(struct fileinfo *f, struct dirent *dir, const char *path)
+static int ls_readEntry(struct fileinfo *f, struct dirent *dir, const char *path, unsigned int full)
 {
 	char *name_re;
 	char *fullname;
@@ -194,30 +192,35 @@ static int ls_readEntry(struct fileinfo *f, struct dirent *dir, const char *path
 	strcpy(f->name, dir->d_name);
 	f->namelen = namelen;
 
-	fullname = malloc((f->namelen + pathlen + 2) * sizeof(char));
+	if (full) {
+		fullname = malloc((f->namelen + pathlen + 2) * sizeof(char));
 
-	if (fullname == NULL) {
-		printf("ls: out of memory\n");
-		return -ENOMEM;
-	}
-	strcpy(fullname, path);
+		if (fullname == NULL) {
+			printf("ls: out of memory\n");
+			return -ENOMEM;
+		}
+		strcpy(fullname, path);
 
-	if (fullname[pathlen - 1] != '/') {
-		fullname[pathlen] = '/';
-		strcpy(fullname + pathlen + 1, dir->d_name);
-	} else {
-		strcpy(fullname + pathlen, dir->d_name);
-	}
+		if (fullname[pathlen - 1] != '/') {
+			fullname[pathlen] = '/';
+			strcpy(fullname + pathlen + 1, dir->d_name);
+		} else {
+			strcpy(fullname + pathlen, dir->d_name);
+		}
 
-	if (stat(fullname, &f->stat) != 0) {
-		printf("ls: Can't stat file %s error: %d\n", dir->d_name);
+		if (stat(fullname, &f->stat) != 0) {
+			printf("ls: Can't stat file %s error: %d\n", dir->d_name);
+			free(fullname);
+			return -1;
+		}
+
+		f->d_type = dir->d_type;
+
 		free(fullname);
-		return -1;
+
+		f->pw = getpwuid(f->stat.st_uid);
+		f->gr = getgrgid(f->stat.st_gid);
 	}
-
-	f->d_type = dir->d_type;
-
-	free(fullname);
 
 	return 0;
 }
@@ -240,22 +243,18 @@ static void ls_printLong(size_t nfiles)
 	size_t grpsz = 3;
 	size_t sizesz = 1;
 	size_t daysz = 1;
-	struct passwd *pw;
-	struct group  *gr;
 	struct tm t;
 
-	tzset();
+
 	for (i = 0; i < nfiles; i++) {
 		linksz = max(ls_numPlaces(files[i].stat.st_nlink), linksz);
 		sizesz = max(ls_numPlaces(files[i].stat.st_size), sizesz);
 
-		pw = getpwuid(files[i].stat.st_uid);
-		if (pw)
-			usersz = max(strlen(pw->pw_name), usersz);
+		if (files[i].pw != NULL)
+			usersz = max(strlen(files[i].pw->pw_name), usersz);
 
-		gr = getgrgid(files[i].stat.st_gid);
-		if (gr)
-			grpsz = max(strlen(gr->gr_name), grpsz);
+		if (files[i].gr != NULL)
+			grpsz = max(strlen(files[i].gr->gr_name), grpsz);
 
 		localtime_r(&files[i].stat.st_mtime, &t);
 		if (t.tm_mday > 10)
@@ -313,16 +312,15 @@ static void ls_printLong(size_t nfiles)
 		printf(fmt, files[i].stat.st_nlink);
 
 		sprintf(fmt, "%%-%ds ", usersz);
-		pw = getpwuid(files[i].stat.st_uid);
-		if (pw)
-			printf(fmt, pw->pw_name);
+		if (files[i].pw)
+			printf(fmt, files[i].pw->pw_name);
 		else
 			printf(fmt, "---");
 
 		sprintf(fmt, "%%-%ds ", grpsz);
-		gr = getgrgid(files[i].stat.st_gid);
-		if (gr)
-			printf(fmt, gr->gr_name);
+		files[i].gr = getgrgid(files[i].stat.st_gid);
+		if (files[i].gr)
+			printf(fmt, files[i].gr->gr_name);
 		else
 			printf(fmt, "---");
 
@@ -555,7 +553,7 @@ int psh_ls(char *args)
 			if (dir->d_name[0] == '.' && !all)
 				continue;
 
-			if ((ret = ls_readEntry(&files[nfiles], dir, path)) != 0)
+			if ((ret = ls_readEntry(&files[nfiles], dir, path, full)) != 0)
 				goto freePaths;
 
 			nfiles++;
@@ -565,9 +563,10 @@ int psh_ls(char *args)
 					goto freePaths;
 			}
 		}
-
-		qsort(files, nfiles, sizeof(struct fileinfo), ls_cmpname);
-		ls_printFiles(nfiles, line, full);
+		if (nfiles > 0) {
+			qsort(files, nfiles, sizeof(struct fileinfo), ls_cmpname);
+			ls_printFiles(nfiles, line, full);
+		}
 		closedir(stream);
 
 		i++;
