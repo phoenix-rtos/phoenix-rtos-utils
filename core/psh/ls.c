@@ -484,6 +484,10 @@ int psh_ls(char *args)
 	}
 
 	maxidx = max(1, w.ws_col / MIN_COL_WIDTH);
+	fileinfoSize = 0;
+	colinfoSize = 0;
+	files = NULL;
+	colinfo = NULL;
 
 	/* Parse arguments */
 	while ((args = psh_nextString(args, &len)) && len) {
@@ -563,6 +567,7 @@ int psh_ls(char *args)
 					goto freePaths;
 			}
 		}
+
 		if (nfiles > 0) {
 			qsort(files, nfiles, sizeof(struct fileinfo), ls_cmpname);
 			ls_printFiles(nfiles, line, full);
@@ -575,10 +580,12 @@ int psh_ls(char *args)
 	} while (i < npaths);
 
 freePaths:
-	for (i = 0; i < npaths; i++)
-		free(paths[i]);
-	if (npaths > 0)
+	if (paths != NULL) {
+		for (i = 0; i < npaths; i++)
+			free(paths[i]);
+
 		free(paths);
+	}
 
 	if (files != NULL) {
 		for (i = 0; i < fileinfoSize; i++)
