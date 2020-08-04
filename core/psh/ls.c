@@ -49,12 +49,15 @@
 #define EXECCOLOR	"\033[32m" /* Green */
 #define SYMCOLOR	"\033[36m" /* Cyan */
 #define DEVCOLOR	"\033[33;40m" /* Yellow with black bg */
-#define FILECOLOR	"\033[37m"	  /* White */
 
+
+#define EXEC_MASK (S_IXUSR | S_IXGRP | S_IXOTH)
 
 /* Minimum column width for 1 char file name and 2 spaces */
 #define MIN_COL_WIDTH 3
 #define BUFFER_INIT_SIZE 32
+
+static const char cwd[] = ".";
 
 struct fileinfo {
 	char *name;
@@ -85,6 +88,18 @@ static struct fileinfo *files;
 static size_t fileinfoSize;
 
 struct winsize w;
+
+
+void ls_printHelp(void)
+{
+	const char help[] = "Command line arguments:\n"
+						"  -h:  prints help\n"
+						"  -l:  long listing format\n"
+						"  -1:  one entry per line\n"
+						"  -a:  do not ignore entries starting with .\n\n";
+
+	printf(help);
+}
 
 static size_t ls_initColinfo(size_t nfiles)
 {
@@ -139,20 +154,16 @@ static void ls_colorPrint(struct fileinfo *file, size_t width)
 	char fmt[8];
 
 	sprintf(fmt, "%%-%ds", width);
-	switch (file->d_type) {
-	case dtDir:
+	if (S_ISREG(file->stat.st_mode)) {
+		if (file->stat.st_mode & EXEC_MASK)
+			printf(EXECCOLOR);
+	} else if (S_ISDIR(file->stat.st_mode)) {
 		printf(DIRCOLOR);
-		break;
-	case dtDev:
+	} else if (S_ISCHR(file->stat.st_mode) ||
+			   S_ISBLK(file->stat.st_mode)) {
 		printf(DEVCOLOR);
-		break;
-	case dtSymlink:
+	} else if (S_ISLNK(file->stat.st_mode)) {
 		printf(SYMCOLOR);
-		break;
-	case dtUnknown:
-	case dtFile:
-		printf(FILECOLOR);
-		break;
 	}
 	printf(fmt, file->name);
 	printf("\033[0m");
@@ -164,13 +175,10 @@ static int ls_cmpname(const void *t1, const void *t2)
 	return strcasecmp(((struct fileinfo *)t1)->name, ((struct fileinfo *)t2)->name);
 }
 
-
-static int ls_readEntry(struct fileinfo *f, struct dirent *dir, const char *path, unsigned int full)
+static int ls_namecpy(struct fileinfo *f, const char *name)
 {
+	size_t namelen = strlen(name);
 	char *name_re;
-	char *fullname;
-	size_t namelen = strlen(dir->d_name);
-	size_t pathlen = strlen(path);
 
 	if (f->memlen == 0) {
 		f->memlen = namelen + 1;
@@ -189,38 +197,71 @@ static int ls_readEntry(struct fileinfo *f, struct dirent *dir, const char *path
 		f->name = name_re;
 	}
 
-	strcpy(f->name, dir->d_name);
+	strcpy(f->name, name);
 	f->namelen = namelen;
 
-	if (full) {
-		fullname = malloc((f->namelen + pathlen + 2) * sizeof(char));
+	return 0;
+}
 
-		if (fullname == NULL) {
-			printf("ls: out of memory\n");
-			return -ENOMEM;
-		}
-		strcpy(fullname, path);
 
-		if (fullname[pathlen - 1] != '/') {
-			fullname[pathlen] = '/';
-			strcpy(fullname + pathlen + 1, dir->d_name);
-		} else {
-			strcpy(fullname + pathlen, dir->d_name);
-		}
+static int ls_readEntry(struct fileinfo *f, struct dirent *dir, const char *path, unsigned int full)
+{
+	char *fullname;
+	size_t pathlen = strlen(path);
+	int ret;
 
-		if (stat(fullname, &f->stat) != 0) {
-			printf("ls: Can't stat file %s error: %d\n", dir->d_name);
-			free(fullname);
-			return -1;
-		}
 
+	if ((ret = ls_namecpy(f, dir->d_name)) != 0)
+		return ret;
+
+	fullname = malloc((f->namelen + pathlen + 2) * sizeof(char));
+	if (fullname == NULL) {
+		printf("ls: out of memory\n");
+		return -ENOMEM;
+	}
+	strcpy(fullname, path);
+
+	if (fullname[pathlen - 1] != '/') {
+		fullname[pathlen] = '/';
+		strcpy(fullname + pathlen + 1, dir->d_name);
+	} else {
+		strcpy(fullname + pathlen, dir->d_name);
+	}
+
+	if (lstat(fullname, &f->stat) != 0) {
+		printf("ls: Can't stat file %s error: %d\n", dir->d_name);
 		free(fullname);
+		return -1;
+	}
 
+	if (full) {
 		f->pw = getpwuid(f->stat.st_uid);
 		f->gr = getgrgid(f->stat.st_gid);
 	}
 
 	f->d_type = dir->d_type;
+	free(fullname);
+
+	return 0;
+}
+
+int ls_readFile(struct fileinfo *f, char *path, int full)
+{
+	int ret;
+
+	if ((ret = ls_namecpy(f, path)) != 0)
+		return ret;
+
+
+	if (lstat(path, &f->stat) != 0) {
+		printf("ls: Can't stat file %s error: %d\n", path);
+		return -1;
+	}
+
+	if (full) {
+		f->pw = getpwuid(f->stat.st_uid);
+		f->gr = getgrgid(f->stat.st_gid);
+	}
 
 	return 0;
 }
@@ -267,7 +308,7 @@ static void ls_printLong(size_t nfiles)
 		char perms[11];
 		char buf[80];
 
-		for (j = 0; j < 9; j++)
+		for (j = 0; j < 10; j++)
 			perms[j] = '-';
 		perms[10] = '\0';
 
@@ -283,7 +324,7 @@ static void ls_printLong(size_t nfiles)
 			perms[0] = 'l';
 		} else if (S_ISFIFO(files[i].stat.st_mode)) {
 			perms[0] = 'p';
-		} else if (S_ISFIFO(files[i].stat.st_mode)) {
+		} else if (S_ISSOCK(files[i].stat.st_mode)) {
 			perms[0] = 's';
 		}
 
@@ -468,7 +509,6 @@ int psh_ls(char *args)
 	unsigned int npaths = 0;
 	char **reptr;
 	unsigned int len;
-	char cwd[] = ".";
 	int ret = 0;
 	int all = 0;
 	int full = 0;
@@ -514,13 +554,16 @@ int psh_ls(char *args)
 				goto freePaths;
 			}
 			npaths++;
-		} else if (!strcmp(args, "-a") || strchr(args, 'a')) {
+		} else if (!strcmp(args, "-a")) {
 			all = 1;
-		} else if (!strcmp(args, "-l") || strchr(args, 'l')) {
+		} else if (!strcmp(args, "-l")) {
 			full = 1;
 			line = 1;
-		} else if (!strcmp(args, "-1") || strchr(args, '1')) {
+		} else if (!strcmp(args, "-1")) {
 			line = 1;
+		} else if (!strcmp(args, "-h")) {
+			ls_printHelp();
+			goto freePaths;
 		} else {
 			printf("ls: unknown option '%s'\n", args);
 			ret = EOK;
@@ -533,15 +576,44 @@ int psh_ls(char *args)
 	if ((ret = ls_buffersInit(BUFFER_INIT_SIZE)) != 0)
 		goto freePaths;
 
+	/* First collect non-dir files and set to null after handling */
+	nfiles = 0;
+	for (int i = 0; i < npaths; i++) {
+		struct stat s;
+
+		if (stat(paths[i], &s) != 0) {
+			printf("ls: cannot access %s: No such file or directory\n", paths[i]);
+			free(paths[i]);
+			paths[i] = NULL;
+		} else if (!S_ISDIR(s.st_mode)) {
+			if ((ret = ls_readFile(&files[nfiles], paths[i], full)) != 0)
+				goto freePaths;
+
+			nfiles++;
+			free(paths[i]);
+			paths[i] = NULL;
+		}
+	}
+
+	if (nfiles > 0) {
+		qsort(files, nfiles, sizeof(struct fileinfo), ls_cmpname);
+		ls_printFiles(nfiles, line, full);
+	}
+
 	i = 0;
 	do {
 		DIR *stream;
 		struct dirent *dir;
-		char *path;
+		const char *path;
 		if (npaths == 0)
 			path = cwd;
 		else
 			path = paths[i];
+
+		if (path == NULL) {
+			i++;
+			continue;
+		}
 
 		stream = opendir(path);
 		if (stream == NULL) {
@@ -549,8 +621,13 @@ int psh_ls(char *args)
 			break;
 		}
 
-		if (npaths > 1)
+		/* Print dir name if there are more files/dirs */
+		if (npaths > 1) {
+			/* Print new line if there were entries already printed */
+			if (nfiles > 0)
+				putchar('\n');
 			printf("%s:\n", path);
+		}
 		nfiles = 0;
 		/* For each entry */
 		while ((dir = readdir(stream)) != NULL) {
@@ -561,7 +638,6 @@ int psh_ls(char *args)
 				goto freePaths;
 
 			nfiles++;
-
 			if (nfiles == fileinfoSize) {
 				if ((ret = ls_bufferExpand(fileinfoSize * 2)) != 0)
 					goto freePaths;
@@ -575,8 +651,6 @@ int psh_ls(char *args)
 		closedir(stream);
 
 		i++;
-		if (npaths > 1 && i < npaths)
-			printf("\n");
 	} while (i < npaths);
 
 freePaths:
