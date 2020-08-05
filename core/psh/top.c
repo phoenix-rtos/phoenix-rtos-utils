@@ -63,12 +63,12 @@ static void top_printHelp(void)
 	const char help[] = "Command line arguments:\n"
 			    "  -h:  Prints help.\n"
 			    "  -H:  Starts with threads mode.\n"
-			    "  -d:  Set refresh rate. Real number greater than 0.\n"
+			    "  -d:  Set refresh rate. Integer greater than 0.\n"
 			    "  -n:  Set number of iterations. By default its infinity.\n\n"
 			    "Interactive commands:\n"
+			    "  <ENTER> or <SPACE>: Refresh\n"
 			    "  H:  Toggle threads mode\n"
 			    "  q:  Quit\n"
-			    "  \\n: Refresh\n"
 			    "  P:  Sort by CPU\n"
 			    "  M:  Sort by MEM\n"
 			    "  T:  Sort by TIME\n"
@@ -197,6 +197,7 @@ static void top_refresh(char cmd, threadinfo_t *info, threadinfo_t *prev_info,
 	/* Reset style */
 	printf("\033[0m");
 	for (i = 0; i < totcnt; i++) {
+
 		psh_convert(SI, info[i].wait, -6, 1, buff);
 		/* Print running process in bold */
 		if (!info[i].state)
@@ -212,18 +213,21 @@ static void top_refresh(char cmd, threadinfo_t *info, threadinfo_t *prev_info,
 
 		psh_convert(BP, info[i].vmem, 0, 1, buff);
 		printf("%6s ", buff);
-		printf("%-30s\n", info[i].name);
+		printf("%-30s", info[i].name);
 
 		printf("\033[0m");
 		lines++;
 		if (lines == w.ws_row)
 			break;
+		putchar('\n');
 	}
 
 	/* Clear pending lines */
 	while (lines < prevlines) {
-		printf("\033[K\n");
+		printf("\033[K");
 		prevlines--;
+		if (lines != prevlines)
+			putchar('\n');
 	}
 	prevlines = lines;
 }
@@ -353,6 +357,7 @@ int psh_top(char *arg)
 		cmd = top_cmdwait(delay);
 		switch (cmd) {
 			case '\n':
+			case ' ':
 			case 0:
 				continue;
 			case 'q':
