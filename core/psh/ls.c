@@ -422,7 +422,8 @@ static int ls_buffersInit(size_t sz)
 
 	files = malloc(sz * sizeof(struct fileinfo));
 	if (files == NULL) {
-		goto outMem;
+		printf("ls: out of memory\n");
+		return -ENOMEM;
 	}
 
 	for (i = 0; i < sz; i++) {
@@ -433,7 +434,8 @@ static int ls_buffersInit(size_t sz)
 
 	colinfo = malloc(maxcols * sizeof(struct colinfo));
 	if (colinfo == NULL) {
-		goto outMem;
+		printf("ls: out of memory\n");
+		return -ENOMEM;
 	}
 
 	for (i = 0; i < maxcols; i++)
@@ -443,16 +445,13 @@ static int ls_buffersInit(size_t sz)
 		colinfo[i].colarr = malloc((i + 1) * sizeof(size_t));
 
 		if (colinfo[i].colarr == NULL) {
-			goto outMem;
+			printf("ls: out of memory\n");
+			return -ENOMEM;
 		}
 	}
 	colinfoSize = maxcols;
 
 	return 0;
-
-outMem:
-	printf("ls: out of memory\n");
-	return -ENOMEM;
 }
 
 static int ls_bufferExpand(size_t sz)
@@ -463,7 +462,8 @@ static int ls_bufferExpand(size_t sz)
 
 	reptr = realloc(files, sz * sizeof(struct fileinfo));
 	if (reptr == NULL) {
-		goto outMem;
+		printf("ls: out of memory\n");
+		return -ENOMEM;
 	}
 
 	files = reptr;
@@ -476,7 +476,8 @@ static int ls_bufferExpand(size_t sz)
 	if (maxcols > colinfoSize) {
 		reptr = realloc(colinfo, maxcols * sizeof(struct colinfo));
 		if (reptr == NULL) {
-			goto outMem;
+			printf("ls: out of memory\n");
+			return -ENOMEM;
 		}
 		colinfo = reptr;
 
@@ -487,17 +488,14 @@ static int ls_bufferExpand(size_t sz)
 			colinfo[i].colarr = malloc((i + 1) * sizeof(size_t));
 
 			if (colinfo[i].colarr == NULL) {
-				goto outMem;
+				printf("ls: out of memory\n");
+				return -ENOMEM;
 			}
 		}
 		colinfoSize = maxcols;
 	}
 
 	return 0;
-
-outMem:
-	printf("ls: out of memory\n");
-	return -ENOMEM;
 }
 
 
