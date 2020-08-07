@@ -11,24 +11,6 @@
  * %LICENSE%
  */
 
-/* Some of the code is inspired by GNU ls implementation, thus we're retaining GNU copyright notice */
-/* Copyright (C) 1985, 1988, 1990-1991, 1995-2010 Free Software Foundation,
- *  Inc.
- *
- *  This program is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
-
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
@@ -53,8 +35,6 @@
 
 #define EXEC_MASK (S_IXUSR | S_IXGRP | S_IXOTH)
 
-/* Minimum column width for 1 char file name and 2 spaces */
-#define MIN_COL_WIDTH 3
 #define BUFFER_INIT_SIZE 32
 
 static const char cwd[] = ".";
@@ -69,25 +49,12 @@ struct fileinfo {
 	uint32_t d_type;
 };
 
-struct colinfo
-{
-  int validlen;
-  size_t linelen;
-  size_t *colarr;
-};
-
-/* Maximum number of columns for display */
-static size_t maxidx;
-
-static struct colinfo *colinfo;
-
-static size_t colinfoSize;
 
 static struct fileinfo *files;
 
 static size_t fileinfoSize;
 
-struct winsize w;
+static struct winsize w;
 
 
 void ls_printHelp(void)
@@ -101,49 +68,59 @@ void ls_printHelp(void)
 	printf(help);
 }
 
-static size_t ls_initColinfo(size_t nfiles)
+
+static size_t *ls_computeRows(size_t *nrowsres, size_t *ncolsres, size_t nfiles)
 {
-	size_t maxcols = min(maxidx, nfiles);
+	unsigned int col;
 	unsigned int i;
-	size_t cols;
+	size_t nrows = 1;
+	size_t ncols = nfiles;
+	size_t *colsz;
+	size_t sum = 0;
 
-	/* Init cols */
-	for (i = 0; i < maxcols; ++i) {
-		size_t j;
+	/* Estimate lower bound of nrows */
+	for (i = 0; i < nfiles; i++)
+		sum += files[i].namelen;
 
-		colinfo[i].validlen = 1;
-		colinfo[i].linelen = (i + 1) * MIN_COL_WIDTH;
-		for (j = 0; j <= i; ++j)
-			colinfo[i].colarr[j] = MIN_COL_WIDTH;
+	nrows = sum / w.ws_col + 1;
+	ncols = nfiles / nrows + 1;
+
+	colsz = malloc(ncols * sizeof(size_t));
+	if (colsz == NULL) {
+		printf("ls: out of memory\n");
+		return NULL;
 	}
 
-	/* Compute the maximum number of possible columns.  */
-	size_t filesno;
-	for (filesno = 0; filesno < nfiles; ++filesno) {
-		struct fileinfo *f = &files[filesno];
-		size_t name_length = f->namelen;
-		size_t i;
+	while (nrows <= nfiles) {
+		if (nfiles % nrows == 0)
+			ncols = nfiles / nrows;
+		else
+			ncols = nfiles / nrows + 1;
 
-		for (i = 0; i < maxcols; ++i) {
-			if (colinfo[i].validlen) {
-				size_t idx =  filesno / ((nfiles + i) / (i + 1));
-				size_t real_length = name_length + (idx == i ? 0 : 2);
-				if (colinfo[i].colarr[idx] < real_length) {
-					colinfo[i].linelen += (real_length - colinfo[i].colarr[idx]);
-					colinfo[i].colarr[idx] = real_length;
-					colinfo[i].validlen = (colinfo[i].linelen < w.ws_col);
-				}
-			}
+		for (i = 0; i < ncols; i++)
+			colsz[i] = 0;
+
+		/* Compute widths of each column */
+		for (i = 0; i < nfiles; i++) {
+			col = i / nrows;
+			colsz[col] = max(colsz[col], files[i].namelen + 2);
 		}
-	}
+		colsz[ncols - 1] -= 2;
 
-	/* Find maximum allowed columns. */
-	for (cols = maxcols; cols > 1; --cols) {
-		if (colinfo[cols - 1].validlen)
+		sum = 0;
+		/* Compute all columns but last */
+		for (col = 0; col < ncols; col++)
+			sum += colsz[col];
+
+		if (sum < w.ws_col)
 			break;
+		nrows++;
 	}
 
-	return cols;
+	*nrowsres = nrows;
+	*ncolsres = ncols;
+
+	return colsz;
 }
 
 
@@ -152,8 +129,8 @@ static void ls_colorPrint(struct fileinfo *file, size_t width)
 	char fmt[8];
 
 	sprintf(fmt, "%%-%ds", width);
-	if (S_ISREG(file->stat.st_mode)) {
-		if (file->stat.st_mode & EXEC_MASK)
+	if (S_ISREG(file->stat.st_mode) &&
+	    file->stat.st_mode & EXEC_MASK) {
 			printf(EXECCOLOR);
 	} else if (S_ISDIR(file->stat.st_mode)) {
 		printf(DIRCOLOR);
@@ -171,6 +148,7 @@ static int ls_cmpname(const void *t1, const void *t2)
 {
 	return strcasecmp(((struct fileinfo *)t1)->name, ((struct fileinfo *)t2)->name);
 }
+
 
 static int ls_namecpy(struct fileinfo *f, const char *name)
 {
@@ -200,12 +178,12 @@ static int ls_namecpy(struct fileinfo *f, const char *name)
 	return 0;
 }
 
+
 static int ls_readEntry(struct fileinfo *f, struct dirent *dir, const char *path, unsigned int full)
 {
 	char *fullname;
 	size_t pathlen = strlen(path);
 	int ret;
-
 
 	if ((ret = ls_namecpy(f, dir->d_name)) != 0)
 		return ret;
@@ -224,10 +202,10 @@ static int ls_readEntry(struct fileinfo *f, struct dirent *dir, const char *path
 		strcpy(fullname + pathlen, dir->d_name);
 	}
 
-	if (lstat(fullname, &f->stat) != 0) {
+	if ((ret = lstat(fullname, &f->stat)) != 0) {
 		printf("ls: Can't stat file %s.\n", dir->d_name);
 		free(fullname);
-		return -1;
+		return ret;
 	}
 
 	if (full) {
@@ -241,6 +219,7 @@ static int ls_readEntry(struct fileinfo *f, struct dirent *dir, const char *path
 	return 0;
 }
 
+
 int ls_readFile(struct fileinfo *f, char *path, int full)
 {
 	int ret;
@@ -249,9 +228,9 @@ int ls_readFile(struct fileinfo *f, char *path, int full)
 		return ret;
 
 
-	if (lstat(path, &f->stat) != 0) {
+	if ((ret = lstat(path, &f->stat)) != 0) {
 		printf("ls: Can't stat file %s.\n", path);
-		return -1;
+		return ret;
 	}
 
 	if (full) {
@@ -261,6 +240,7 @@ int ls_readFile(struct fileinfo *f, char *path, int full)
 
 	return 0;
 }
+
 
 static unsigned int ls_numPlaces(unsigned int n)
 {
@@ -274,15 +254,19 @@ static unsigned int ls_numPlaces(unsigned int n)
 	return r;
 }
 
+
 static void ls_printLong(size_t nfiles)
 {
-	unsigned int i;
+	unsigned int i, j;
 	size_t linksz = 1;
 	size_t usersz = 3;
 	size_t grpsz = 3;
 	size_t sizesz = 1;
 	size_t daysz = 1;
 	struct tm t;
+	char fmt[8];
+	char perms[11];
+	char buf[80];
 
 
 	for (i = 0; i < nfiles; i++) {
@@ -301,11 +285,6 @@ static void ls_printLong(size_t nfiles)
 	}
 
 	for (i = 0; i < nfiles; i++) {
-		unsigned int j;
-		char fmt[8];
-		char perms[11];
-		char buf[80];
-
 		for (j = 0; j < 10; j++)
 			perms[j] = '-';
 		perms[10] = '\0';
@@ -377,48 +356,57 @@ static void ls_printLong(size_t nfiles)
 	}
 }
 
-static void ls_printMultiline(size_t nfiles)
+
+static int ls_printMultiline(size_t nfiles)
 {
-	size_t ncols = ls_initColinfo(nfiles);
-	size_t nrows = nfiles / ncols + (nfiles % ncols != 0);
-	struct colinfo *line_fmt = &colinfo[ncols - 1];
-	unsigned int row;
+	size_t ncols, nrows;
+	size_t *colsz;
+	unsigned int row, col, idx;
+
+	colsz = ls_computeRows(&nrows, &ncols, nfiles);
+	if (colsz == NULL)
+		return -ENOMEM;
 
 	for (row = 0; row < nrows; row++) {
-		unsigned int col;
 		for (col = 0; col < ncols; col++) {
-			unsigned int idx = col * nrows + row;
+			idx = col * nrows + row;
 
 			if (idx >= nfiles)
 				continue;
 
-			ls_colorPrint(&files[idx], max(files[idx].namelen, min(line_fmt->colarr[col], w.ws_col)));
+			ls_colorPrint(&files[idx], max(files[idx].namelen, min(colsz[col], w.ws_col)));
 		}
 		putchar('\n');
 	}
+	free(colsz);
+
+	return 0;
 }
 
-static void ls_printFiles(size_t nfiles, int oneline, int full)
+
+static int ls_printFiles(size_t nfiles, int oneline, int full)
 {
-	if (oneline) {
-		unsigned int i;
-		if (full) {
-			ls_printLong(nfiles);
-		} else {
-			for (i = 0; i < nfiles; i++) {
-				ls_colorPrint(&files[i], files[i].namelen);
-				putchar('\n');
-			}
+	unsigned int i;
+	int ret = 0;
+
+	if (full) {
+		ls_printLong(nfiles);
+	} else if (oneline) {
+		for (i = 0; i < nfiles; i++) {
+			ls_colorPrint(&files[i], files[i].namelen);
+			putchar('\n');
 		}
 	} else {
-		ls_printMultiline(nfiles);
+		ret = ls_printMultiline(nfiles);
 	}
+
+	return ret;
 }
+
 
 static int ls_buffersInit(size_t sz)
 {
 	unsigned int i;
-	unsigned int maxcols = min(sz, maxidx);
 
 	files = malloc(sz * sizeof(struct fileinfo));
 	if (files == NULL) {
@@ -432,32 +420,13 @@ static int ls_buffersInit(size_t sz)
 	}
 	fileinfoSize = sz;
 
-	colinfo = malloc(maxcols * sizeof(struct colinfo));
-	if (colinfo == NULL) {
-		printf("ls: out of memory\n");
-		return -ENOMEM;
-	}
-
-	for (i = 0; i < maxcols; i++)
-		 colinfo[i].colarr = NULL;
-
-	for (i = 0; i < maxcols; i++) {
-		colinfo[i].colarr = malloc((i + 1) * sizeof(size_t));
-
-		if (colinfo[i].colarr == NULL) {
-			printf("ls: out of memory\n");
-			return -ENOMEM;
-		}
-	}
-	colinfoSize = maxcols;
-
 	return 0;
 }
+
 
 static int ls_bufferExpand(size_t sz)
 {
 	unsigned int i;
-	unsigned int maxcols = min(sz, maxidx);
 	void *reptr;
 
 	reptr = realloc(files, sz * sizeof(struct fileinfo));
@@ -473,29 +442,36 @@ static int ls_bufferExpand(size_t sz)
 	}
 	fileinfoSize = sz;
 
-	if (maxcols > colinfoSize) {
-		reptr = realloc(colinfo, maxcols * sizeof(struct colinfo));
-		if (reptr == NULL) {
-			printf("ls: out of memory\n");
-			return -ENOMEM;
-		}
-		colinfo = reptr;
-
-		for (i = colinfoSize; i < maxcols; i++)
-			colinfo[i].colarr = NULL;
-
-		for (i = colinfoSize; i < maxcols; i++) {
-			colinfo[i].colarr = malloc((i + 1) * sizeof(size_t));
-
-			if (colinfo[i].colarr == NULL) {
-				printf("ls: out of memory\n");
-				return -ENOMEM;
-			}
-		}
-		colinfoSize = maxcols;
-	}
-
 	return 0;
+}
+
+
+static void ls_freePaths(char **paths, size_t npaths)
+{
+	unsigned int i;
+
+	if (paths == NULL)
+		return;
+	
+	for (i = 0; i < npaths; i++)
+		free(paths[i]);
+
+	free(paths);
+}
+
+
+static void ls_buffersFree(char **paths, size_t npaths)
+{
+	unsigned int i;
+
+	ls_freePaths(paths, npaths);
+
+	if (files != NULL) {
+		for (i = 0; i < fileinfoSize; i++)
+			free(files[i].name);
+
+		free(files);
+	}
 }
 
 
@@ -505,12 +481,13 @@ int psh_ls(char *args)
 	unsigned int npaths = 0;
 	char **reptr;
 	unsigned int len;
-	int ret = 0;
-	int all = 0;
-	int full = 0;
-	int line = 0;
+	int ret = 0, all = 0, full = 0, line = 0;
 	int nfiles = 0;
 	unsigned int i;
+	struct stat s;
+	DIR *stream;
+	struct dirent *dir;
+	const char *path;
 
 
 	/* In case of ioctl fail set default window size */
@@ -519,11 +496,8 @@ int psh_ls(char *args)
 		w.ws_row = 25;
 	}
 
-	maxidx = max(1, w.ws_col / MIN_COL_WIDTH);
 	fileinfoSize = 0;
-	colinfoSize = 0;
 	files = NULL;
-	colinfo = NULL;
 
 	/* Parse arguments */
 	while ((args = psh_nextString(args, &len)) && len) {
@@ -531,15 +505,15 @@ int psh_ls(char *args)
 			reptr = realloc(paths, (npaths + 1) * sizeof(char *));
 			if (reptr == NULL) {
 				printf("ls: out of memory\n");
-				ret = -ENOMEM;
-				goto freePaths;
+				ls_freePaths(paths, npaths);
+				return -ENOMEM;
 			}
 			paths = reptr;
 
 			if ((paths[npaths] = strdup(args)) == NULL) {
 				printf("ls: out of memory\n");
-				ret = -ENOMEM;
-				goto freePaths;
+				ls_freePaths(paths, npaths);
+				return -ENOMEM;
 			}
 			npaths++;
 		} else if (!strcmp(args, "-a")) {
@@ -551,31 +525,34 @@ int psh_ls(char *args)
 			line = 1;
 		} else if (!strcmp(args, "-h")) {
 			ls_printHelp();
-			goto freePaths;
+			ls_freePaths(paths, npaths);
+			return EOK;
 		} else {
 			printf("ls: unknown option '%s'\n", args);
-			ret = EOK;
-			goto freePaths;
+			ls_freePaths(paths, npaths);
+			return -1;
 		}
 
 		args += len + 1;
 	}
 
-	if ((ret = ls_buffersInit(BUFFER_INIT_SIZE)) != 0)
-		goto freePaths;
+	if ((ret = ls_buffersInit(BUFFER_INIT_SIZE)) != 0) {
+		ls_freePaths(paths, npaths);
+		return ret;
+	}
 
 	/* First collect non-dir files and set to null after handling */
 	nfiles = 0;
 	for (int i = 0; i < npaths; i++) {
-		struct stat s;
-
 		if (stat(paths[i], &s) != 0) {
 			printf("ls: cannot access %s: No such file or directory\n", paths[i]);
 			free(paths[i]);
 			paths[i] = NULL;
 		} else if (!S_ISDIR(s.st_mode)) {
-			if ((ret = ls_readFile(&files[nfiles], paths[i], full)) != 0)
-				goto freePaths;
+			if ((ret = ls_readFile(&files[nfiles], paths[i], full)) != 0) {
+				ls_buffersFree(paths, npaths);
+				return ret;
+			}
 
 			nfiles++;
 			free(paths[i]);
@@ -585,14 +562,15 @@ int psh_ls(char *args)
 
 	if (nfiles > 0) {
 		qsort(files, nfiles, sizeof(struct fileinfo), ls_cmpname);
-		ls_printFiles(nfiles, line, full);
+		ret = ls_printFiles(nfiles, line, full);
+		if (ret != 0) {
+			ls_buffersFree(paths, npaths);
+			return ret;
+		}
 	}
 
 	i = 0;
 	do {
-		DIR *stream;
-		struct dirent *dir;
-		const char *path;
 		if (npaths == 0)
 			path = cwd;
 		else
@@ -624,14 +602,16 @@ int psh_ls(char *args)
 
 			if ((ret = ls_readEntry(&files[nfiles], dir, path, full)) != 0) {
 				closedir(stream);
-				goto freePaths;
+				ls_buffersFree(paths, npaths);
+				return ret;
 			}
 
 			nfiles++;
 			if (nfiles == fileinfoSize) {
 				if ((ret = ls_bufferExpand(fileinfoSize * 2)) != 0) {
 					closedir(stream);
-					goto freePaths;
+					ls_buffersFree(paths, npaths);
+					return ret;
 				}
 			}
 		}
@@ -645,27 +625,7 @@ int psh_ls(char *args)
 		i++;
 	} while (i < npaths);
 
-freePaths:
-	if (paths != NULL) {
-		for (i = 0; i < npaths; i++)
-			free(paths[i]);
-
-		free(paths);
-	}
-
-	if (files != NULL) {
-		for (i = 0; i < fileinfoSize; i++)
-			free(files[i].name);
-
-		free(files);
-	}
-
-	if (colinfo != NULL) {
-		for (i = 0; i < colinfoSize; i++)
-			free(colinfo[i].colarr);
-
-		free(colinfo);
-	}
+	ls_buffersFree(paths, npaths);
 
 	return ret;
 }
