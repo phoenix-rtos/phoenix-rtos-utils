@@ -57,13 +57,13 @@ static size_t fileinfoSize;
 static struct winsize w;
 
 
-void ls_printHelp(void)
+static void ls_printHelp(void)
 {
-	const char help[] = "Command line arguments:\n"
-			    "  -h:  prints help\n"
-			    "  -l:  long listing format\n"
-			    "  -1:  one entry per line\n"
-			    "  -a:  do not ignore entries starting with .\n\n";
+	static const char help[] = "Command line arguments:\n"
+				   "  -h:  prints help\n"
+				   "  -l:  long listing format\n"
+				   "  -1:  one entry per line\n"
+				   "  -a:  do not ignore entries starting with .\n\n";
 
 	printf(help);
 }
@@ -126,21 +126,20 @@ static size_t *ls_computeRows(size_t *nrowsres, size_t *ncolsres, size_t nfiles)
 
 static void ls_colorPrint(struct fileinfo *file, size_t width)
 {
-	char fmt[8];
+	char fmt[16];
+	const char *p = "";
 
-	sprintf(fmt, "%%-%ds", width);
-	if (S_ISREG(file->stat.st_mode) &&
-	    file->stat.st_mode & EXEC_MASK) {
-			printf(EXECCOLOR);
+	sprintf(fmt, "%%s%%-%ds%%s", width);
+	if (S_ISREG(file->stat.st_mode) && file->stat.st_mode & EXEC_MASK) {
+		p = EXECCOLOR;
 	} else if (S_ISDIR(file->stat.st_mode)) {
-		printf(DIRCOLOR);
+		p = DIRCOLOR;
 	} else if (S_ISCHR(file->stat.st_mode) || S_ISBLK(file->stat.st_mode)) {
-		printf(DEVCOLOR);
+		p = DEVCOLOR;
 	} else if (S_ISLNK(file->stat.st_mode)) {
-		printf(SYMCOLOR);
+		p = SYMCOLOR;
 	}
-	printf(fmt, file->name);
-	printf("\033[0m");
+	printf(fmt, p, file->name, "\033[0m");
 }
 
 
@@ -155,25 +154,19 @@ static int ls_namecpy(struct fileinfo *f, const char *name)
 	size_t namelen = strlen(name);
 	char *name_re;
 
-	if (f->memlen == 0) {
-		f->memlen = namelen + 1;
-		f->name = malloc(f->memlen);
-		if (f->name == NULL) {
-			printf("ls: out of memory\n");
-			return -ENOMEM;
-		}
-	 } else if (f->memlen <= namelen) {
-		f->memlen = namelen + 1;
-		name_re = realloc(f->name, f->memlen);
+
+	if (f->memlen <= namelen) {
+		name_re = realloc(f->name, namelen + 1);
 		if (name_re == NULL) {
 			printf("ls: out of memory\n");
 			return -ENOMEM;
 		}
 		f->name = name_re;
+		f->namelen = namelen;
+		f->memlen = namelen + 1;
 	}
 
 	strcpy(f->name, name);
-	f->namelen = namelen;
 
 	return 0;
 }
@@ -220,7 +213,7 @@ static int ls_readEntry(struct fileinfo *f, struct dirent *dir, const char *path
 }
 
 
-int ls_readFile(struct fileinfo *f, char *path, int full)
+static int ls_readFile(struct fileinfo *f, char *path, int full)
 {
 	int ret;
 
@@ -446,25 +439,16 @@ static int ls_bufferExpand(size_t sz)
 }
 
 
-static void ls_freePaths(char **paths, size_t npaths)
+static void ls_free(char **paths, size_t npaths)
 {
 	unsigned int i;
 
-	if (paths == NULL)
-		return;
-	
-	for (i = 0; i < npaths; i++)
-		free(paths[i]);
+	if (paths != NULL) {
+		for (i = 0; i < npaths; i++)
+			free(paths[i]);
 
-	free(paths);
-}
-
-
-static void ls_buffersFree(char **paths, size_t npaths)
-{
-	unsigned int i;
-
-	ls_freePaths(paths, npaths);
+		free(paths);
+	}
 
 	if (files != NULL) {
 		for (i = 0; i < fileinfoSize; i++)
@@ -505,14 +489,14 @@ int psh_ls(char *args)
 			reptr = realloc(paths, (npaths + 1) * sizeof(char *));
 			if (reptr == NULL) {
 				printf("ls: out of memory\n");
-				ls_freePaths(paths, npaths);
+				ls_free(paths, npaths);
 				return -ENOMEM;
 			}
 			paths = reptr;
 
 			if ((paths[npaths] = strdup(args)) == NULL) {
 				printf("ls: out of memory\n");
-				ls_freePaths(paths, npaths);
+				ls_free(paths, npaths);
 				return -ENOMEM;
 			}
 			npaths++;
@@ -525,11 +509,11 @@ int psh_ls(char *args)
 			line = 1;
 		} else if (!strcmp(args, "-h")) {
 			ls_printHelp();
-			ls_freePaths(paths, npaths);
+			ls_free(paths, npaths);
 			return EOK;
 		} else {
 			printf("ls: unknown option '%s'\n", args);
-			ls_freePaths(paths, npaths);
+			ls_free(paths, npaths);
 			return -1;
 		}
 
@@ -537,7 +521,7 @@ int psh_ls(char *args)
 	}
 
 	if ((ret = ls_buffersInit(BUFFER_INIT_SIZE)) != 0) {
-		ls_freePaths(paths, npaths);
+		ls_free(paths, npaths);
 		return ret;
 	}
 
@@ -550,7 +534,7 @@ int psh_ls(char *args)
 			paths[i] = NULL;
 		} else if (!S_ISDIR(s.st_mode)) {
 			if ((ret = ls_readFile(&files[nfiles], paths[i], full)) != 0) {
-				ls_buffersFree(paths, npaths);
+				ls_free(paths, npaths);
 				return ret;
 			}
 
@@ -564,7 +548,7 @@ int psh_ls(char *args)
 		qsort(files, nfiles, sizeof(struct fileinfo), ls_cmpname);
 		ret = ls_printFiles(nfiles, line, full);
 		if (ret != 0) {
-			ls_buffersFree(paths, npaths);
+			ls_free(paths, npaths);
 			return ret;
 		}
 	}
@@ -602,7 +586,7 @@ int psh_ls(char *args)
 
 			if ((ret = ls_readEntry(&files[nfiles], dir, path, full)) != 0) {
 				closedir(stream);
-				ls_buffersFree(paths, npaths);
+				ls_free(paths, npaths);
 				return ret;
 			}
 
@@ -610,7 +594,7 @@ int psh_ls(char *args)
 			if (nfiles == fileinfoSize) {
 				if ((ret = ls_bufferExpand(fileinfoSize * 2)) != 0) {
 					closedir(stream);
-					ls_buffersFree(paths, npaths);
+					ls_free(paths, npaths);
 					return ret;
 				}
 			}
@@ -625,7 +609,7 @@ int psh_ls(char *args)
 		i++;
 	} while (i < npaths);
 
-	ls_buffersFree(paths, npaths);
+	ls_free(paths, npaths);
 
 	return ret;
 }
