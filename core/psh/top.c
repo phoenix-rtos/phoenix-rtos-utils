@@ -192,7 +192,7 @@ static void top_refresh(char cmd, threadinfo_t *info, threadinfo_t *prev_info,
 
 	/* Set header style */
 	printf("\033[0;30;47m");
-	printf("%5s %5s %2s %5s %5s %5s %7s %8s %-30s\n", "PID", "PPID", "PR", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "CMD");
+	printf("%5s %5s %2s %5s %5s %5s %9s %8s %-28s\n", "PID", "PPID", "PR", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "CMD");
 
 	/* Reset style */
 	printf("\033[0m");
@@ -212,8 +212,8 @@ static void top_refresh(char cmd, threadinfo_t *info, threadinfo_t *prev_info,
 			info[i].load / 10, info[i].load % 10, buff, m, s, hs);
 
 		psh_convert(BP, info[i].vmem, 0, 1, buff);
-		printf("%6s ", buff);
-		printf("%-30s", info[i].name);
+		printf("%8s ", buff);
+		printf("%-27s", info[i].name);
 
 		printf("\033[0m");
 		lines++;
