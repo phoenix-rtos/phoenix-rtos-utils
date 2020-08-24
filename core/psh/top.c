@@ -61,19 +61,19 @@ static int top_cmpmem(const void *t1, const void *t2)
 static void top_printHelp(void)
 {
 	const char help[] = "Command line arguments:\n"
-						"  -h:  Prints help.\n"
-						"  -H:  Starts with threads mode.\n"
-						"  -d:  Set refresh rate. Real number greater than 0.\n"
-						"  -n:  Set number of iterations. By default its infinity.\n\n"
-						"Interactive commands:\n"
-						"  H:  Toggle threads mode\n"
-						"  q:  Quit\n"
-						"  \\n: Refresh\n"
-						"  P:  Sort by CPU\n"
-						"  M:  Sort by MEM\n"
-						"  T:  Sort by TIME\n"
-						"  N:  Sort by PID\n"
-						"  R:  Reverse sorting\n";
+			    "  -h:  Prints help.\n"
+			    "  -H:  Starts with threads mode.\n"
+			    "  -d:  Set refresh rate. Integer greater than 0.\n"
+			    "  -n:  Set number of iterations. By default its infinity.\n\n"
+			    "Interactive commands:\n"
+			    "  <ENTER> or <SPACE>: Refresh\n"
+			    "  H:  Toggle threads mode\n"
+			    "  q:  Quit\n"
+			    "  P:  Sort by CPU\n"
+			    "  M:  Sort by MEM\n"
+			    "  T:  Sort by TIME\n"
+			    "  N:  Sort by PID\n"
+			    "  R:  Reverse sorting\n";
 
 	printf(help);
 }
@@ -111,12 +111,12 @@ static int top_cmdwait(unsigned int secs)
 
 	if (FD_ISSET(STDIN_FILENO, &fds))
 		return getchar();
-	else
-		return 0;
+
+	return 0;
 }
 
 static void top_refresh(char cmd, threadinfo_t *info, threadinfo_t *prev_info,
-						unsigned int totcnt, time_t delta)
+			unsigned int totcnt, time_t delta)
 {
 	static unsigned int prevlines = 0;
 	static unsigned int prevcnt = 0;
@@ -139,8 +139,7 @@ static void top_refresh(char cmd, threadinfo_t *info, threadinfo_t *prev_info,
 			/* Prevent negative load, if a new thread with
 			 * the same tid has occured */
 			if (info[i].cpuTime >= p->cpuTime)
-				info[i].load = ((info[i].cpuTime - p->cpuTime)) * 1000 /
-								delta;
+				info[i].load = ((info[i].cpuTime - p->cpuTime)) * 1000 / delta;
 		}
 	}
 
@@ -193,11 +192,12 @@ static void top_refresh(char cmd, threadinfo_t *info, threadinfo_t *prev_info,
 
 	/* Set header style */
 	printf("\033[0;30;47m");
-	printf("%5s %5s %2s %5s %5s %5s %7s %8s %-30s\n", "PID", "PPID", "PR", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "CMD");
+	printf("%5s %5s %2s %5s %5s %5s %9s %8s %-28s\n", "PID", "PPID", "PR", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "CMD");
 
 	/* Reset style */
 	printf("\033[0m");
 	for (i = 0; i < totcnt; i++) {
+
 		psh_convert(SI, info[i].wait, -6, 1, buff);
 		/* Print running process in bold */
 		if (!info[i].state)
@@ -208,23 +208,26 @@ static void top_refresh(char cmd, threadinfo_t *info, threadinfo_t *prev_info,
 		s = info[i].cpuTime / 1000000 - 60 * m;
 		hs = info[i].cpuTime / 10000 - 60 * 100 * m - 100 * s;
 		printf("%5u %5u %2d %5s %3u.%u %4ss %3u:%02u.%02u ", (threads_mode) ? info[i].tid : info[i].pid,
-					info[i].ppid, info[i].priority, (info[i].state) ? "sleep" : "ready",
-					info[i].load / 10, info[i].load % 10, buff, m, s, hs);
+			info[i].ppid, info[i].priority, (info[i].state) ? "sleep" : "ready",
+			info[i].load / 10, info[i].load % 10, buff, m, s, hs);
 
 		psh_convert(BP, info[i].vmem, 0, 1, buff);
-		printf("%6s ", buff);
-		printf("%-30s\n", info[i].name);
+		printf("%8s ", buff);
+		printf("%-27s", info[i].name);
 
 		printf("\033[0m");
 		lines++;
 		if (lines == w.ws_row)
 			break;
+		putchar('\n');
 	}
 
 	/* Clear pending lines */
 	while (lines < prevlines) {
-		printf("\033[K\n");
+		printf("\033[K");
 		prevlines--;
+		if (lines != prevlines)
+			putchar('\n');
 	}
 	prevlines = lines;
 }
@@ -240,7 +243,7 @@ int psh_top(char *arg)
 	unsigned int len;
 	unsigned int delay = 3;
 	unsigned int niter = 0;
-	int ret;
+	int ret = EOK;
 	time_t prev_time;
 	struct timespec ts;
 
@@ -354,6 +357,7 @@ int psh_top(char *arg)
 		cmd = top_cmdwait(delay);
 		switch (cmd) {
 			case '\n':
+			case ' ':
 			case 0:
 				continue;
 			case 'q':
