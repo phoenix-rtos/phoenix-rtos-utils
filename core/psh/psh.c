@@ -732,9 +732,9 @@ static int psh_ps(char *arg)
 		printf("%6s ", buff);
 
 		if (collapse_threads)
-			printf("%3u %-28s", info[i].tid, info[i].name);
+			printf("%3u %-28s\n", info[i].tid, info[i].name);
 		else
-			printf("%-32s", info[i].name);
+			printf("%-32s\n", info[i].name);
 	}
 
 	free(info);
