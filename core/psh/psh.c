@@ -791,9 +791,14 @@ static int psh_runscript(char *path)
 }
 
 
-static int psh_exec(char **argv)
+static int psh_exec(int argc, char **argv)
 {
 	int err;
+
+	if (argc < 2) {
+		printf("usage: %s command [args]...\n", argv[0]);
+		return -EINVAL;
+	}
 
 	switch (err = execve(argv[1], argv + 1, NULL)) {
 	case EOK:
@@ -820,7 +825,7 @@ static void psh_help(void)
 	printf("Available commands:\n");
 	printf("  bind    - binds device to directory\n");
 	printf("  cat     - concatenate file(s) to standard output\n");
-	printf("  exec    - executes a file\n");
+	printf("  exec    - replace shell with the given command\n");
 	printf("  exit    - exits the shell\n");
 	printf("  help    - prints this help message\n");
 	printf("  history - prints command history\n");
@@ -995,7 +1000,7 @@ static int psh_run(void)
 			else if (!strcmp(argv[0], "cat"))
 				psh_cat(argc, argv);
 			else if (!strcmp(argv[0], "exec"))
-				psh_exec(argv);
+				psh_exec(argc, argv);
 			else if (!strcmp(argv[0], "exit"))
 				exit(EXIT_SUCCESS);
 			else if (!strcmp(argv[0], "help"))
