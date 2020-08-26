@@ -1,102 +1,120 @@
 /*
  * Phoenix-RTOS
  *
- * Phoenix Shell ls
+ * fs - lists files and directories, based on GNU implementation
  *
- * Copyright 2020 Phoenix Systems
- * Author: Maciej Purski
+ * Copyright 2017, 2018, 2020 Phoenix Systems
+ * Author: Maciej Purski, Lukasz Kosinski
  *
  * This file is part of Phoenix-RTOS.
  *
  * %LICENSE%
  */
 
-#include <errno.h>
-#include <string.h>
-#include <stdlib.h>
 #include <dirent.h>
-#include <termios.h>
-#include <unistd.h>
-#include <sys/minmax.h>
-#include <sys/ioctl.h>
-#include <sys/stat.h>
-#include <sys/file.h>
-#include <time.h>
-#include <pwd.h>
+#include <errno.h>
 #include <grp.h>
-#include "psh.h"
+#include <pwd.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <termios.h>
+#include <time.h>
+#include <unistd.h>
+
+#include <sys/file.h>
+#include <sys/minmax.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 
-#define DIRCOLOR	"\033[34m" /* Blue */
-#define EXECCOLOR	"\033[32m" /* Green */
-#define SYMCOLOR	"\033[36m" /* Cyan */
-#define DEVCOLOR	"\033[33;40m" /* Yellow with black bg */
+#define DIR_COLOR "\033[34m"    /* Blue */
+#define EXE_COLOR "\033[32m"    /* Green */
+#define SYM_COLOR "\033[36m"    /* Cyan */
+#define DEV_COLOR "\033[33;40m" /* Yellow with black bg */
 
 
-#define EXEC_MASK (S_IXUSR | S_IXGRP | S_IXOTH)
+enum { MODE_NORMAL, MODE_ONEPERLINE, MODE_LONG };
 
-#define BUFFER_INIT_SIZE 32
 
-static const char cwd[] = ".";
-
-struct fileinfo {
+typedef struct {
 	char *name;
 	size_t namelen;
 	size_t memlen;
 	struct stat stat;
 	struct passwd *pw;
-	struct group  *gr;
+	struct group *gr;
 	uint32_t d_type;
-};
+} fileinfo_t;
 
 
-static struct fileinfo *files;
+static struct {
+	struct winsize ws;
+	fileinfo_t *files;
+	size_t fileinfosz;
+	int *odir;
+	int mode;
+	int all;
+	int reverse;
+	int dir;
+	int (*cmp)(const void *, const void *);
+} psh_ls_common;
 
-static size_t fileinfoSize;
 
-static struct winsize w;
-
-
-void ls_printHelp(void)
+static int psh_ls_cmpname(const void *t1, const void *t2)
 {
-	const char help[] = "Command line arguments:\n"
-			    "  -h:  prints help\n"
-			    "  -l:  long listing format\n"
-			    "  -1:  one entry per line\n"
-			    "  -a:  do not ignore entries starting with .\n\n";
-
-	printf(help);
+	return strcasecmp(((fileinfo_t *)t1)->name, ((fileinfo_t *)t2)->name) * psh_ls_common.reverse;
 }
 
 
-static size_t *ls_computeRows(size_t *nrowsres, size_t *ncolsres, size_t nfiles)
+static int psh_ls_cmpmtime(const void *t1, const void *t2)
 {
-	unsigned int col;
-	unsigned int i;
-	size_t nrows = 1;
-	size_t ncols = nfiles;
-	size_t *colsz;
-	size_t sum = 0;
+	return (((fileinfo_t *)t2)->stat.st_mtime - ((fileinfo_t *)t1)->stat.st_mtime) * psh_ls_common.reverse;
+}
+
+
+static int psh_ls_cmpsize(const void *t1, const void *t2)
+{
+	return (((fileinfo_t *)t2)->stat.st_size - ((fileinfo_t *)t1)->stat.st_size) * psh_ls_common.reverse;
+}
+
+
+static void psh_ls_help(void)
+{
+	printf("usage: ls [options] [files]\n");
+	printf("  -1:  one entry per line\n");
+	printf("  -a:  do not ignore entries starting with .\n");
+	printf("  -d:  list directories themselves, not their contents\n");
+	printf("  -f:  do not sort\n");
+	printf("  -h:  prints help\n");
+	printf("  -l:  long listing format\n");
+	printf("  -r:  sort in reverse order\n");
+	printf("  -S:  sort by file size, largest first\n");
+	printf("  -t:  sort by time, newest first\n");
+}
+
+
+static size_t *psh_ls_computerows(size_t *rows, size_t *cols, size_t nfiles)
+{
+	fileinfo_t *files = psh_ls_common.files;
+	size_t *colsz, sum = 0, nrows = 1, ncols = nfiles;
+	unsigned int i, col;
 
 	/* Estimate lower bound of nrows */
 	for (i = 0; i < nfiles; i++)
 		sum += files[i].namelen;
 
-	nrows = sum / w.ws_col + 1;
+	nrows = sum / psh_ls_common.ws.ws_col + 1;
 	ncols = nfiles / nrows + 1;
 
-	colsz = malloc(ncols * sizeof(size_t));
-	if (colsz == NULL) {
+	if ((colsz = (size_t *)malloc(ncols * sizeof(size_t))) == NULL) {
 		printf("ls: out of memory\n");
 		return NULL;
 	}
 
-	while (nrows <= nfiles) {
-		if (nfiles % nrows == 0)
-			ncols = nfiles / nrows;
-		else
-			ncols = nfiles / nrows + 1;
-
+	for (; nrows <= nfiles; nrows++) {
+		ncols = nfiles / nrows + !!(nfiles % nrows);
 		for (i = 0; i < ncols; i++)
 			colsz[i] = 0;
 
@@ -107,89 +125,77 @@ static size_t *ls_computeRows(size_t *nrowsres, size_t *ncolsres, size_t nfiles)
 		}
 		colsz[ncols - 1] -= 2;
 
-		sum = 0;
 		/* Compute all columns but last */
-		for (col = 0; col < ncols; col++)
+		for (sum = 0, col = 0; col < ncols; col++)
 			sum += colsz[col];
 
-		if (sum < w.ws_col)
+		if (sum < psh_ls_common.ws.ws_col)
 			break;
-		nrows++;
 	}
 
-	*nrowsres = nrows;
-	*ncolsres = ncols;
+	*rows = nrows;
+	*cols = ncols;
 
 	return colsz;
 }
 
 
-static void ls_colorPrint(struct fileinfo *file, size_t width)
+static void psh_ls_printfile(fileinfo_t *file, size_t width)
 {
 	char fmt[8];
 
 	sprintf(fmt, "%%-%ds", width);
-	if (S_ISREG(file->stat.st_mode) &&
-	    file->stat.st_mode & EXEC_MASK) {
-			printf(EXECCOLOR);
-	} else if (S_ISDIR(file->stat.st_mode)) {
-		printf(DIRCOLOR);
-	} else if (S_ISCHR(file->stat.st_mode) || S_ISBLK(file->stat.st_mode)) {
-		printf(DEVCOLOR);
-	} else if (S_ISLNK(file->stat.st_mode)) {
-		printf(SYMCOLOR);
-	}
+	if (S_ISREG(file->stat.st_mode) && file->stat.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH))
+		printf(EXE_COLOR);
+	else if (S_ISDIR(file->stat.st_mode))
+		printf(DIR_COLOR);
+	else if (S_ISCHR(file->stat.st_mode) || S_ISBLK(file->stat.st_mode))
+		printf(DEV_COLOR);
+	else if (S_ISLNK(file->stat.st_mode))
+		printf(SYM_COLOR);
+
 	printf(fmt, file->name);
 	printf("\033[0m");
 }
 
 
-static int ls_cmpname(const void *t1, const void *t2)
-{
-	return strcasecmp(((struct fileinfo *)t1)->name, ((struct fileinfo *)t2)->name);
-}
-
-
-static int ls_namecpy(struct fileinfo *f, const char *name)
+static int psh_ls_copyname(fileinfo_t *file, const char *name)
 {
 	size_t namelen = strlen(name);
-	char *name_re;
+	char *rname;
 
-	if (f->memlen == 0) {
-		f->memlen = namelen + 1;
-		f->name = malloc(f->memlen);
-		if (f->name == NULL) {
+	if (!file->memlen) {
+		file->memlen = namelen + 1;
+		if ((file->name = (char *)malloc(file->memlen)) == NULL) {
 			printf("ls: out of memory\n");
 			return -ENOMEM;
 		}
-	 } else if (f->memlen <= namelen) {
-		f->memlen = namelen + 1;
-		name_re = realloc(f->name, f->memlen);
-		if (name_re == NULL) {
+	} else if (file->memlen <= namelen) {
+		file->memlen = namelen + 1;
+		if ((rname = (char *)realloc(file->name, file->memlen)) == NULL) {
 			printf("ls: out of memory\n");
 			return -ENOMEM;
 		}
-		f->name = name_re;
+		file->name = rname;
 	}
 
-	strcpy(f->name, name);
-	f->namelen = namelen;
+	strcpy(file->name, name);
+	file->namelen = namelen;
 
-	return 0;
+	return EOK;
 }
 
 
-static int ls_readEntry(struct fileinfo *f, struct dirent *dir, const char *path, unsigned int full)
+static int psh_ls_readentry(fileinfo_t *file, struct dirent *dir, const char *path)
 {
-	char *fullname;
 	size_t pathlen = strlen(path);
+	char *fullname;
 	int ret;
 
-	if ((ret = ls_namecpy(f, dir->d_name)) != 0)
+	if ((ret = psh_ls_copyname(file, dir->d_name)) < 0)
 		return ret;
 
-	fullname = malloc((f->namelen + pathlen + 2) * sizeof(char));
-	if (fullname == NULL) {
+	if ((fullname = (char *)malloc((file->namelen + pathlen + 2) * sizeof(char))) == NULL) {
 		printf("ls: out of memory\n");
 		return -ENOMEM;
 	}
@@ -198,80 +204,71 @@ static int ls_readEntry(struct fileinfo *f, struct dirent *dir, const char *path
 	if (fullname[pathlen - 1] != '/') {
 		fullname[pathlen] = '/';
 		strcpy(fullname + pathlen + 1, dir->d_name);
-	} else {
+	}
+	else {
 		strcpy(fullname + pathlen, dir->d_name);
 	}
 
-	if ((ret = lstat(fullname, &f->stat)) != 0) {
-		printf("ls: Can't stat file %s.\n", dir->d_name);
+	if ((ret = lstat(fullname, &file->stat)) < 0) {
+		printf("ls: can't stat file %s\n", dir->d_name);
 		free(fullname);
 		return ret;
 	}
 
-	if (full) {
-		f->pw = getpwuid(f->stat.st_uid);
-		f->gr = getgrgid(f->stat.st_gid);
+	if (psh_ls_common.mode == MODE_LONG) {
+		file->pw = getpwuid(file->stat.st_uid);
+		file->gr = getgrgid(file->stat.st_gid);
 	}
 
-	f->d_type = dir->d_type;
+	file->d_type = dir->d_type;
 	free(fullname);
 
-	return 0;
+	return EOK;
 }
 
 
-int ls_readFile(struct fileinfo *f, char *path, int full)
+static int psh_ls_readfile(fileinfo_t *file, char *path)
 {
 	int ret;
 
-	if ((ret = ls_namecpy(f, path)) != 0)
+	if ((ret = psh_ls_copyname(file, path)) < 0)
 		return ret;
 
-
-	if ((ret = lstat(path, &f->stat)) != 0) {
-		printf("ls: Can't stat file %s.\n", path);
-		return ret;
+	if (psh_ls_common.mode == MODE_LONG) {
+		file->pw = getpwuid(file->stat.st_uid);
+		file->gr = getgrgid(file->stat.st_gid);
 	}
 
-	if (full) {
-		f->pw = getpwuid(f->stat.st_uid);
-		f->gr = getgrgid(f->stat.st_gid);
-	}
-
-	return 0;
+	return EOK;
 }
 
 
-static unsigned int ls_numPlaces(unsigned int n)
+static unsigned int psh_ls_numplaces(unsigned int n)
 {
-	size_t r = 1;
+	unsigned int r = 1;
 
-	while (n > 9) {
-		n /= 10;
+	while (n /= 10)
 		r++;
-	}
 
 	return r;
 }
 
 
-static void ls_printLong(size_t nfiles)
+static void psh_ls_printlong(size_t nfiles)
 {
-	unsigned int i, j;
+	fileinfo_t *files = psh_ls_common.files;
+	char fmt[8], perms[11], buf[80];
 	size_t linksz = 1;
 	size_t usersz = 3;
 	size_t grpsz = 3;
 	size_t sizesz = 1;
 	size_t daysz = 1;
+	unsigned int i, j;
 	struct tm t;
-	char fmt[8];
-	char perms[11];
-	char buf[80];
-
 
 	for (i = 0; i < nfiles; i++) {
-		linksz = max(ls_numPlaces(files[i].stat.st_nlink), linksz);
-		sizesz = max(ls_numPlaces(files[i].stat.st_size), sizesz);
+		linksz = max(psh_ls_numplaces(files[i].stat.st_nlink), linksz);
+		sizesz = max(psh_ls_numplaces(files[i].stat.st_size), sizesz);
 
 		if (files[i].pw != NULL)
 			usersz = max(strlen(files[i].pw->pw_name), usersz);
@@ -289,19 +286,18 @@ static void ls_printLong(size_t nfiles)
 			perms[j] = '-';
 		perms[10] = '\0';
 
-		if (S_ISDIR(files[i].stat.st_mode)) {
+		if (S_ISDIR(files[i].stat.st_mode))
 			perms[0] = 'd';
-		} else if (S_ISCHR(files[i].stat.st_mode)) {
+		else if (S_ISCHR(files[i].stat.st_mode))
 			perms[0] = 'c';
-		} else if (S_ISBLK(files[i].stat.st_mode)) {
+		else if (S_ISBLK(files[i].stat.st_mode))
 			perms[0] = 'b';
-		} else if (S_ISLNK(files[i].stat.st_mode)) {
+		else if (S_ISLNK(files[i].stat.st_mode))
 			perms[0] = 'l';
-		} else if (S_ISFIFO(files[i].stat.st_mode)) {
+		else if (S_ISFIFO(files[i].stat.st_mode))
 			perms[0] = 'p';
-		} else if (S_ISSOCK(files[i].stat.st_mode)) {
+		else if (S_ISSOCK(files[i].stat.st_mode))
 			perms[0] = 's';
-		}
 
 		if (files[i].stat.st_mode & S_IRUSR)
 			perms[1] = 'r';
@@ -323,11 +319,10 @@ static void ls_printLong(size_t nfiles)
 			perms[9] = 'x';
 
 		printf("%s ", perms);
-
 		sprintf(fmt, "%%%dd ", linksz);
 		printf(fmt, files[i].stat.st_nlink);
-
 		sprintf(fmt, "%%-%ds ", usersz);
+
 		if (files[i].pw)
 			printf(fmt, files[i].pw->pw_name);
 		else
@@ -344,245 +339,246 @@ static void ls_printLong(size_t nfiles)
 		printf(fmt, files[i].stat.st_size);
 
 		localtime_r(&files[i].stat.st_mtime, &t);
-
 		strftime(buf, 80, "%b ", &t);
 		sprintf(fmt, "%%%dd ", daysz);
 		sprintf(buf + 4, fmt, t.tm_mday);
 		strftime(buf + 5 + daysz, 75 - daysz, "%H:%M", &t);
 		printf("%s ", buf);
 
-		ls_colorPrint(&files[i], files[i].namelen);
+		psh_ls_printfile(&files[i], files[i].namelen);
 		putchar('\n');
 	}
 }
 
 
-static int ls_printMultiline(size_t nfiles)
+static int psh_ls_printmultiline(size_t nfiles)
 {
-	size_t ncols, nrows;
-	size_t *colsz;
+	fileinfo_t *files = psh_ls_common.files;
+	size_t ncols, nrows, *colsz;
 	unsigned int row, col, idx;
 
-	colsz = ls_computeRows(&nrows, &ncols, nfiles);
-	if (colsz == NULL)
+	if ((colsz = psh_ls_computerows(&nrows, &ncols, nfiles)) == NULL)
 		return -ENOMEM;
 
 	for (row = 0; row < nrows; row++) {
 		for (col = 0; col < ncols; col++) {
-			idx = col * nrows + row;
-
-			if (idx >= nfiles)
+			if ((idx = col * nrows + row) >= nfiles)
 				continue;
-
-			ls_colorPrint(&files[idx], max(files[idx].namelen, min(colsz[col], w.ws_col)));
+			psh_ls_printfile(&files[idx], max(files[idx].namelen, min(colsz[col], psh_ls_common.ws.ws_col)));
 		}
 		putchar('\n');
 	}
 	free(colsz);
 
-	return 0;
+	return EOK;
 }
 
 
-static int ls_printFiles(size_t nfiles, int oneline, int full)
+static int psh_ls_printfiles(size_t nfiles)
 {
 	unsigned int i;
-	int ret = 0;
+	int ret = EOK;
 
-	if (full) {
-		ls_printLong(nfiles);
-	} else if (oneline) {
+	if (psh_ls_common.mode == MODE_LONG) {
+		psh_ls_printlong(nfiles);
+	}
+	else if (psh_ls_common.mode == MODE_ONEPERLINE) {
 		for (i = 0; i < nfiles; i++) {
-			ls_colorPrint(&files[i], files[i].namelen);
+			psh_ls_printfile(&psh_ls_common.files[i], psh_ls_common.files[i].namelen);
 			putchar('\n');
 		}
-	} else {
-		ret = ls_printMultiline(nfiles);
+	}
+	else {
+		ret = psh_ls_printmultiline(nfiles);
 	}
 
 	return ret;
 }
 
 
-static int ls_buffersInit(size_t sz)
+static int psh_ls_initbuffs(size_t size)
 {
-	unsigned int i;
+	size_t i;
 
-	files = malloc(sz * sizeof(struct fileinfo));
-	if (files == NULL) {
+	if ((psh_ls_common.files = (fileinfo_t *)malloc(size * sizeof(fileinfo_t))) == NULL) {
 		printf("ls: out of memory\n");
 		return -ENOMEM;
 	}
 
-	for (i = 0; i < sz; i++) {
-		files[i].memlen = 0;
-		files[i].name = NULL;
+	for (i = 0; i < size; i++) {
+		psh_ls_common.files[i].memlen = 0;
+		psh_ls_common.files[i].name = NULL;
 	}
-	fileinfoSize = sz;
+	psh_ls_common.fileinfosz = size;
+
+	return EOK;
+}
+
+
+static int psh_ls_expandbuff(size_t size)
+{
+	fileinfo_t *rptr;
+	size_t i;
+
+	if ((rptr = (fileinfo_t *)realloc(psh_ls_common.files, size * sizeof(fileinfo_t))) == NULL) {
+		printf("ls: out of memory\n");
+		return -ENOMEM;
+	}
+
+	psh_ls_common.files = rptr;
+	for (i = psh_ls_common.fileinfosz; i < size; i++) {
+		psh_ls_common.files[i].memlen = 0;
+		psh_ls_common.files[i].name = NULL;
+	}
+	psh_ls_common.fileinfosz = size;
 
 	return 0;
 }
 
 
-static int ls_bufferExpand(size_t sz)
+static void psh_ls_free(void)
 {
-	unsigned int i;
-	void *reptr;
+	size_t i;
 
-	reptr = realloc(files, sz * sizeof(struct fileinfo));
-	if (reptr == NULL) {
-		printf("ls: out of memory\n");
-		return -ENOMEM;
+	if (psh_ls_common.files != NULL) {
+		for (i = 0; i < psh_ls_common.fileinfosz; i++)
+			free(psh_ls_common.files[i].name);
+		free(psh_ls_common.files);
 	}
-
-	files = reptr;
-	for (i = fileinfoSize; i < sz; i++) {
-		files[i].memlen = 0;
-		files[i].name = NULL;
-	}
-	fileinfoSize = sz;
-
-	return 0;
+	free(psh_ls_common.odir);
 }
 
 
-static void ls_freePaths(char **paths, size_t npaths)
+int psh_ls(int argc, char **argv)
 {
-	unsigned int i;
-
-	if (paths == NULL)
-		return;
-	
-	for (i = 0; i < npaths; i++)
-		free(paths[i]);
-
-	free(paths);
-}
-
-
-static void ls_buffersFree(char **paths, size_t npaths)
-{
-	unsigned int i;
-
-	ls_freePaths(paths, npaths);
-
-	if (files != NULL) {
-		for (i = 0; i < fileinfoSize; i++)
-			free(files[i].name);
-
-		free(files);
-	}
-}
-
-
-int psh_ls(char *args)
-{
+	unsigned int i, npaths = 0;
+	int c, ret = 0, nfiles = 0;
 	char **paths = NULL;
-	unsigned int npaths = 0;
-	char **reptr;
-	unsigned int len;
-	int ret = 0, all = 0, full = 0, line = 0;
-	int nfiles = 0;
-	unsigned int i;
-	struct stat s;
-	DIR *stream;
 	struct dirent *dir;
 	const char *path;
-
+	DIR *stream;
 
 	/* In case of ioctl fail set default window size */
-	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w)) {
-		w.ws_col = 80;
-		w.ws_row = 25;
+	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &psh_ls_common.ws)) {
+		psh_ls_common.ws.ws_col = 80;
+		psh_ls_common.ws.ws_row = 25;
 	}
 
-	fileinfoSize = 0;
-	files = NULL;
+	psh_ls_common.fileinfosz = 0;
+	psh_ls_common.files = NULL;
+	psh_ls_common.odir = NULL;
+	psh_ls_common.cmp = psh_ls_cmpname;
+	psh_ls_common.reverse = 1;
+	psh_ls_common.all = 0;
+	psh_ls_common.dir = 0;
+	psh_ls_common.mode = MODE_NORMAL;
 
 	/* Parse arguments */
-	while ((args = psh_nextString(args, &len)) && len) {
-		if (args[0] != '-') {
-			reptr = realloc(paths, (npaths + 1) * sizeof(char *));
-			if (reptr == NULL) {
-				printf("ls: out of memory\n");
-				ls_freePaths(paths, npaths);
-				return -ENOMEM;
-			}
-			paths = reptr;
+	while ((c = getopt(argc, argv, "lad1htfSr")) != -1) {
+		switch (c) {
+		case 'l':
+			psh_ls_common.mode = MODE_LONG;
+			break;
 
-			if ((paths[npaths] = strdup(args)) == NULL) {
-				printf("ls: out of memory\n");
-				ls_freePaths(paths, npaths);
-				return -ENOMEM;
-			}
-			npaths++;
-		} else if (!strcmp(args, "-a")) {
-			all = 1;
-		} else if (!strcmp(args, "-l")) {
-			full = 1;
-			line = 1;
-		} else if (!strcmp(args, "-1")) {
-			line = 1;
-		} else if (!strcmp(args, "-h")) {
-			ls_printHelp();
-			ls_freePaths(paths, npaths);
+		case 'a':
+			psh_ls_common.all = 1;
+			break;
+
+		case '1':
+			if (psh_ls_common.mode == MODE_NORMAL)
+				psh_ls_common.mode = MODE_ONEPERLINE;
+			break;
+
+		case 't':
+			psh_ls_common.cmp = psh_ls_cmpmtime;
+			break;
+
+		case 'f':
+			psh_ls_common.cmp = NULL;
+			break;
+
+		case 'S':
+			psh_ls_common.cmp = psh_ls_cmpsize;
+			break;
+
+		case 'r':
+			psh_ls_common.reverse = -1;
+			break;
+
+		case 'd':
+			psh_ls_common.dir = 1;
+			break;
+
+		case 'h':
+		default:
+			psh_ls_help();
 			return EOK;
-		} else {
-			printf("ls: unknown option '%s'\n", args);
-			ls_freePaths(paths, npaths);
-			return -1;
+		}
+	}
+
+	/* Treat rest of arguments as paths */
+	if (optind < argc) {
+		paths = &argv[optind];
+		npaths = argc - optind;
+	}
+
+	if ((npaths > 0) && ((psh_ls_common.odir = calloc(npaths, sizeof(int *))) == NULL)) {
+		printf("ls: out of memory\n");
+		return -ENOMEM;
+	}
+
+	if ((ret = psh_ls_initbuffs(32)) < 0)
+		return ret;
+
+	/* Try to stat all the given paths */
+	for (i = 0; i < npaths; i++) {
+		if ((ret = lstat(paths[i], &psh_ls_common.files[nfiles].stat)) < 0) {
+			printf("ls: can't access %s: no such file or directory\n", paths[i]);
+			continue;
 		}
 
-		args += len + 1;
-	}
-
-	if ((ret = ls_buffersInit(BUFFER_INIT_SIZE)) != 0) {
-		ls_freePaths(paths, npaths);
-		return ret;
-	}
-
-	/* First collect non-dir files and set to null after handling */
-	nfiles = 0;
-	for (int i = 0; i < npaths; i++) {
-		if (stat(paths[i], &s) != 0) {
-			printf("ls: cannot access %s: No such file or directory\n", paths[i]);
-			free(paths[i]);
-			paths[i] = NULL;
-		} else if (!S_ISDIR(s.st_mode)) {
-			if ((ret = ls_readFile(&files[nfiles], paths[i], full)) != 0) {
-				ls_buffersFree(paths, npaths);
+		if (!S_ISDIR(psh_ls_common.files[nfiles].stat.st_mode) || psh_ls_common.dir) {
+			if ((ret = psh_ls_readfile(&psh_ls_common.files[nfiles], paths[i])) < 0) {
+				psh_ls_free();
 				return ret;
 			}
-
 			nfiles++;
-			free(paths[i]);
-			paths[i] = NULL;
+		}
+		else {
+			psh_ls_common.odir[i] = 1;
+		}
+
+		if (nfiles == psh_ls_common.fileinfosz) {
+			if ((ret = psh_ls_expandbuff(psh_ls_common.fileinfosz * 2)) < 0) {
+				psh_ls_free();
+				return ret;
+			}
 		}
 	}
 
 	if (nfiles > 0) {
-		qsort(files, nfiles, sizeof(struct fileinfo), ls_cmpname);
-		ret = ls_printFiles(nfiles, line, full);
-		if (ret != 0) {
-			ls_buffersFree(paths, npaths);
+		if (psh_ls_common.cmp != NULL)
+			qsort(psh_ls_common.files, nfiles, sizeof(fileinfo_t), psh_ls_common.cmp);
+		if ((ret = psh_ls_printfiles(nfiles)) < 0) {
+			psh_ls_free();
 			return ret;
 		}
 	}
 
 	i = 0;
 	do {
-		if (npaths == 0)
-			path = cwd;
-		else
+		if (npaths == 0) {
+			path = ".";
+		}
+		else if (psh_ls_common.odir[i]) {
 			path = paths[i];
-
-		if (path == NULL) {
+		}
+		else {
 			i++;
 			continue;
 		}
 
-		stream = opendir(path);
-		if (stream == NULL) {
+		if ((stream = opendir(path)) == NULL) {
 			printf("%s: no such directory\n", path);
 			break;
 		}
@@ -597,35 +593,34 @@ int psh_ls(char *args)
 		nfiles = 0;
 		/* For each entry */
 		while ((dir = readdir(stream)) != NULL) {
-			if (dir->d_name[0] == '.' && !all)
+			if ((dir->d_name[0] == '.') && !psh_ls_common.all)
 				continue;
 
-			if ((ret = ls_readEntry(&files[nfiles], dir, path, full)) != 0) {
+			if ((ret = psh_ls_readentry(&psh_ls_common.files[nfiles], dir, path)) < 0) {
 				closedir(stream);
-				ls_buffersFree(paths, npaths);
+				psh_ls_free();
 				return ret;
 			}
 
 			nfiles++;
-			if (nfiles == fileinfoSize) {
-				if ((ret = ls_bufferExpand(fileinfoSize * 2)) != 0) {
+			if (nfiles == psh_ls_common.fileinfosz) {
+				if ((ret = psh_ls_expandbuff(psh_ls_common.fileinfosz * 2)) < 0) {
 					closedir(stream);
-					ls_buffersFree(paths, npaths);
+					psh_ls_free();
 					return ret;
 				}
 			}
 		}
 
 		if (nfiles > 0) {
-			qsort(files, nfiles, sizeof(struct fileinfo), ls_cmpname);
-			ls_printFiles(nfiles, line, full);
+			if (psh_ls_common.cmp != NULL)
+				qsort(psh_ls_common.files, nfiles, sizeof(fileinfo_t), psh_ls_common.cmp);
+			psh_ls_printfiles(nfiles);
 		}
 		closedir(stream);
+	} while (++i < npaths);
 
-		i++;
-	} while (i < npaths);
-
-	ls_buffersFree(paths, npaths);
+	psh_ls_free();
 
 	return ret;
 }

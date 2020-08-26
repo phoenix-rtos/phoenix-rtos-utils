@@ -1,12 +1,10 @@
 /*
  * Phoenix-RTOS
  *
- * libphoenix
+ * Phoenix-RTOS SHell
  *
- * test/psh
- *
- * Copyright 2017, 2018 Phoenix Systems
- * Author: Pawel Pisarczyk, Jan Sikorski
+ * Copyright 2017, 2018, 2020 Phoenix Systems
+ * Author: Pawel Pisarczyk, Jan Sikorski, Lukasz Kosinski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -14,36 +12,120 @@
  */
 
 #include <errno.h>
+#include <signal.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdarg.h>
+#include <termios.h>
 #include <unistd.h>
-#include <dirent.h>
-#include <sys/threads.h>
-#include <sys/minmax.h>
-#include <sys/mman.h>
-#include <sys/msg.h>
-#include <sys/mount.h>
+
 #include <sys/file.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
-#include <sys/reboot.h>
-#include <arch.h>
-#include "top.h"
+#include <sys/ioctl.h>
+#include <sys/types.h>
+
+#include <posix/utils.h>
+
 #include "psh.h"
 
-#define PSH_SCRIPT_MAGIC ":{}:"
+
+/* Shell definitions */
+#define PROMPT       "(psh)% "     /* Shell prompt */
+#define SCRIPT_MAGIC ":{}:"        /* Every psh script should start with this line */
+#define HISTSZ       512           /* Command history size */
+
+
+/* Special key codes */
+#define UP           "[A"          /* Up */
+#define DOWN         "[B"          /* Down */
+#define RIGHT        "[C"          /* Right */
+#define LEFT         "[D"          /* Left */
+#define DELETE       "[3~"         /* Delete */
+
+
+/* Misc definitions */
+#define BP_OFFS      0             /* Offset of 0 exponent entry in binary prefix table */
+#define BP_EXP_OFFS  10            /* Offset between consecutive entries exponents in binary prefix table */
+#define SI_OFFS      8             /* Offset of 0 exponent entry in SI prefix table */
+#define SI_EXP_OFFS  3             /* Offset between consecutive entries exponents in SI prefix table */
+
+
+typedef struct {
+	int n;                         /* Command length (each word is followed by '\0') */
+	char *cmd;                     /* Command pointer */
+} psh_histent_t;
+
+
+typedef struct {
+	int hb;                        /* History begin index (oldest command) */
+	int he;                        /* History end index (newest command) */
+	psh_histent_t entries[HISTSZ]; /* Command history entries */
+} psh_hist_t;
+
+
+/* Shell commands */
+extern int psh_bind(int argc, char **argv);
+extern int psh_cat(int argc, char **argv);
+extern int psh_kill(int argc, char **argv);
+extern int psh_ls(int argc, char **argv);
+extern int psh_mem(int argc, char **argv);
+extern int psh_mkdir(int argc, char **argv);
+extern int psh_mount(int argc, char **argv);
+extern int psh_perf(int argc, char **argv);
+extern int psh_ps(int argc, char **argv);
+extern int psh_reboot(int argc, char **argv);
+extern int psh_sync(int argc, char **argv);
+extern int psh_top(int argc, char **argv);
+extern int psh_touch(int argc, char **argv);
+
+
+/* Binary (base 2) prefixes */
+static const char *bp[] = {
+	"",   /* 2^0       */
+	"K",  /* 2^10   kibi */
+	"M",  /* 2^20   mebi */
+	"G",  /* 2^30   gibi */
+	"T",  /* 2^40   tebi */
+	"P",  /* 2^50   pebi */
+	"E",  /* 2^60   exbi */
+	"Z",  /* 2^70   zebi */
+	"Y"   /* 2^80   yobi */
+};
+
+
+/* SI (base 10) prefixes */
+static const char* si[] = {
+	"y",  /* 10^-24 yocto */
+	"z",  /* 10^-21 zepto */
+	"a",  /* 10^-18 atto  */
+	"f",  /* 10^-15 femto */
+	"p",  /* 10^-12 pico  */
+	"n",  /* 10^-9  nano  */
+	"u",  /* 10^-6  micro */
+	"m",  /* 10^-3  milli */
+	"",   /* 10^0         */
+	"k",  /* 10^3   kilo  */
+	"M",  /* 10^6   mega  */
+	"G",  /* 10^9   giga  */
+	"T",  /* 10^12  tera  */
+	"P",  /* 10^15  peta  */
+	"E",  /* 10^18  exa   */
+	"Z",  /* 10^21  zetta */
+	"Y",  /* 10^24  yotta */
+};
+
+
+psh_common_t psh_common;
 
 
 static int psh_mod(int x, int y)
 {
-	int res = x % y;
+	int ret = x % y;
 
-	if (res < 0)
-		res += abs(y);
+	if (ret < 0)
+		ret += abs(y);
 
-	return res;
+	return ret;
 }
 
 
@@ -55,210 +137,101 @@ static int psh_div(int x, int y)
 
 static int psh_log(unsigned int base, unsigned int x)
 {
-	int res = 0;
+	int ret = 0;
 
 	while (x /= base)
-		res++;
+		ret++;
 
-	return res;
+	return ret;
 }
 
 
 static int psh_pow(int x, unsigned int y)
 {
-	int res = 1;
+	int ret = 1;
 
 	while (y) {
 		if (y & 1)
-			res *= x;
+			ret *= x;
 		y >>= 1;
 		if (!y)
 			break;
 		x *= x;
 	}
 
-	return res;
+	return ret;
 }
 
 
-static int psh_isNewline(char c)
+static const char *psh_bp(int exp)
 {
-	if (c == '\r' || c == '\n')
-		return 1;
+	exp = psh_div(exp, BP_EXP_OFFS) + BP_OFFS;
 
-	return 0;
-}
-
-
-static int psh_isAcceptable(char c)
-{
-	if (psh_isNewline(c))
-		return 1;
-
-	return (c >= ' ');
-}
-
-
-char *psh_nextString(char *buff, unsigned int *size)
-{
-	char *s, *p;
-
-	/* Skip leading spaces. */
-	for (s = buff; *s == ' '; ++s);
-
-	/* Count string size. */
-	for (p = s, *size = 0; *p && *p != ' '; ++p, ++(*size));
-
-	s[*size] = '\0';
-
-	return s;
-}
-
-
-static int psh_readln(char *line, int size)
-{
-	int count = 0;
-	char c;
-
-	for (;;) {
-		read(0, &c, 1);
-
-		if (c == 0) /* EOF - exit */
-			exit(EXIT_SUCCESS);
-
-		if (!psh_isAcceptable(c))
-			continue;
-
-		/* Check, if line has maximum size. */
-		if (count >= size - 2 && c != 0x7f && !psh_isNewline(c))
-			continue;
-
-		if (psh_isNewline(c))
-			break;
-
-		line[count++] = c;
-	}
-
-	memset(&line[count], '\0', size - count);
-
-	return count;
-}
-
-
-static char *psh_BP(int exp)
-{
-	#define PSH_BP_OFFSET     0
-	#define PSH_BP_EXP_OFFSET 10
-
-	/* Binary prefixes */
-	static char *BP[] = {
-		"",   /* 2^0       */
-		"K",  /* 2^10   kibi */
-		"M",  /* 2^20   mebi */
-		"G",  /* 2^30   gibi */
-		"T",  /* 2^40   tebi */
-		"P",  /* 2^50   pebi */
-		"E",  /* 2^60   exbi */
-		"Z",  /* 2^70   zebi */
-		"Y"   /* 2^80   yobi */
-	};
-
-	exp = psh_div(exp, PSH_BP_EXP_OFFSET) + PSH_BP_OFFSET;
-
-	if (exp < 0 || exp >= sizeof(BP) / sizeof(char *))
+	if ((exp < 0) || (exp >= sizeof(bp) / sizeof(bp[0])))
 		return NULL;
 
-	return BP[exp];
+	return bp[exp];
 }
 
 
-static char *psh_SI(int exp)
+static const char *psh_si(int exp)
 {
-	#define PSH_SI_OFFSET     8
-	#define PSH_SI_EXP_OFFSET 3
+	exp = psh_div(exp, SI_EXP_OFFS) + SI_OFFS;
 
-	/* SI prefixes */
-	static char* SI[] = {
-		"y",  /* 10^-24 yocto */
-		"z",  /* 10^-21 zepto */
-		"a",  /* 10^-18 atto  */
-		"f",  /* 10^-15 femto */
-		"p",  /* 10^-12 pico  */
-		"n",  /* 10^-9  nano  */
-		"u",  /* 10^-6  micro */
-		"m",  /* 10^-3  milli */
-		"",   /* 10^0         */
-		"k",  /* 10^3   kilo  */
-		"M",  /* 10^6   mega  */
-		"G",  /* 10^9   giga  */
-		"T",  /* 10^12  tera  */
-		"P",  /* 10^15  peta  */
-		"E",  /* 10^18  exa   */
-		"Z",  /* 10^21  zetta */
-		"Y",  /* 10^24  yotta */
-	};
-
-	exp = psh_div(exp, PSH_SI_EXP_OFFSET) + PSH_SI_OFFSET;
-
-	if (exp < 0 || exp >= sizeof(SI) / sizeof(char *))
+	if ((exp < 0) || (exp >= sizeof(si) / sizeof(si[0])))
 		return NULL;
 
-	return SI[exp];
+	return si[exp];
 }
 
 
-/* Convert n = x * base^y to a short binary(base 2)/SI(base 10) prefix notation */
-/* (value of n gets rounded to prec decimal places, trailing zeros get cut), e.g. */
-/* psh_convert(SI, -15496, 3, 2, buff) saves "-15.5M" in buff */
-/* psh_convert(BP, 2000, 10, 3, buff) saves "1.953M" in buff */
-int psh_convert(unsigned int base, int x, int y, unsigned int prec, char *buff)
+int psh_prefix(unsigned int base, int x, int y, unsigned int prec, char *buff)
 {
-	char *(*fp)(int);
-	char *prefix;
+	int div = psh_log(base, abs(x)), exp = div + y;
+	int offs, ipart, fpart;
+	const char *(*fp)(int);
+	const char *prefix;
 	char fmt[11];
-	int offset, ipart, fpart;
-	int div = psh_log(base, abs(x));
-	int exp = div + y;
 
 	/* Support precision for up to 8 decimal places */
 	if (prec > 8)
-		return -1;
+		return -EINVAL;
 
 	switch (base) {
 	/* Binary prefix */
-	case BP:
-		fp = psh_BP;
-		offset = PSH_BP_EXP_OFFSET;
+	case 2:
+		fp = psh_bp;
+		offs = BP_EXP_OFFS;
 		break;
 
 	/* SI prefix */
-	case SI:
-		fp = psh_SI;
-		offset = PSH_SI_EXP_OFFSET;
+	case 10:
+		fp = psh_si;
+		offs = SI_EXP_OFFS;
 		break;
 
 	default:
-		return -1;
+		return -EINVAL;
 	}
 
 	/* div < 0 => accumulate extra exponents in x */
-	if ((div -= psh_mod(exp, offset)) < 0) {
+	if ((div -= psh_mod(exp, offs)) < 0) {
 		x *= psh_pow(base, -div);
 		div = 0;
 	}
 	div = psh_pow(base, div);
 
-	/* Save integer part */
+	/* Save integer part and fractional part as percentage */
 	ipart = abs(x) / div;
-	/* Save fractional part as percentage */
 	fpart = (int)((uint64_t)psh_pow(10, prec + 1) * (abs(x) % div) / div);
+
 	/* Round the result */
 	if ((fpart = (fpart + 5) / 10) == psh_pow(10, prec)) {
 		ipart++;
 		fpart = 0;
-		if (ipart == psh_pow(base, offset)) {
+		if (ipart == psh_pow(base, offs)) {
 			ipart = 1;
-			exp += offset;
+			exp += offs;
 		}
 	}
 
@@ -269,13 +242,8 @@ int psh_convert(unsigned int base, int x, int y, unsigned int prec, char *buff)
 	}
 
 	/* Get the prefix */
-	if (!ipart && !fpart)
-		prefix = fp(y);
-	else
-		prefix = fp(exp);
-
-	if (prefix == NULL)
-		return -1;
+	if ((prefix = fp((!ipart && !fpart) ? y : exp)) == NULL)
+		return -EINVAL;
 
 	if (x < 0)
 		*buff++ = '-';
@@ -288,867 +256,802 @@ int psh_convert(unsigned int base, int x, int y, unsigned int prec, char *buff)
 		sprintf(buff, "%d%s", ipart, prefix);
 	}
 
-	return 0;
+	return EOK;
 }
 
 
-static void psh_help(void)
+static int psh_extendcmd(char **cmd, int *cmdsz, int n)
 {
-	printf("Available commands:\n");
-	printf("  cat    - concatenates files\n");
-	printf("  exec   - executes a file\n");
-	printf("  exit   - exits the shell\n");
-	printf("  help   - prints this help\n");
-	printf("  ls     - lists files in the namespace\n");
-	printf("  mem    - prints memory map\n");
-	printf("  mkdir  - creates directory\n");
-	printf("  ps     - prints list of processes and threads\n");
-	printf("  top    - top utility\n");
-	printf("  touch  - changes file timestamp\n");
+	char *rcmd;
+
+	if ((rcmd = (char *)realloc(*cmd, n)) == NULL) {
+		printf("psh: out of memory\r\n");
+		free(*cmd);
+		return -ENOMEM;
+	}
+	*cmd = rcmd;
+	*cmdsz = n;
+
+	return EOK;
 }
 
 
-static void psh_mkdir(char *args)
+static int psh_histentcmd(char **cmd, int *cmdsz, psh_histent_t *entry, int n)
 {
-	char *path = args;
-	unsigned int len;
+	int err, i;
 
-	while ((path = psh_nextString(path, &len)) && len) {
-		if (mkdir(path, 0) < 0) {
-			printf("%s: failed to create directory\n", path);
-		}
+	if ((*cmdsz < n) && ((err = psh_extendcmd(cmd, cmdsz, n)) < 0))
+		return err;
 
-		path += len + 1;
+	for (i = 0; i < entry->n; i++)
+		(*cmd)[i] = (entry->cmd[i] == '\0') ? ' ' : entry->cmd[i];
+
+	return entry->n;
+}
+
+
+static void psh_printhistent(psh_histent_t *entry)
+{
+	int i;
+
+	write(STDOUT_FILENO, "\r\033[0J", 5);
+	write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
+
+	for (i = 0; i < entry->n; i++)
+		write(STDOUT_FILENO, (entry->cmd[i] == '\0') ? " " : entry->cmd + i, 1);
+}
+
+
+static void psh_movecursor(int col, int n)
+{
+	struct winsize ws;
+	char fmt[8];
+	int p;
+
+	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) < 0) {
+		ws.ws_row = 25;
+		ws.ws_col = 80;
+	}
+	col %= ws.ws_col;
+
+	if (col + n < 0) {
+		p = (-(col + n) + ws.ws_col - 1) / ws.ws_col;
+		n += p * ws.ws_col;
+		sprintf(fmt, "\033[%dA", p);
+		write(STDOUT_FILENO, fmt, strlen(fmt));
+	}
+	else if (col + n > ws.ws_col - 1) {
+		p = (col + n) / ws.ws_col;
+		n -= p * ws.ws_col;
+		sprintf(fmt, "\033[%dB", p);
+		write(STDOUT_FILENO, fmt, strlen(fmt));
+	}
+
+	if (n > 0) {
+		sprintf(fmt, "\033[%dC", n);
+		write(STDOUT_FILENO, fmt, strlen(fmt));
+	}
+	else if (n < 0) {
+		sprintf(fmt, "\033[%dD", -n);
+		write(STDOUT_FILENO, fmt, strlen(fmt));
 	}
 }
 
 
-static void psh_touch(char *args)
+extern void cfmakeraw(struct termios *termios);
+
+
+static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 {
-	char *path = args;
-	unsigned int len;
-	FILE *f;
+	int err, esc, l, n, m, hn, hm, hp = cmdhist->he, cmdsz = 128;
+	struct termios raw = *orig;
+	char c, *escp, tmp[8];
 
-	while ((path = psh_nextString(path, &len)) && len) {
-		if ((f = fopen(path, "w")) == NULL) {
-			printf("%s: fopen failed\n", path);
-		}
-		else {
-			fclose(f);
-		}
-
-		path += len + 1;
-	}
-}
-
-
-static int psh_mem(char *args)
-{
-	char *arg, *end;
-	unsigned int len, i, n;
-	meminfo_t info;
-	int mapsz = 0;
-	entryinfo_t *e = NULL;
-	pageinfo_t *p = NULL;
-	char flags[8], prot[5], *f, *r;
-	void *map_re;
-
-	memset(&info, 0, sizeof(info));
-	arg = psh_nextString(args, &len);
-	args += len + 1;
-
-	if (!len) {
-		/* show summary */
-		info.page.mapsz = -1;
-		info.entry.mapsz = -1;
-		info.entry.kmapsz = -1;
-
-		meminfo(&info);
-
-		printf("(%d+%d)/%dKB ", (info.page.alloc - info.page.boot) / 1024, info.page.boot / 1024,
-			(info.page.alloc + info.page.free) / 1024);
-
-		printf("%d/%d entries\n", info.entry.total - info.entry.free, info.entry.total);
-
-		return EOK;
+	/* Enable raw mode for command processing */
+	cfmakeraw(&raw);
+	if ((err = tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw)) < 0) {
+		printf("psh: failed to enable raw mode\n");
+		return err;
 	}
 
-	if (!strcmp("-m", arg)) {
-		info.page.mapsz = -1;
-		arg = psh_nextString(args, &len);
+	if ((*cmd = (char *)malloc(cmdsz)) == NULL) {
+		printf("psh: out of memory\n");
+		return -ENOMEM;
+	}
 
-		if (!strcmp("kernel", arg))  {
-			/* show memory map of the kernel */
-			info.entry.mapsz = -1;
-			info.entry.kmapsz = 16;
+	for (n = 0, m = 0, hn = 0, hm = 0, esc = -1;;) {
+		read(STDIN_FILENO, &c, 1);
 
-			do {
-				mapsz = info.entry.kmapsz;
-				if ((map_re = realloc(info.entry.kmap, mapsz * sizeof(entryinfo_t))) == NULL) {
-					printf("psh: out of memory\n");
-					free(info.entry.kmap);
-					return -ENOMEM;
+		/* Process control characters */
+		if ((c < 0x20) || (c == 0x7f)) {
+			/* Print not recognized escape codes */
+			if (esc != -1) {
+				l = n - esc;
+				if (hp != cmdhist->he) {
+					memcpy(tmp, *cmd + esc, l);
+					if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp, cmdhist->entries[hp].n + l)) < 0)
+						return err;
+					hp = cmdhist->he;
+					n = hn;
+					m = hm;
+					memmove(*cmd + n + l, *cmd + n, m);
+					memcpy(*cmd + n, tmp, l);
+					n += l;
 				}
-				info.entry.kmap = map_re;
-				meminfo(&info);
-			}
-			while (info.entry.kmapsz > mapsz);
-
-			mapsz = info.entry.kmapsz;
-			e = info.entry.kmap;
-		}
-		else {
-			/* show memory map of a process */
-			if (len) {
-				info.entry.pid = strtoul(arg, &end, 10);
-
-				if (end != args + len || (!info.entry.pid && *arg != '0')) {
-					printf("mem: could not parse process id: '%s'\n", arg);
-					return EOK;
-				}
-			}
-			else {
-				info.entry.pid = getpid();
+				write(STDOUT_FILENO, *cmd + n - l, l + m);
+				psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
+				esc = -1;
 			}
 
-			info.entry.kmapsz = -1;
-			info.entry.mapsz = 16;
-
-			do {
-				mapsz = info.entry.mapsz;
-				if ((map_re = realloc(info.entry.map, mapsz * sizeof(entryinfo_t))) == NULL) {
-					printf("psh: out of memory\n");
-					free(info.page.map);
-					return -ENOMEM;
-				}
-				info.entry.map = map_re;
-				meminfo(&info);
-			}
-			while (info.entry.mapsz > mapsz);
-
-			if (info.entry.mapsz < 0) {
-				printf("mem: process with pid %x not found\n", info.entry.pid);
-				free(info.entry.map);
-				return EOK;
-			}
-
-			mapsz = info.entry.mapsz;
-			e = info.entry.map;
-		}
-
-		printf("%-17s  PROT  FLAGS  %16s  OBJECT\n", "SEGMENT", "OFFSET");
-
-		e += mapsz - 1;
-		for (i = 0; i < mapsz; ++i, --e) {
-			memset(f = flags, 0, sizeof(flags));
-
-			if (e->flags & MAP_NEEDSCOPY)
-				*(f++) = 'C';
-
-			if (e->flags & MAP_PRIVATE)
-				*(f++) = 'P';
-
-			if (e->flags & MAP_FIXED)
-				*(f++) = 'F';
-
-			if (e->flags & MAP_ANONYMOUS)
-				*(f++) = 'A';
-
-			memset(r = prot, 0, sizeof(prot));
-
-			if (e->prot & PROT_READ)
-				*(r++) = 'r';
-			else
-				*(r++) = '-';
-
-			if (e->prot & PROT_WRITE)
-				*(r++) = 'w';
-			else
-				*(r++) = '-';
-
-			if (e->prot & PROT_EXEC)
-				*(r++) = 'x';
-			else
-				*(r++) = '-';
-
-			*(r++) = '-';
-
-			printf("%p:%p  %4s  %5s", e->vaddr, e->vaddr + e->size - 1, prot, flags);
-
-			if (e->offs != -1)
-				printf("  %16llx", e->offs);
-
-			else
-				printf("  %16s", "");
-
-			if (e->object == OBJECT_ANONYMOUS)
-				printf("  %s", "(anonymous)");
-
-			else if (e->object == OBJECT_MEMORY)
-				printf("  %s", "mem");
-
-			else
-				printf("  %d.%llu", e->oid.port, e->oid.id);
-
-			if (e->object != OBJECT_ANONYMOUS && e->anonsz != ~0)
-				printf("/(%zuKB)\n", e->anonsz / 1024);
-
-			else
-				printf("\n");
-		}
-
-		free(info.entry.map);
-		free(info.entry.kmap);
-
-		return EOK;
-	}
-
-	if (!strcmp("-p", arg)) {
-		/* show page map */
-		info.entry.mapsz = ~0;
-		info.entry.kmapsz = ~0;
-		info.page.mapsz = 16;
-
-		do {
-			mapsz = info.page.mapsz;
-			if ((map_re = realloc(info.page.map, mapsz * sizeof(pageinfo_t))) == NULL) {
-				printf("psh: out of memory\n");
-				free(info.page.map);
-				return -ENOMEM;
-			}
-			info.page.map = map_re;
-			meminfo(&info);
-		}
-		while (info.page.mapsz > mapsz);
-
-		for (i = 0, p = info.page.map; i < info.page.mapsz; ++i, ++p) {
-			if (p != info.page.map && (n = (p->addr - (p - 1)->addr) / _PAGE_SIZE - (p - 1)->count)) {
-				if (n > 3) {
-					printf("[%ux]", n);
+			/* ETX => cancel command */
+			if (c == '\003') {
+				write(STDOUT_FILENO, "^C", 2);
+				if (hp == cmdhist->he) {
+					if (m > 2)
+						psh_movecursor(n + sizeof(PROMPT) + 1, m - 2);
 				}
 				else {
-					while (n-- > 0)
-						printf("x");
+					if (hm > 2)
+						psh_movecursor(hn + sizeof(PROMPT) + 1, hm - 2);
+				}
+				write(STDOUT_FILENO, "\r\n", 2);
+				n = m = 0;
+				break;
+			}
+			/* EOT => delete next character/exit */
+			else if (c == '\004') {
+				if (hp != cmdhist->he) {
+					if (hm) {
+						if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp, cmdhist->entries[hp].n + 2)) < 0)
+							return err;
+						hp = cmdhist->he;
+						n = hn;
+						m = hm;
+					}
+					else {
+						continue;
+					}
+				}
+				if (m) {
+					memmove(*cmd + n, *cmd + n + 1, --m);
+					write(STDOUT_FILENO, "\033[0J", 4);
+					write(STDOUT_FILENO, *cmd + n, m);
+					psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
+				}
+				else if (!(n + m)) {
+					write(STDOUT_FILENO, "exit\r\n", 6);
+					exit(EXIT_SUCCESS);
 				}
 			}
-
-			if ((n = p->count) > 3) {
-				printf("[%u%c]", p->count, p->marker);
-				continue;
+			/* BS => remove last character */
+			else if (c == '\b') {
+				if (hp != cmdhist->he) {
+					if (hn) {
+						if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp, cmdhist->entries[hp].n + 2)) < 0)
+							return err;
+						hp = cmdhist->he;
+						n = hn;
+						m = hm;
+					}
+					else {
+						continue;
+					}
+				}
+				if (n) {
+					write(STDOUT_FILENO, &c, 1);
+					n--;
+					memmove(*cmd + n, *cmd + n + 1, m);
+					write(STDOUT_FILENO, "\033[0J", 4);
+					write(STDOUT_FILENO, *cmd + n, m);
+					psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
+				}
 			}
-
-			while (n-- > 0)
-				printf("%c", p->marker);
+			/* TAB => autocomplete */
+			else if (c == '\t') {
+				
+			}
+			/* FF => clear screen */
+			else if (c == '\014') {
+				write(STDOUT_FILENO, "\033[2J", 4);
+				write(STDOUT_FILENO, "\033[f", 3);
+				if (hp != cmdhist->he) {
+					psh_printhistent(cmdhist->entries + hp);
+					psh_movecursor(cmdhist->entries[hp].n + sizeof(PROMPT) - 1, -hm);
+				}
+				else {
+					write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
+					write(STDOUT_FILENO, *cmd, n + m);
+					psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
+				}
+			}
+			/* LF or CR => go to new line and break (finished reading command) */
+			else if ((c == '\r') || (c == '\n')) {
+				if (hp != cmdhist->he) {
+					if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp, cmdhist->entries[hp].n + 2)) < 0)
+						return err;
+					hp = cmdhist->he;
+					n = hn;
+					m = hm;
+				}
+				psh_movecursor(n + sizeof(PROMPT) - 1, m);
+				write(STDOUT_FILENO, "\r\n", 2);
+				break;
+			}
+			/* ESC => process escape code keys */
+			else if (c == '\033') {
+				esc = n;
+			}
 		}
-		printf("\n");
-
-		free(info.page.map);
-		return EOK;
-	}
-
-	printf("mem: unrecognized option '%s'\n", arg);
-	return EOK;
-}
-
-
-static int psh_perf(char *args)
-{
-	char *timeout_s;
-	unsigned len;
-	time_t timeout, elapsed = 0, sleeptime = 200 * 1000;
-	perf_event_t *buffer;
-	const size_t bufsz = 4 << 20;
-	int bcount, tcnt, n = 32;
-	threadinfo_t *info, *info_re;
-
-	if ((info = malloc(n * sizeof(threadinfo_t))) == NULL) {
-		fprintf(stderr, "perf: out of memory\n");
-		return -ENOMEM;
-	}
-
-	while ((tcnt = threadsinfo(n, info)) >= n) {
-		n *= 2;
-		if ((info_re = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
-			free(info);
-			fprintf(stderr, "perf: out of memory\n");
-			return -ENOMEM;
-		}
-
-		info = info_re;
-	}
-
-	if (fwrite(&tcnt, sizeof(tcnt), 1, stdout) != 1) {
-		fprintf(stderr, "perf: failed or partial write\n");
-		free(info);
-		return -1;
-	}
-
-	if (fwrite(info, sizeof(threadinfo_t), tcnt, stdout) != tcnt) {
-		fprintf(stderr, "perf: failed or partial write\n");
-		free(info);
-		return -1;
-	}
-
-	free(info);
-
-	timeout_s = psh_nextString(args, &len);
-	args += len + 1;
-
-	timeout = 1000 * 1000 * strtoull(timeout_s, NULL, 10);
-
-	buffer = malloc(bufsz);
-
-	if (buffer == NULL) {
-		fprintf(stderr, "perf: out of memory\n");
-		return -ENOMEM;
-	}
-
-	if (perf_start(-1) < 0) {
-		fprintf(stderr, "perf: could not start\n");
-		free(buffer);
-		return -1;
-	}
-
-	while (elapsed < timeout) {
-		bcount = perf_read(buffer, bufsz);
-
-		if (fwrite(buffer, 1, bcount, stdout) < bcount) {
-			fprintf(stderr, "perf: failed or partial write\n");
-			break;
-		}
-
-		fprintf(stderr, "perf: wrote %d/%d bytes\n", bcount, bufsz);
-
-		usleep(sleeptime);
-		elapsed += sleeptime;
-	}
-
-	perf_finish();
-	free(buffer);
-	return EOK;
-}
-
-
-static int psh_ps_cmp_name(const void *t1, const void *t2)
-{
-	return strcmp(((threadinfo_t *)t1)->name, ((threadinfo_t *)t2)->name);
-}
-
-
-static int psh_ps_cmp_pid(const void *t1, const void *t2)
-{
-	return (int)((threadinfo_t *)t1)->pid - (int)((threadinfo_t *)t2)->pid;
-}
-
-
-static int psh_ps_cmp_cpu(const void *t1, const void *t2)
-{
-	return ((threadinfo_t *)t2)->load - ((threadinfo_t *)t1)->load;
-}
-
-
-static int psh_ps(char *arg)
-{
-	threadinfo_t *info, *info_re;
-	unsigned int h, m, len;
-	int tcnt, i, j, n = 32;
-	int collapse_threads = 1;
-	char buff[8];
-	int (*cmp)(const void *, const void*) = psh_ps_cmp_pid;
-
-	if ((info = malloc(n * sizeof(threadinfo_t))) == NULL) {
-		printf("ps: out of memory\n");
-		return -ENOMEM;
-	}
-
-	while ((tcnt = threadsinfo(n, info)) >= n) {
-		n *= 2;
-		if ((info_re = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
-			free(info);
-			printf("ps: out of memory\n");
-			return -ENOMEM;
-		}
-		info = info_re;
-	}
-
-	while ((arg = psh_nextString(arg, &len)) && len) {
-		if (!strcmp(arg, "-p")) {
-			cmp = psh_ps_cmp_pid;
-		}
-		else if (!strcmp(arg, "-n")) {
-			cmp = psh_ps_cmp_name;
-		}
-		else if (!strcmp(arg, "-c")) {
-			cmp = psh_ps_cmp_cpu;
-		}
-		else if (!strcmp(arg, "-t")) {
-			collapse_threads = 0;
-		}
+		/* Process regular characters */
 		else {
-			printf("ps: unknown option '%s'\n", arg);
-			free(info);
-			return EOK;
+			if ((n + m > cmdsz - 2) && ((err = psh_extendcmd(cmd, &cmdsz, 2 * cmdsz)) < 0))
+				return err;
+
+			if (esc == -1) {
+				if (hp != cmdhist->he) {
+					if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp, cmdhist->entries[hp].n + 2)) < 0)
+						return err;
+					hp = cmdhist->he;
+					n = hn;
+					m = hm;
+				}
+				memmove(*cmd + n + 1, *cmd + n, m);
+				(*cmd)[n++] = c;
+				write(STDOUT_FILENO, *cmd + n - 1, m + 1);
+				psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
+			}
+			else {
+				memmove(*cmd + n + 1, *cmd + n, m);
+				(*cmd)[n++] = c;
+				escp = *cmd + esc;
+				l = n - esc;
+
+				if (!strncmp(escp, UP, l)) {
+					if (l == sizeof(UP) - 1) {
+						n -= sizeof(UP) - 1;
+						memmove(*cmd + n, *cmd + n + sizeof(UP) - 1, m);
+						esc = -1;
+						if (hp != cmdhist->hb) {
+							l = ((hp == cmdhist->he) ? n : hn) + sizeof(PROMPT) - 1;
+							psh_movecursor(l, -l);
+							psh_printhistent(cmdhist->entries + (hp = (hp) ? hp - 1 : HISTSZ - 1));
+							hn = cmdhist->entries[hp].n;
+							hm = 0;
+						}
+					}
+				}
+				else if (!strncmp(escp, DOWN, l)) {
+					if (l == sizeof(DOWN) - 1) {
+						n -= sizeof(DOWN) - 1;
+						memmove(*cmd + n, *cmd + n + sizeof(DOWN) - 1, m);
+						esc = -1;
+						if (hp != cmdhist->he) {
+							l = hn + sizeof(PROMPT) - 1;
+							psh_movecursor(l, -l);
+							if ((hp = (hp + 1) % HISTSZ) == cmdhist->he) {
+								write(STDOUT_FILENO, "\r\033[0J", 5);
+								write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
+								n += m;
+								m = 0;
+								write(STDOUT_FILENO, *cmd, n);
+							}
+							else {
+								psh_printhistent(cmdhist->entries + hp);
+								hn = cmdhist->entries[hp].n;
+								hm = 0;
+							}
+						}
+					}
+				}
+				else if (!strncmp(escp, RIGHT, l)) {
+					if (l == sizeof(RIGHT) - 1) {
+						n -= sizeof(RIGHT) - 1;
+						memmove(*cmd + n, *cmd + n + sizeof(RIGHT) - 1, m);
+						esc = -1;
+						if (hp == cmdhist->he) {
+							if (m) {
+								psh_movecursor(n + sizeof(PROMPT) - 1, 1);
+								n++;
+								m--;
+							}
+						}
+						else {
+							if (hm) {
+								psh_movecursor(hn + sizeof(PROMPT) - 1, 1);
+								hn++;
+								hm--;
+							}
+						}
+					}
+				}
+				else if (!strncmp(escp, LEFT, l)) {
+					if (l == sizeof(LEFT) - 1) {
+						n -= sizeof(LEFT) - 1;
+						memmove(*cmd + n, *cmd + n + sizeof(LEFT) - 1, m);
+						esc = -1;
+						if (hp == cmdhist->he) {
+							if (n) {
+								psh_movecursor(n + sizeof(PROMPT) - 1, -1);
+								n--;
+								m++;
+							}
+						}
+						else {
+							if (hn) {
+								psh_movecursor(hn + sizeof(PROMPT) - 1, -1);
+								hn--;
+								hm++;
+							}
+						}
+					}
+				}
+				else if (!strncmp(escp, DELETE, l)) {
+					if (l == sizeof(DELETE) - 1) {
+						n -= sizeof(DELETE) - 1;
+						memmove(*cmd + n, *cmd + n + sizeof(DELETE) - 1, m);
+						esc = -1;
+						if (hp != cmdhist->he) {
+							if (hm) {
+								if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp, cmdhist->entries[hp].n + 2)) < 0)
+									return err;
+								hp = cmdhist->he;
+								n = hn;
+								m = hm;
+							}
+							else {
+								continue;
+							}
+						}
+						if (m) {
+							memmove(*cmd + n, *cmd + n + 1, --m);
+							write(STDOUT_FILENO, "\033[0J", 4);
+							write(STDOUT_FILENO, *cmd + n, m);
+							psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
+						}
+					}
+				}
+				else {
+					if (hp != cmdhist->he) {
+						memcpy(tmp, escp, l);
+						if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp, cmdhist->entries[hp].n + l)) < 0)
+							return err;
+						hp = cmdhist->he;
+						n = hn;
+						m = hm;
+						memmove(*cmd + n + l, *cmd + n, m);
+						memcpy(*cmd + n, tmp, l);
+						n += l;
+					}
+					write(STDOUT_FILENO, *cmd + n - l, l + m);
+					psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
+					esc = -1;
+				}
+			}
+		}
+	}
+	(*cmd)[n + m] = '\0';
+
+	/* Restore original terminal settings */
+	if ((err = tcsetattr(STDIN_FILENO, TCSAFLUSH, orig)) < 0) {
+		printf("psh: failed to disable raw mode\r\n");
+		free(*cmd);
+		return err;
+	}
+
+	return n + m;
+}
+
+
+static int psh_parsecmd(char *line, int *argc, char ***argv)
+{
+	char *cmd, *arg, **rargv;
+
+	if ((cmd = strtok(line, "\t ")) == NULL)
+		return -EINVAL;
+
+	if ((*argv = (char **)malloc(2 * sizeof(char *))) == NULL)
+		return -ENOMEM;
+
+	*argc = 0;
+	(*argv)[(*argc)++] = cmd;
+
+	while ((arg = strtok(NULL, "\t ")) != NULL) {
+		if ((rargv = (char **)realloc(*argv, (*argc + 2) * sizeof(char *))) == NULL) {
+			free(*argv);
+			return -ENOMEM;
 		}
 
-		arg += len + 1;
+		*argv = rargv;
+		(*argv)[(*argc)++] = arg;
 	}
 
-	if (collapse_threads) {
-		qsort(info, tcnt, sizeof(threadinfo_t), psh_ps_cmp_pid);
-		for (i = 0; i < tcnt; i++) {
-			info[i].tid = 1;
+	(*argv)[*argc] = NULL;
 
-			for (j = i + 1; j < tcnt && info[j].pid == info[i].pid; j++) {
-				info[i].tid++;
-				info[i].load += info[j].load;
-				info[i].cpuTime += info[j].cpuTime;
-				info[i].priority = min(info[i].priority, info[j].priority);
-				info[i].state = min(info[i].state, info[j].state);
-				info[i].wait = max(info[i].wait, info[j].wait);
-			}
-
-			if (j > i + 1) {
-				memcpy(info + i + 1, info + j, (tcnt - j) * sizeof(threadinfo_t));
-				tcnt -= j - i - 1;
-			}
-		}
-		printf("%5s %5s %2s %5s %5s %5s %7s %6s %3s %-28s\n", "PID", "PPID", "PR", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "THR", "CMD");
-	}
-	else {
-		printf("%5s %5s %2s %5s %5s %5s %7s %6s %-32s\n", "PID", "PPID", "PR", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "CMD");
-	}
-
-	qsort(info, tcnt, sizeof(threadinfo_t), cmp);
-
-	for (i = 0; i < tcnt; i++) {
-		psh_convert(SI, info[i].wait, -6, 1, buff);
-		info[i].cpuTime /= 10000;
-		h = info[i].cpuTime / 3600;
-		m = (info[i].cpuTime - h * 3600) / 60;
-		printf("%5u %5u %2d %5s %3u.%u %4ss %4u:%02u ", info[i].pid, info[i].ppid, info[i].priority, (info[i].state) ? "sleep" : "ready",
-			info[i].load / 10, info[i].load % 10, buff, h, m);
-
-		psh_convert(BP, info[i].vmem, 0, 1, buff);
-		printf("%6s ", buff);
-
-		if (collapse_threads)
-			printf("%3u %-28s\n", info[i].tid, info[i].name);
-		else
-			printf("%-32s\n", info[i].name);
-	}
-
-	free(info);
 	return EOK;
 }
 
 
-int psh_exec(char *cmd)
+static int psh_runfile(char **argv)
 {
-	int exerr = 0;
-	int argc = 0;
-	char **argv = NULL, **argv_re;
-
-	char *arg = cmd;
-	unsigned int len;
-
-	while ((arg = psh_nextString(arg, &len)) && len) {
-		if ((argv_re = realloc(argv, (2 + argc) * sizeof(char *))) == NULL) {
-			free(argv);
-			printf("psh: out of memory\n");
-			return -ENOMEM;
-		}
-		argv = argv_re;
-		argv[argc++] = arg;
-		arg += len + 1;
-	}
-	if (argc == 0) {
-		printf("psh: exec empty agument\n");
-		return -EINVAL;
-	}
-
-	argv[argc] = NULL;
-
-	exerr = execve(cmd, argv, NULL);
-
-	if (exerr == -ENOMEM)
-		printf("psh: not enough memory to exec\n");
-
-	else if (exerr == -EINVAL)
-		printf("psh: invalid executable\n");
-
-	else if (exerr < 0)
-		printf("psh: exec failed with code %d\n", exerr);
-
-	return exerr;
-}
-
-
-int psh_runfile(char *cmd)
-{
-	volatile int exerr = EOK;
-	int pid;
-	int argc = 0;
-	char **argv = NULL, **argv_re;
-
-	char *arg = cmd;
-	unsigned int len;
-
-	while ((arg = psh_nextString(arg, &len)) && len) {
-		if ((argv_re = realloc(argv, (2 + argc) * sizeof(char *))) == NULL) {
-			free(argv);
-			printf("psh: out of memory\n");
-			return -ENOMEM;
-		}
-		argv = argv_re;
-		argv[argc++] = arg;
-		arg += len + 1;
-	}
-
-	argv[argc] = NULL;
+	volatile int err = EOK;
+	pid_t pid;
 
 	if ((pid = vfork()) < 0) {
 		printf("psh: vfork failed\n");
 		return pid;
 	}
 	else if (!pid) {
-		exit(exerr = execve(cmd, argv, NULL));
+		/* Put process in its own process group */
+		pid = getpid();
+		if (setpgid(pid, pid) < 0) {
+			printf("psh: failed to put %s process in its own process group\n", argv[0]);
+			exit(EXIT_FAILURE);
+		}
+
+		/* Take terminal control */
+		tcsetpgrp(STDIN_FILENO, pid);
+
+		/* Execute the file */
+		exit(err = execve(argv[0], argv, NULL));
 	}
 
-	if (exerr == EOK)
-		return wait(0);
+	switch (err) {
+	case EOK:
+		err = waitpid(pid, NULL, 0);
+		break;
 
-	if (exerr == -ENOMEM)
-		printf("psh: not enough memory to exec\n");
-
-	else if (exerr == -EINVAL)
+	case -ENOMEM:
+		printf("psh: out of memory\n");
+		break;
+		
+	case -EINVAL:
 		printf("psh: invalid executable\n");
+		break;
 
-	else
-		printf("psh: exec failed with code %d\n", exerr);
-
-	return exerr;
-}
-
-
-int psh_cat(char *args)
-{
-	char *arg = args, *buf;
-	int rsz;
-	unsigned int len;
-	FILE *file;
-
-	if ((buf = malloc(1024)) == NULL) {
-		printf("cat: out of memory\n");
-		return -ENOMEM;
+	default:
+		printf("psh: exec failed with code %d\n", err);
 	}
 
-	while ((arg = psh_nextString(arg, &len)) && len) {
-		file = fopen(arg, "r");
-
-		if (file == NULL) {
-			printf("cat: %s no such file\n", arg);
-		}
-		else {
-			while ((rsz = fread(buf, 1, 1024, file)) > 0) {
-				fwrite(buf, 1, rsz, stdout);
-			}
-		}
-
-		fclose(file);
-		arg += len + 1;
-	}
-
-	free(buf);
-	return EOK;
-}
-
-
-static int psh_kill(char *arg)
-{
-	unsigned len, pid;
-	char *end;
-
-	arg = psh_nextString(arg, &len);
-
-	if (!len) {
-		printf("kill: missing argument (pid)\n");
-		return -EINVAL;
-	}
-
-	pid = strtoul(arg, &end, 10);
-
-	if ((end != arg + len) || (pid == 0 && *arg != '0')) {
-		printf("kill: could not parse process id: '%s'\n", arg);
-		return -EINVAL;
-	}
-
-	return signalPost(pid, -1, signal_kill);
-}
-
-
-static int psh_mount(int argc, char **argv)
-{
-	int err;
-
-	if (argc != 5 && argc != 4) {
-		printf("usage: mount source target fstype mode %d\n", argc);
-		return -1;
-	}
-
-	err = mount(argv[0], argv[1], argv[2], atoi(argv[3]), argv[4]);
-
-	if (err < 0)
-		printf("mount: %s\n", strerror(err));
+	/* Take back terminal control */
+	tcsetpgrp(STDIN_FILENO, getpgid(getpid()));
 
 	return err;
 }
 
 
-static int psh_bind(int argc, char **argv)
+static int psh_runscript(char *path)
 {
-	struct stat buf;
-	oid_t soid, doid;
-	msg_t msg = {0};
-	int err;
-
-	if (argc != 2) {
-		printf("usage: bind source target %d\n", argc);
-		return -1;
-	}
-
-	if (lookup(argv[0], NULL, &soid) < EOK)
-		return -ENOENT;
-
-	if (lookup(argv[1], NULL, &doid) < EOK)
-		return -ENOENT;
-
-	if ((err = stat(argv[1], &buf)))
-		return err;
-
-	if (!S_ISDIR(buf.st_mode))
-		return -ENOTDIR;
-
-	msg.type = mtSetAttr;
-	msg.i.attr.oid = doid;
-	msg.i.attr.type = atDev;
-	msg.i.data = &soid;
-	msg.i.size = sizeof(oid_t);
-
-	if ((err = msgSend(doid.port, &msg)) < 0)
-		return err;
-
-	return msg.o.attr.val;
-
-}
-
-
-static int psh_sync(int argc, char **argv)
-{
-	oid_t oid;
-	msg_t msg = {0};
-	msg.type = mtSync;
-
-	if (!argc) {
-		printf("usage: sync path-to-device\n");
-		return -1;
-	}
-
-	if (lookup(argv[0], NULL, &oid) < 0)
-		return -1;
-
-	return msgSend(oid.port, &msg);
-}
-
-
-static void psh_reboot(char *arg)
-{
-	unsigned int len, magic = PHOENIX_REBOOT_MAGIC;
-
-#ifdef TARGET_IMX6ULL
-	if (arg != NULL) {
-		arg = psh_nextString(arg, &len);
-		if (len && !strcmp(arg, "-s"))
-			magic = ~magic;
-	}
-#else
-	(void)len;
-#endif
-
-	reboot(magic);
-}
-
-
-void psh_run(void)
-{
-	unsigned int n;
-	char buff[128];
-	char *cmd;
-
-	for (;;) {
-		write(1, "(psh)% ", 7);
-
-		psh_readln(buff, sizeof(buff));
-		cmd = psh_nextString(buff, &n);
-
-		if (n == 0)
-			continue;
-
-		if (!strcmp(cmd, "help"))
-			psh_help();
-
-		else if (!strcmp(cmd, "ls"))
-			psh_ls(cmd + n + 1);
-
-		else if (!strcmp(cmd, "mem"))
-			psh_mem(cmd + n + 1);
-
-		else if (!strcmp(cmd, "ps"))
-			psh_ps(cmd + n + 1);
-
-		else if (!strcmp(cmd, "cat"))
-			psh_cat(cmd + n + 1);
-
-		else if (!strcmp(cmd, "touch"))
-			psh_touch(cmd + n + 1);
-
-		else if (!strcmp(cmd, "mkdir"))
-			psh_mkdir(cmd + n + 1);
-
-		else if (!strcmp(cmd, "exec"))
-			psh_exec(cmd + n + 1);
-
-		else if (!strcmp(cmd, "kill"))
-			psh_kill(cmd + n + 1);
-
-		else if (!strcmp(cmd, "perf"))
-			psh_perf(cmd + n + 1);
-
-		else if (!strcmp(cmd, "top"))
-			psh_top(cmd + n + 1);
-
-		else if (cmd[0] == '/')
-			psh_runfile(cmd);
-
-		else if (!strcmp(cmd, "exit"))
-			exit(EXIT_SUCCESS);
-
-		else if (!strcmp(cmd, "reboot"))
-			psh_reboot(cmd + n + 1);
-
-		else
-			printf("Unknown command!\n");
-		fflush(NULL);
-	}
-}
-
-
-int psh_runscript(char *path)
-{
-	FILE *stream;
-	char *line = NULL;
+	char **argv = NULL, *line = NULL;
+	int i, err, argc = 0;
 	size_t n = 0;
-	char *arg;
-	int argc = 0;
-	char **argv = NULL, **argv_re;
-	char *bin;
-	int err;
+	ssize_t ret;
+	FILE *stream;
 	pid_t pid;
 
-	stream = fopen(path, "r");
-
-	if (stream == NULL)
+	if ((stream = fopen(path, "r")) == NULL) {
+		printf("psh: failed to open file %s\n", path);
 		return -EINVAL;
-	if (getline(&line, &n, stream) == 5) {
-		if (strncmp(PSH_SCRIPT_MAGIC, line, strlen(PSH_SCRIPT_MAGIC))) {
-			free(line);
-			fclose(stream);
-			printf("psh: %s is not a psh script\n", path);
-			return -1;
-		}
+	}
+
+	if ((getline(&line, &n, stream) < sizeof(SCRIPT_MAGIC)) || strncmp(line, SCRIPT_MAGIC, sizeof(SCRIPT_MAGIC) - 1)) {
+		printf("psh: %s is not a psh script\n", path);
+		free(line);
+		fclose(stream);
+		return -EINVAL;
 	}
 
 	free(line);
 	line = NULL;
 	n = 0;
 
-	while (getline(&line, &n, stream) > 0) {
-
+	for (i = 2; (ret = getline(&line, &n, stream)) > 0; i++) {
 		if (line[0] == 'X' || line[0] == 'W') {
-			strtok(line, " ");
+			if (line[ret - 1] == '\n')
+				line[ret - 1] = '\0';
 
-			bin = strtok(NULL, " ");
-			if (bin == NULL) {
-				free(line);
-				fclose(stream);
-				line = NULL;
-				n = 0;
-				return -1;
-			}
-
-			if (bin[strlen(bin) - 1] == '\n')
-				bin[strlen(bin) - 1] = 0;
-
-			argv = malloc(2 * sizeof(char *));
-			argv[argc++] = bin;
-
-			while ((arg = strtok(NULL, " ")) != NULL) {
-				if (arg[strlen(arg) - 1] == '\n')
-					arg[strlen(arg) - 1] = 0;
-
-				argv_re = realloc(argv, (argc + 2) * sizeof(char *));
-
-				if (argv_re == NULL) {
-					printf("psh: Out of memory\n");
-					free(argv);
-					free(line);
-					fclose(stream);
-					return -1;
+			do {
+				if ((err = psh_parsecmd(line + 1, &argc, &argv)) < 0) {
+					printf("psh: failed to parse line %d\n", i);
+					break;
 				}
 
-				argv = argv_re;
-				argv[argc] = arg;
-				argc++;
-			}
+				if ((pid = vfork()) < 0) {
+					printf("psh: vfork failed in line %d\n", i);
+					err = pid;
+					break;
+				}
+				else if (!pid) {
+					err = execve(argv[0], argv, NULL);
+					printf("psh: exec failed in line %d\n", i);
+					exit(EXIT_FAILURE);
+				}
 
-			argv[argc] = NULL;
+				if ((line[0] == 'W') && ((err = waitpid(pid, NULL, 0)) < 0)) {
+					printf("psh: waitpid failed in line %d\n", i);
+					break;
+				}
+			} while (0);
 
-			if (!(pid = vfork())) {
-				err = execve(bin, argv, NULL);
-				printf("psh: execve failed %d\n", err);
-				exit(err);
-			}
-
-			if (line[0] == 'W')
-				waitpid(pid, NULL, 0);
+			free(argv);
+			argv = NULL;
 		}
 
-		free(argv);
+		if (err < 0)
+			break;
+
 		free(line);
-		argv = NULL;
-		argc = 0;
 		line = NULL;
 		n = 0;
 	}
+
+	free(line);
 	fclose(stream);
+
 	return EOK;
 }
 
 
-extern void splitname(char *, char **, char**);
+static int psh_exec(char **argv)
+{
+	int err;
+
+	switch (err = execve(argv[1], argv + 1, NULL)) {
+	case EOK:
+		break;
+
+	case -ENOMEM:
+		printf("psh: out of memory\n");
+		break;
+		
+	case -EINVAL:
+		printf("psh: invalid executable\n");
+		break;
+
+	default:
+		printf("psh: exec failed with code %d\n", err);
+	}
+
+	return err;
+}
+
+
+static void psh_help(void)
+{
+	printf("Available commands:\n");
+	printf("  bind    - binds device to directory\n");
+	printf("  cat     - concatenate file(s) to standard output\n");
+	printf("  exec    - executes a file\n");
+	printf("  exit    - exits the shell\n");
+	printf("  help    - prints this help message\n");
+	printf("  history - prints command history\n");
+	printf("  kill    - terminates process\n");
+	printf("  ls      - lists files in the namespace\n");
+	printf("  mem     - prints memory map\n");
+	printf("  mkdir   - creates directory\n");
+	printf("  mount   - mounts a filesystem\n");
+	printf("  perf    - tracks kernel performance\n");
+	printf("  ps      - prints processes and threads\n");
+	printf("  reboot  - restarts the machine\n");
+	printf("  sync    - synchronizes device\n");
+	printf("  top     - top utility\n");
+	printf("  touch   - changes file timestamp\n");
+}
+
+
+static int psh_history(int argc, char **argv, psh_hist_t *cmdhist)
+{
+	psh_histent_t *entry;
+	unsigned char clear = 0;
+	int c, i, j, size;
+	char fmt[12];
+
+	while ((c = getopt(argc, argv, "ch")) != -1) {
+		switch (c) {
+		case 'c':
+			clear = 1;
+			break;
+
+		case 'h':
+		default:
+			printf("usage: %s [options] or no args to print command history\n", argv[0]);
+			printf("  -c:  clears command history\n");
+			printf("  -h:  shows this help message\n");
+			return EOK;
+		}
+	}
+
+	if (clear) {
+		for (i = cmdhist->hb; i != cmdhist->he; i = (i + 1) % HISTSZ)
+			free(cmdhist->entries[i].cmd);
+		cmdhist->hb = cmdhist->he = 0;
+	}
+	else {
+		size = (cmdhist->hb < cmdhist->he) ? cmdhist->he - cmdhist->hb : HISTSZ - cmdhist->hb + cmdhist->he;
+		sprintf(fmt, "  %%%du  ", psh_log(10, size) + 1);
+
+		for (i = 0; i < size; i++) {
+			entry = cmdhist->entries + (cmdhist->hb + i) % HISTSZ;
+			printf(fmt, i + 1);
+			for (j = 0; j < entry->n; j++)
+				printf("%c", (entry->cmd[j] == '\0') ? ' ' : entry->cmd[j]);
+			printf("\n");
+		}
+	}
+
+	return EOK;
+}
+
+
+static void psh_signalint(int sig)
+{
+	psh_common.sigint = 1;
+}
+
+
+static void psh_signalquit(int sig)
+{
+	psh_common.sigquit = 1;
+}
+
+
+static void psh_signalstop(int sig)
+{
+	psh_common.sigstop = 1;
+}
+
+
+static int psh_run(void)
+{
+	psh_hist_t cmdhist = { .hb = 0, .he = 0 };
+	psh_histent_t *entry;
+	struct termios orig;
+	char *cmd, **argv;
+	int err, argc;
+	pid_t pgrp;
+
+	/* Check if we run interactively */
+	if (!isatty(STDIN_FILENO))
+		return -ENOTTY;
+
+	/* Wait till we run in foreground */
+	if (tcgetpgrp(STDIN_FILENO) != -1) {
+		while ((pgrp = getpgrp()) != tcgetpgrp(STDIN_FILENO))
+			kill(-pgrp, SIGTTIN);
+	}
+
+	/* Set signal handlers */
+	signal(SIGINT, psh_signalint);
+	signal(SIGQUIT, psh_signalquit);
+	signal(SIGTSTP, psh_signalstop);
+	signal(SIGTTIN, SIG_IGN);
+	signal(SIGTTOU, SIG_IGN);
+	signal(SIGCHLD, SIG_IGN);
+
+	/* Put ourselves in our own process group */
+	pgrp = getpid();
+	if ((err = setpgid(pgrp, pgrp)) < 0) {
+		printf("psh: failed to put shell in its own process group\n");
+		return err;
+	}
+
+	do {
+		/* Save original terminal settings */
+		if ((err = tcgetattr(STDIN_FILENO, &orig)) < 0) {
+			printf("psh: failed to save terminal settings\n");
+			break;
+		}
+
+		/* Take terminal control */
+		if ((err = tcsetpgrp(STDIN_FILENO, pgrp)) < 0) {
+			printf("psh: failed to take terminal control\n");
+			break;
+		}
+
+		for (;;) {
+			write(STDOUT_FILENO, "\r\033[0J", 5);
+			write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
+
+			if ((err = psh_readcmd(&orig, &cmdhist, &cmd)) < 0)
+				break;
+
+			if (psh_parsecmd(cmd, &argc, &argv) < 0) {
+				free(cmd);
+				continue;
+			}
+
+			/* Select command history entry */
+			if (cmdhist.he != cmdhist.hb) {
+				entry = &cmdhist.entries[(cmdhist.he) ? cmdhist.he - 1 : HISTSZ - 1];
+				if ((err == entry->n) && !memcmp(cmd, entry->cmd, err)) {
+					cmdhist.he = (cmdhist.he) ? cmdhist.he - 1 : HISTSZ - 1;
+					free(entry->cmd);
+				}
+				else {
+					entry = cmdhist.entries + cmdhist.he;
+				}
+			}
+			else {
+				entry = cmdhist.entries + cmdhist.he;
+			}
+
+			/* Update command history */
+			entry->cmd = cmd;
+			entry->n = err;
+			if ((cmdhist.he = (cmdhist.he + 1) % HISTSZ) == cmdhist.hb) {
+				free(cmdhist.entries[cmdhist.hb].cmd);
+				cmdhist.hb = (cmdhist.hb + 1) % HISTSZ;
+			}
+
+			/* Clear signals */
+			psh_common.sigint = 0;
+			psh_common.sigquit = 0;
+			psh_common.sigstop = 0;
+
+			/* Reset getopt */
+			optind = 1;
+
+			if (!strcmp(argv[0], "bind"))
+				psh_bind(argc, argv);
+			else if (!strcmp(argv[0], "cat"))
+				psh_cat(argc, argv);
+			else if (!strcmp(argv[0], "exec"))
+				psh_exec(argv);
+			else if (!strcmp(argv[0], "exit"))
+				exit(EXIT_SUCCESS);
+			else if (!strcmp(argv[0], "help"))
+				psh_help();
+			else if (!strcmp(argv[0], "history"))
+				psh_history(argc, argv, &cmdhist);
+			else if (!strcmp(argv[0], "kill"))
+				psh_kill(argc, argv);
+			else if (!strcmp(argv[0], "ls"))
+				psh_ls(argc, argv);
+			else if (!strcmp(argv[0], "mem"))
+				psh_mem(argc, argv);
+			else if (!strcmp(argv[0], "mkdir"))
+				psh_mkdir(argc, argv);
+			else if (!strcmp(argv[0], "mount"))
+				psh_mount(argc, argv);
+			else if (!strcmp(argv[0], "perf"))
+				psh_perf(argc, argv);
+			else if (!strcmp(argv[0], "ps"))
+				psh_ps(argc, argv);
+			else if (!strcmp(argv[0], "reboot"))
+				psh_reboot(argc, argv);
+			else if (!strcmp(argv[0], "sync"))
+				psh_sync(argc, argv);
+			else if (!strcmp(argv[0], "top"))
+				psh_top(argc, argv);
+			else if (!strcmp(argv[0], "touch"))
+				psh_touch(argc, argv);
+			else if (argv[0][0] == '/')
+				psh_runfile(argv);
+			else
+				printf("Unknown command!\n");
+
+			free(argv);
+			fflush(NULL);
+		}
+	} while (0);
+
+	/* Free command history */
+	for (; cmdhist.hb != cmdhist.he; cmdhist.hb = (cmdhist.hb + 1) % HISTSZ)
+		free(cmdhist.entries[cmdhist.hb].cmd);
+
+	return err;
+}
 
 
 int main(int argc, char **argv)
 {
-	int c;
+	char *base, *dir, *path = NULL;
 	oid_t oid;
-	char *args;
-	char *base, *dir, *cmd;
-	FILE *file;
+	int c;
 
 	splitname(argv[0], &base, &dir);
 
 	if (!strcmp(base, "psh")) {
-		/* Wait for filesystem */
+		/* Wait for root filesystem */
 		while (lookup("/", NULL, &oid) < 0)
 			usleep(10000);
 
@@ -1156,56 +1059,61 @@ int main(int argc, char **argv)
 		while (write(1, "", 0) < 0)
 			usleep(50000);
 
-		if (argc > 0 && (c = getopt(argc, argv, "i:")) != -1) {
-			if (psh_runscript(optarg) != EOK)
-				printf("psh: error during preinit\n");
+		if (argc > 1) {
+			/* Process command options */
+			while ((c = getopt(argc, argv, "i:h")) != -1) {
+				switch (c) {
+				case 'i':
+					path = optarg;
+					break;
 
-			file = fopen("/var/preinit", "w+");
-
-			if (file != NULL) {
-				while ((cmd = argv[optind++]) != NULL) {
-					fwrite(cmd, 1, strlen(cmd), file);
-					fwrite(" ", 1, 1, file);
+				case 'h':
+				default:
+					printf("usage: %s [options] [script path] or no args to run shell interactively\n", argv[0]);
+					printf("  -i <script path>:  selects psh script to execute\n");
+					printf("  -h:                shows this help message\n");
+					return EOK;
 				}
-
-				fwrite("\n", 1, 1, file);
-				fclose(file);
 			}
+
+			if (optind < argc)
+				path = argv[optind];
+
+			if (path != NULL)
+				psh_runscript(path);
 		}
 		else {
+			/* Run shell interactively */
 			psh_run();
 		}
 	}
+	else if (!strcmp(base, "bind")) {
+		psh_bind(argc, argv);
+	}
+	else if (!strcmp(base, "mem")) {
+		psh_mem(argc, argv);
+	}
+	else if (!strcmp(base, "mount")) {
+		psh_mount(argc, argv);
+	}
+	else if (!strcmp(base, "perf")) {
+		psh_perf(argc, argv);
+	}
+	else if (!strcmp(base, "ps")) {
+		psh_ps(argc, argv);
+	}
+	else if (!strcmp(base, "reboot")) {
+		psh_reboot(argc, argv);
+	}
+	else if (!strcmp(base, "sync")) {
+		psh_sync(argc, argv);
+	}
+	else if(!strcmp(base, "top")) {
+		psh_top(argc, argv);
+	}
 	else {
-		if ((args = calloc(3000, 1)) == NULL) {
-			printf("psh: out of memory\n");
-			return EXIT_FAILURE;
-		}
-
-		for (c = 1; c < argc; ++c) {
-			strcat(args, argv[c]);
-			strcat(args, " ");
-		}
-
-		if (!strcmp(base, "mem"))
-			psh_mem(args);
-		else if (!strcmp(base, "ps"))
-			psh_ps(args);
-		else if (!strcmp(base, "perf"))
-			psh_perf(args);
-		else if (!strcmp(base, "mount"))
-			psh_mount(argc - 1, argv + 1);
-		else if (!strcmp(base, "bind"))
-			psh_bind(argc - 1, argv + 1);
-		else if (!strcmp(base, "sync"))
-			psh_sync(argc - 1, argv + 1);
-		else if (!strcmp(base, "reboot"))
-			psh_reboot(argv[1]);
-		else if(!strcmp(base, "top"))
-			psh_top(args);
-		else
-			printf("psh: %s: unknown command\n", argv[0]);
+		printf("psh: %s: unknown command\n", argv[0]);
 	}
 
-	return 0;
+	return EOK;
 }
