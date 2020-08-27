@@ -448,7 +448,6 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 			}
 			/* TAB => autocomplete */
 			else if (c == '\t') {
-				
 			}
 			/* FF => clear screen */
 			else if (c == '\014') {
@@ -703,7 +702,7 @@ static int psh_runfile(char **argv)
 	case -ENOMEM:
 		printf("psh: out of memory\n");
 		break;
-		
+
 	case -EINVAL:
 		printf("psh: invalid executable\n");
 		break;
@@ -807,7 +806,7 @@ static int psh_exec(int argc, char **argv)
 	case -ENOMEM:
 		printf("psh: out of memory\n");
 		break;
-		
+
 	case -EINVAL:
 		printf("psh: invalid executable\n");
 		break;

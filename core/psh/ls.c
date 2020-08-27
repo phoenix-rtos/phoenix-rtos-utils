@@ -164,18 +164,12 @@ static int psh_ls_copyname(fileinfo_t *file, const char *name)
 	size_t namelen = strlen(name);
 	char *rname;
 
-	if (!file->memlen) {
-		file->memlen = namelen + 1;
-		if ((file->name = (char *)malloc(file->memlen)) == NULL) {
+	if (file->memlen <= namelen) {
+		if ((rname = realloc(file->name, namelen + 1)) == NULL) {
 			printf("ls: out of memory\n");
 			return -ENOMEM;
 		}
-	} else if (file->memlen <= namelen) {
 		file->memlen = namelen + 1;
-		if ((rname = (char *)realloc(file->name, file->memlen)) == NULL) {
-			printf("ls: out of memory\n");
-			return -ENOMEM;
-		}
 		file->name = rname;
 	}
 
@@ -396,25 +390,6 @@ static int psh_ls_printfiles(size_t nfiles)
 }
 
 
-static int psh_ls_initbuffs(size_t size)
-{
-	size_t i;
-
-	if ((psh_ls_common.files = (fileinfo_t *)malloc(size * sizeof(fileinfo_t))) == NULL) {
-		printf("ls: out of memory\n");
-		return -ENOMEM;
-	}
-
-	for (i = 0; i < size; i++) {
-		psh_ls_common.files[i].memlen = 0;
-		psh_ls_common.files[i].name = NULL;
-	}
-	psh_ls_common.fileinfosz = size;
-
-	return EOK;
-}
-
-
 static int psh_ls_expandbuff(size_t size)
 {
 	fileinfo_t *rptr;
@@ -432,7 +407,7 @@ static int psh_ls_expandbuff(size_t size)
 	}
 	psh_ls_common.fileinfosz = size;
 
-	return 0;
+	return EOK;
 }
 
 
@@ -452,7 +427,7 @@ static void psh_ls_free(void)
 int psh_ls(int argc, char **argv)
 {
 	unsigned int i, npaths = 0;
-	int c, ret = 0, nfiles = 0;
+	int c, ret = EOK, nfiles = 0;
 	char **paths = NULL;
 	struct dirent *dir;
 	const char *path;
@@ -527,8 +502,10 @@ int psh_ls(int argc, char **argv)
 		return -ENOMEM;
 	}
 
-	if ((ret = psh_ls_initbuffs(32)) < 0)
+	if ((ret = psh_ls_expandbuff(32)) < 0) {
+		free(psh_ls_common.odir);
 		return ret;
+	}
 
 	/* Try to stat all the given paths */
 	for (i = 0; i < npaths; i++) {

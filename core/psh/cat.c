@@ -55,8 +55,8 @@ int psh_cat(int argc, char **argv)
 		else {
 			while (!psh_common.sigint && !psh_common.sigquit && !psh_common.sigstop && ((ret = fread(buff, 1, 1024, file)) > 0))
 				fwrite(buff, 1, ret, stdout);
+			fclose(file);
 		}
-		fclose(file);
 	}
 	free(buff);
 
