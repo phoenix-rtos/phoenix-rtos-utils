@@ -71,7 +71,7 @@ static void psh_top_help(void)
 	printf("  -d:  sets refresh rate (integer greater than 0)\n");
 	printf("  -n:  sets number of iterations (by default its infinity)\n\n");
 	printf("Interactive commands:\n");
-	printf("   <ENTER> or <SPACE>:  Refresh\n");
+	printf("   <ENTER> or <SPACE>:  refresh\n");
 	printf("   H:  toggle threads mode\n");
 	printf("   q:  quit\n");
 	printf("   P:  sort by CPU\n");

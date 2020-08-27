@@ -81,7 +81,7 @@ extern int psh_touch(int argc, char **argv);
 
 /* Binary (base 2) prefixes */
 static const char *bp[] = {
-	"",   /* 2^0       */
+	"",   /* 2^0         */
 	"K",  /* 2^10   kibi */
 	"M",  /* 2^20   mebi */
 	"G",  /* 2^30   gibi */
@@ -446,7 +446,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 					psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
 				}
 			}
-			/* TAB => autocomplete */
+			/* TAB => autocomplete paths */
 			else if (c == '\t') {
 			}
 			/* FF => clear screen */
@@ -1063,8 +1063,8 @@ int main(int argc, char **argv)
 		while (write(1, "", 0) < 0)
 			usleep(50000);
 
+		/* Run shell script */
 		if (argc > 1) {
-			/* Process command options */
 			while ((c = getopt(argc, argv, "i:h")) != -1) {
 				switch (c) {
 				case 'i':
@@ -1086,8 +1086,8 @@ int main(int argc, char **argv)
 			if (path != NULL)
 				psh_runscript(path);
 		}
+		/* Run shell interactively */
 		else {
-			/* Run shell interactively */
 			psh_run();
 		}
 	}
