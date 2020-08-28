@@ -404,14 +404,14 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 				}
 			}
 			/* BS => remove last character */
-			else if (c == '\b') {
+			else if ((c == '\b') || (c == '\177')) {
 				if (n) {
 					if (hp != cmdhist->he) {
 						if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp, cmdhist->entries[hp].n + 2)) < 0)
 							return err;
 						hp = cmdhist->he;
 					}
-					write(STDOUT_FILENO, &c, 1);
+					write(STDOUT_FILENO, "\b", 1);
 					n--;
 					memmove(*cmd + n, *cmd + n + 1, m);
 					write(STDOUT_FILENO, "\033[0J", 4);
