@@ -30,7 +30,7 @@ int psh_kill(int argc, char **argv)
 	}
 
 	pid = strtoul(argv[1], &end, 10);
-	if ((*end != '\0') || (pid == 0 && argv[1][0] != '0')) {
+	if (*end != '\0') {
 		printf("kill: could not parse process id: %s\n", argv[1]);
 		return -EINVAL;
 	}

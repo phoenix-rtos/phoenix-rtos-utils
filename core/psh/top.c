@@ -249,6 +249,7 @@ int psh_top(int argc, char **argv)
 	threadinfo_t *info, *rinfo, *previnfo;
 	time_t prev_time = 0;
 	struct timespec ts;
+	char *end;
 
 	psh_top_common.threads = 0;
 	psh_top_common.sortdir = -1;
@@ -266,14 +267,16 @@ int psh_top(int argc, char **argv)
 			break;
 
 		case 'd':
-			if (!(delay = strtoul(optarg, NULL, 10))) {
-				printf("top: -d option requires int greater than 0\n");
+			delay = strtoul(optarg, &end, 10);
+			if (*end != '\0' || !delay) {
+				printf("top: -d option requires integer greater than 0\n");
 				return -EINVAL;
 			}
 			break;
 
 		case 'n':
-			if (!(niter = strtoul(optarg, NULL, 10))) {
+			niter = strtoul(optarg, &end, 10);
+			if (*end != '\0' || !niter) {
 				printf("top: -n option requires integer greater than 0\n");
 				return -EINVAL;
 			}
