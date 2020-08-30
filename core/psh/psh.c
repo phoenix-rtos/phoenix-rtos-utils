@@ -267,6 +267,7 @@ static int psh_extendcmd(char **cmd, int *cmdsz, int n)
 	if ((rcmd = (char *)realloc(*cmd, n)) == NULL) {
 		printf("psh: out of memory\r\n");
 		free(*cmd);
+		*cmd = NULL;
 		return -ENOMEM;
 	}
 	*cmd = rcmd;
@@ -556,13 +557,6 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 	}
 	(*cmd)[n + m] = '\0';
 
-	/* Restore original terminal settings */
-	if ((err = tcsetattr(STDIN_FILENO, TCSAFLUSH, orig)) < 0) {
-		printf("psh: failed to disable raw mode\r\n");
-		free(*cmd);
-		return err;
-	}
-
 	return n + m;
 }
 
@@ -835,8 +829,8 @@ static int psh_run(void)
 	psh_hist_t cmdhist = { .hb = 0, .he = 0 };
 	psh_histent_t *entry;
 	struct termios orig;
-	char *cmd, **argv;
-	int err, argc;
+	char *cmd = NULL, **argv;
+	int err, err2, argc;
 	pid_t pgrp;
 
 	/* Check if we run interactively */
@@ -881,8 +875,16 @@ static int psh_run(void)
 			write(STDOUT_FILENO, "\r\033[0J", 5);
 			write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
 
-			if ((err = psh_readcmd(&orig, &cmdhist, &cmd)) < 0)
+			err = psh_readcmd(&orig, &cmdhist, &cmd);
+
+			/* Restore original terminal settings */
+			if ((err2 = tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig)) < 0)
+				printf("psh: failed to restore terminal settings\r\n");
+
+			if (err < 0 || err2 < 0) {
+				free(cmd);
 				break;
+			}
 
 			if (psh_parsecmd(cmd, &argc, &argv) < 0) {
 				free(cmd);
