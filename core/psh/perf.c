@@ -25,12 +25,12 @@ int psh_perf(int argc, char **argv)
 	const size_t bufsz = 4 << 20;
 	int bcount, tcnt, n = 32;
 	perf_event_t *buffer;
-	char *timeout_s;
+	char *end;
 
 	if (argc > 1) {
-		timeout_s = argv[1];
+		timeout = strtoul(argv[1], &end, 10);
 
-		if (!(timeout = strtoull(timeout_s, NULL, 10))) {
+		if (*end != '\0' || !timeout) {
 			printf("perf: timeout argument must be integer greater than 0\n");
 			return -EINVAL;
 		}

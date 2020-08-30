@@ -50,21 +50,6 @@ int psh_ps(int argc, char **argv)
 	unsigned int h, m;
 	char buff[8];
 
-	if ((info = malloc(n * sizeof(threadinfo_t))) == NULL) {
-		printf("ps: out of memory\n");
-		return -ENOMEM;
-	}
-
-	while ((tcnt = threadsinfo(n, info)) >= n) {
-		n *= 2;
-		if ((rinfo = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
-			free(info);
-			printf("ps: out of memory\n");
-			return -ENOMEM;
-		}
-		info = rinfo;
-	}
-
 	while ((c = getopt(argc, argv, "cnpt")) != -1) {
 		switch (c) {
 		case 'c':
@@ -84,9 +69,23 @@ int psh_ps(int argc, char **argv)
 			break;
 
 		default:
-			free(info);
 			return EOK;
 		}
+	}
+
+	if ((info = malloc(n * sizeof(threadinfo_t))) == NULL) {
+		printf("ps: out of memory\n");
+		return -ENOMEM;
+	}
+
+	while ((tcnt = threadsinfo(n, info)) >= n) {
+		n *= 2;
+		if ((rinfo = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
+			free(info);
+			printf("ps: out of memory\n");
+			return -ENOMEM;
+		}
+		info = rinfo;
 	}
 
 	if (!threads) {
