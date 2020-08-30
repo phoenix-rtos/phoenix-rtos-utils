@@ -24,6 +24,7 @@
 #include <unistd.h>
 
 #include <sys/file.h>
+#include <sys/ioctl.h>
 #include <sys/minmax.h>
 #include <sys/stat.h>
 #include <sys/types.h>
