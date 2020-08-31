@@ -11,6 +11,7 @@
  * %LICENSE%
  */
 
+#include <dirent.h>
 #include <errno.h>
 #include <signal.h>
 #include <stdint.h>
@@ -22,6 +23,7 @@
 
 #include <sys/file.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 
 #include <posix/utils.h>
@@ -267,7 +269,6 @@ static int psh_extendcmd(char **cmd, int *cmdsz, int n)
 	if ((rcmd = (char *)realloc(*cmd, n)) == NULL) {
 		printf("psh: out of memory\r\n");
 		free(*cmd);
-		*cmd = NULL;
 		return -ENOMEM;
 	}
 	*cmd = rcmd;
@@ -277,11 +278,11 @@ static int psh_extendcmd(char **cmd, int *cmdsz, int n)
 }
 
 
-static int psh_histentcmd(char **cmd, int *cmdsz, psh_histent_t *entry, int n)
+static int psh_histentcmd(char **cmd, int *cmdsz, psh_histent_t *entry)
 {
 	int err, i;
 
-	if ((*cmdsz < n) && ((err = psh_extendcmd(cmd, cmdsz, n)) < 0))
+	if ((entry->n > *cmdsz) && ((err = psh_extendcmd(cmd, cmdsz, entry->n + 1)) < 0))
 		return err;
 
 	for (i = 0; i < entry->n; i++)
@@ -300,10 +301,96 @@ static void psh_printhistent(psh_histent_t *entry)
 }
 
 
+static int psh_completepath(char *path, int len, char ***files, int *nfiles)
+{
+	int i, n, bn, pn, size = 32, err = EOK;
+	char *base, *prefix, *fpath, **rfiles;
+	struct stat stat;
+	DIR *dir;
+
+	for (i = len; i && (path[i - 1] != '/'); i--);
+	prefix = path + i;
+	pn = len - i;
+
+	if (i) {
+		path[i - 1] = '\0';
+		base = path;
+		bn = i;
+	}
+	else {
+		base = ".";
+		bn = 2;
+	}
+
+	*files = NULL;
+	*nfiles = 0;
+
+	do {
+		if ((dir = opendir(base)) == NULL)
+			break;
+
+		if ((*files = malloc(size * sizeof(char *))) == NULL) {
+			err = -ENOMEM;
+			break;
+		}
+
+		while (readdir(dir) != NULL) {
+			if (strncmp(dir->dirent->d_name, prefix, pn))
+				continue;
+
+			n = bn + dir->dirent->d_namlen;
+			if ((fpath = malloc(n + 1)) == NULL) {
+				err = -ENOMEM;
+				break;
+			}
+			memcpy(fpath, base, bn - 1);
+			fpath[bn - 1] = '/';
+			memcpy(fpath + bn, dir->dirent->d_name, dir->dirent->d_namlen);
+			fpath[n] = '\0';
+
+			if ((err = lstat(fpath, &stat)) < 0) {
+				free(fpath);
+				break;
+			}
+			free(fpath);
+
+			n = dir->dirent->d_namlen - pn;
+			if (((*files)[*nfiles] = malloc(n + 2)) == NULL) {
+				err = -ENOMEM;
+				break;
+			}
+			memcpy((*files)[*nfiles], dir->dirent->d_name + pn, n);
+			(*files)[*nfiles][n] = (S_ISDIR(stat.st_mode)) ? '/' : ' ';
+			(*files)[*nfiles][n + 1] = '\0';
+
+			if (++(*nfiles) == size) {
+				if ((rfiles = realloc(*files, 2 * size * sizeof(char *))) == NULL) {
+					err = -ENOMEM;
+					break;
+				}
+				*files = rfiles;
+				size *= 2;
+			}
+		}
+	} while (0);
+
+	if (i)
+		path[i - 1] = '/';
+
+	if (err < 0) {
+		for (i = 0; i < *nfiles; i++)
+			free((*files)[i]);
+		free(*files);
+	}
+
+	return err;
+}
+
+
 static void psh_movecursor(int col, int n)
 {
 	struct winsize ws;
-	char fmt[8];
+	char buff[8];
 	int p;
 
 	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) < 0) {
@@ -315,42 +402,31 @@ static void psh_movecursor(int col, int n)
 	if (col + n < 0) {
 		p = (-(col + n) + ws.ws_col - 1) / ws.ws_col;
 		n += p * ws.ws_col;
-		sprintf(fmt, "\033[%dA", p);
-		write(STDOUT_FILENO, fmt, strlen(fmt));
+		sprintf(buff, "\033[%dA", p);
+		write(STDOUT_FILENO, buff, strlen(buff));
 	}
 	else if (col + n > ws.ws_col - 1) {
 		p = (col + n) / ws.ws_col;
 		n -= p * ws.ws_col;
-		sprintf(fmt, "\033[%dB", p);
-		write(STDOUT_FILENO, fmt, strlen(fmt));
+		sprintf(buff, "\033[%dB", p);
+		write(STDOUT_FILENO, buff, strlen(buff));
 	}
 
 	if (n > 0) {
-		sprintf(fmt, "\033[%dC", n);
-		write(STDOUT_FILENO, fmt, strlen(fmt));
+		sprintf(buff, "\033[%dC", n);
+		write(STDOUT_FILENO, buff, strlen(buff));
 	}
 	else if (n < 0) {
-		sprintf(fmt, "\033[%dD", -n);
-		write(STDOUT_FILENO, fmt, strlen(fmt));
+		sprintf(buff, "\033[%dD", -n);
+		write(STDOUT_FILENO, buff, strlen(buff));
 	}
 }
 
 
-extern void cfmakeraw(struct termios *termios);
-
-
-static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
+static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
 {
-	int err, esc = 0, n = 0, m = 0, ln = 0, hp = cmdhist->he, cmdsz = 128;
-	struct termios raw = *orig;
-	char c, buff[8];
-
-	/* Enable raw mode for command processing */
-	cfmakeraw(&raw);
-	if ((err = tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw)) < 0) {
-		printf("psh: failed to enable raw mode\n");
-		return err;
-	}
+	int i, nfiles, err, esc = 0, n = 0, m = 0, ln = 0, hp = cmdhist->he, cmdsz = 128;
+	char c, *path, **files, buff[8];
 
 	if ((*cmd = (char *)malloc(cmdsz)) == NULL) {
 		printf("psh: out of memory\n");
@@ -365,10 +441,12 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 			/* Print not recognized escape codes */
 			if (esc) {
 				if (hp != cmdhist->he) {
-					if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp, cmdhist->entries[hp].n + esc)) < 0)
+					if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
 						return err;
 					hp = cmdhist->he;
 				}
+				if ((n + m + esc + 1 > cmdsz) && ((err = psh_extendcmd(cmd, &cmdsz, 2 * (n + m + esc) + 1)) < 0))
+					return err;
 				memmove(*cmd + n + esc, *cmd + n, m);
 				memcpy(*cmd + n, buff, esc);
 				write(STDOUT_FILENO, *cmd + n, esc + m);
@@ -390,7 +468,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 			else if (c == '\004') {
 				if (m) {
 					if (hp != cmdhist->he) {
-						if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp, cmdhist->entries[hp].n + 2)) < 0)
+						if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
 							return err;
 						hp = cmdhist->he;
 					}
@@ -408,7 +486,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 			else if ((c == '\b') || (c == '\177')) {
 				if (n) {
 					if (hp != cmdhist->he) {
-						if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp, cmdhist->entries[hp].n + 2)) < 0)
+						if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
 							return err;
 						hp = cmdhist->he;
 					}
@@ -422,6 +500,40 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 			}
 			/* TAB => autocomplete paths */
 			else if (c == '\t') {
+				path = (hp != cmdhist->he) ? cmdhist->entries[hp].cmd : *cmd;
+				for (i = n; i && (path[i - 1] != ' ') && (path[i - 1] != '\0'); i--);
+				path += i;
+				i = n - i;
+				c = path[i];
+				path[i] = '\0';
+				if ((err = psh_completepath(path, i, &files, &nfiles)) < 0) {
+					path[i] = c;
+					free(*cmd);
+					return err;
+				}
+				path[i] = c;
+				do {
+					if (nfiles == 1) {
+						i = strlen(files[0]);
+						if (hp != cmdhist->he) {
+							if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
+								break;
+							hp = cmdhist->he;
+						}
+						if ((n + m + i + 1 > cmdsz) && ((err = psh_extendcmd(cmd, &cmdsz, 2 * (n + m + i) + 1)) < 0))
+							break;
+						memmove(*cmd + n + i, *cmd + n, m);
+						memcpy(*cmd + n, files[0], i);
+						write(STDOUT_FILENO, *cmd + n, i + m);
+						n += i;
+						psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
+					}
+				} while(0);
+				for (i = 0; i < nfiles; i++)
+					free(files[i]);
+				free(files);
+				if (err < 0)
+					return err;
 			}
 			/* FF => clear screen */
 			else if (c == '\014') {
@@ -437,7 +549,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 			/* LF or CR => go to new line and break (finished reading command) */
 			else if ((c == '\r') || (c == '\n')) {
 				if (hp != cmdhist->he) {
-					if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp, cmdhist->entries[hp].n + 2)) < 0)
+					if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
 						return err;
 					hp = cmdhist->he;
 				}
@@ -455,11 +567,11 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 		else {
 			if (!esc) {
 				if (hp != cmdhist->he) {
-					if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp, cmdhist->entries[hp].n + 2)) < 0)
+					if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
 						return err;
 					hp = cmdhist->he;
 				}
-				if ((n + m > cmdsz - 2) && ((err = psh_extendcmd(cmd, &cmdsz, 2 * cmdsz)) < 0))
+				if ((n + m + 2 > cmdsz) && ((err = psh_extendcmd(cmd, &cmdsz, 2 * (n + m + 1) + 1)) < 0))
 					return err;
 				memmove(*cmd + n + 1, *cmd + n, m);
 				(*cmd)[n++] = c;
@@ -527,7 +639,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 					if (esc == sizeof(DELETE) - 1) {
 						if (m) {
 							if (hp != cmdhist->he) {
-								if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp, cmdhist->entries[hp].n + 2)) < 0)
+								if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
 									return err;
 								hp = cmdhist->he;
 							}
@@ -541,10 +653,12 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 				}
 				else {
 					if (hp != cmdhist->he) {
-						if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp, cmdhist->entries[hp].n + esc)) < 0)
+						if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
 							return err;
 						hp = cmdhist->he;
 					}
+					if ((n + m + esc + 1 > cmdsz) && ((err = psh_extendcmd(cmd, &cmdsz, 2 * (n + m + esc) + 1)) < 0))
+						return err;
 					memmove(*cmd + n + esc, *cmd + n, m);
 					memcpy(*cmd + n, buff, esc);
 					write(STDOUT_FILENO, *cmd + n, esc + m);
@@ -558,6 +672,39 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 	(*cmd)[n + m] = '\0';
 
 	return n + m;
+}
+
+
+extern void cfmakeraw(struct termios *termios);
+
+
+static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
+{
+	struct termios raw = *orig;
+	int err, ret;
+
+	/* Enable raw mode for command processing */
+	cfmakeraw(&raw);
+	if ((err = tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw)) < 0) {
+		printf("psh: failed to enable raw mode\n");
+		return err;
+	}
+
+	ret = psh_readcmdraw(cmdhist, cmd);
+
+	/* Restore original terminal settings */
+	if ((err = tcsetattr(STDIN_FILENO, TCSAFLUSH, orig)) < 0)
+		printf("psh: failed to restore terminal settings\r\n");
+
+	if (ret < 0)
+		err = ret;
+
+	if (err < 0) {
+		free(*cmd);
+		ret = err;
+	}
+
+	return ret;
 }
 
 
@@ -829,8 +976,8 @@ static int psh_run(void)
 	psh_hist_t cmdhist = { .hb = 0, .he = 0 };
 	psh_histent_t *entry;
 	struct termios orig;
-	char *cmd = NULL, **argv;
-	int err, err2, argc;
+	char *cmd, **argv;
+	int err, n, argc;
 	pid_t pgrp;
 
 	/* Check if we run interactively */
@@ -858,113 +1005,107 @@ static int psh_run(void)
 		return err;
 	}
 
-	do {
-		/* Save original terminal settings */
-		if ((err = tcgetattr(STDIN_FILENO, &orig)) < 0) {
-			printf("psh: failed to save terminal settings\n");
+	/* Save original terminal settings */
+	if ((err = tcgetattr(STDIN_FILENO, &orig)) < 0) {
+		printf("psh: failed to save terminal settings\n");
+		return err;
+	}
+
+	/* Take terminal control */
+	if ((err = tcsetpgrp(STDIN_FILENO, pgrp)) < 0) {
+		printf("psh: failed to take terminal control\n");
+		return err;
+	}
+
+	for (;;) {
+		write(STDOUT_FILENO, "\r\033[0J", 5);
+		write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
+
+		if ((n = psh_readcmd(&orig, &cmdhist, &cmd)) < 0) {
+			err = n;
 			break;
 		}
 
-		/* Take terminal control */
-		if ((err = tcsetpgrp(STDIN_FILENO, pgrp)) < 0) {
-			printf("psh: failed to take terminal control\n");
-			break;
-		}
-
-		for (;;) {
-			write(STDOUT_FILENO, "\r\033[0J", 5);
-			write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
-
-			err = psh_readcmd(&orig, &cmdhist, &cmd);
-
-			/* Restore original terminal settings */
-			if ((err2 = tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig)) < 0)
-				printf("psh: failed to restore terminal settings\r\n");
-
-			if (err < 0 || err2 < 0) {
-				free(cmd);
-				break;
-			}
-
-			if (psh_parsecmd(cmd, &argc, &argv) < 0) {
-				free(cmd);
+		if ((err = psh_parsecmd(cmd, &argc, &argv)) < 0) {
+			free(cmd);
+			if (err == -EINVAL)
 				continue;
-			}
+			break;
+		}
 
-			/* Select command history entry */
-			if (cmdhist.he != cmdhist.hb) {
-				entry = &cmdhist.entries[(cmdhist.he) ? cmdhist.he - 1 : HISTSZ - 1];
-				if ((err == entry->n) && !memcmp(cmd, entry->cmd, err)) {
-					cmdhist.he = (cmdhist.he) ? cmdhist.he - 1 : HISTSZ - 1;
-					free(entry->cmd);
-				}
-				else {
-					entry = cmdhist.entries + cmdhist.he;
-				}
+		/* Select command history entry */
+		if (cmdhist.he != cmdhist.hb) {
+			entry = &cmdhist.entries[(cmdhist.he) ? cmdhist.he - 1 : HISTSZ - 1];
+			if ((n == entry->n) && !memcmp(cmd, entry->cmd, err)) {
+				cmdhist.he = (cmdhist.he) ? cmdhist.he - 1 : HISTSZ - 1;
+				free(entry->cmd);
 			}
 			else {
 				entry = cmdhist.entries + cmdhist.he;
 			}
-
-			/* Update command history */
-			entry->cmd = cmd;
-			entry->n = err;
-			if ((cmdhist.he = (cmdhist.he + 1) % HISTSZ) == cmdhist.hb) {
-				free(cmdhist.entries[cmdhist.hb].cmd);
-				cmdhist.hb = (cmdhist.hb + 1) % HISTSZ;
-			}
-
-			/* Clear signals */
-			psh_common.sigint = 0;
-			psh_common.sigquit = 0;
-			psh_common.sigstop = 0;
-
-			/* Reset getopt */
-			optind = 1;
-
-			if (!strcmp(argv[0], "bind"))
-				psh_bind(argc, argv);
-			else if (!strcmp(argv[0], "cat"))
-				psh_cat(argc, argv);
-			else if (!strcmp(argv[0], "exec"))
-				psh_exec(argc, argv);
-			else if (!strcmp(argv[0], "exit"))
-				exit(EXIT_SUCCESS);
-			else if (!strcmp(argv[0], "help"))
-				psh_help();
-			else if (!strcmp(argv[0], "history"))
-				psh_history(argc, argv, &cmdhist);
-			else if (!strcmp(argv[0], "kill"))
-				psh_kill(argc, argv);
-			else if (!strcmp(argv[0], "ls"))
-				psh_ls(argc, argv);
-			else if (!strcmp(argv[0], "mem"))
-				psh_mem(argc, argv);
-			else if (!strcmp(argv[0], "mkdir"))
-				psh_mkdir(argc, argv);
-			else if (!strcmp(argv[0], "mount"))
-				psh_mount(argc, argv);
-			else if (!strcmp(argv[0], "perf"))
-				psh_perf(argc, argv);
-			else if (!strcmp(argv[0], "ps"))
-				psh_ps(argc, argv);
-			else if (!strcmp(argv[0], "reboot"))
-				psh_reboot(argc, argv);
-			else if (!strcmp(argv[0], "sync"))
-				psh_sync(argc, argv);
-			else if (!strcmp(argv[0], "top"))
-				psh_top(argc, argv);
-			else if (!strcmp(argv[0], "touch"))
-				psh_touch(argc, argv);
-			else if (argv[0][0] == '/')
-				psh_runfile(argv);
-			else
-				printf("Unknown command!\n");
-
-			free(argv);
-			fflush(NULL);
 		}
-	} while (0);
+		else {
+			entry = cmdhist.entries + cmdhist.he;
+		}
+
+		/* Update command history */
+		entry->cmd = cmd;
+		entry->n = n;
+		if ((cmdhist.he = (cmdhist.he + 1) % HISTSZ) == cmdhist.hb) {
+			free(cmdhist.entries[cmdhist.hb].cmd);
+			cmdhist.hb = (cmdhist.hb + 1) % HISTSZ;
+		}
+
+		/* Clear signals */
+		psh_common.sigint = 0;
+		psh_common.sigquit = 0;
+		psh_common.sigstop = 0;
+
+		/* Reset getopt */
+		optind = 1;
+
+		if (!strcmp(argv[0], "bind"))
+			psh_bind(argc, argv);
+		else if (!strcmp(argv[0], "cat"))
+			psh_cat(argc, argv);
+		else if (!strcmp(argv[0], "exec"))
+			psh_exec(argc, argv);
+		else if (!strcmp(argv[0], "exit"))
+			exit(EXIT_SUCCESS);
+		else if (!strcmp(argv[0], "help"))
+			psh_help();
+		else if (!strcmp(argv[0], "history"))
+			psh_history(argc, argv, &cmdhist);
+		else if (!strcmp(argv[0], "kill"))
+			psh_kill(argc, argv);
+		else if (!strcmp(argv[0], "ls"))
+			psh_ls(argc, argv);
+		else if (!strcmp(argv[0], "mem"))
+			psh_mem(argc, argv);
+		else if (!strcmp(argv[0], "mkdir"))
+			psh_mkdir(argc, argv);
+		else if (!strcmp(argv[0], "mount"))
+			psh_mount(argc, argv);
+		else if (!strcmp(argv[0], "perf"))
+			psh_perf(argc, argv);
+		else if (!strcmp(argv[0], "ps"))
+			psh_ps(argc, argv);
+		else if (!strcmp(argv[0], "reboot"))
+			psh_reboot(argc, argv);
+		else if (!strcmp(argv[0], "sync"))
+			psh_sync(argc, argv);
+		else if (!strcmp(argv[0], "top"))
+			psh_top(argc, argv);
+		else if (!strcmp(argv[0], "touch"))
+			psh_touch(argc, argv);
+		else if (argv[0][0] == '/')
+			psh_runfile(argv);
+		else
+			printf("Unknown command!\n");
+
+		free(argv);
+		fflush(NULL);
+	}
 
 	/* Free command history */
 	for (; cmdhist.hb != cmdhist.he; cmdhist.hb = (cmdhist.hb + 1) % HISTSZ)
