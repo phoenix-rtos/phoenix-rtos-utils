@@ -320,7 +320,7 @@ static int psh_completepath(char *base, char *prefix, char ***files)
 		}
 
 		while (readdir(dir) != NULL) {
-			if (strncmp(dir->dirent->d_name, prefix, plen))
+			if (memcmp(dir->dirent->d_name, prefix, plen))
 				continue;
 
 			i = blen + dir->dirent->d_namlen;
@@ -533,6 +533,7 @@ static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
 					}
 					/* Print suggestions */
 					else {
+						//psh_printhints();
 					}
 				} while (0);
 
