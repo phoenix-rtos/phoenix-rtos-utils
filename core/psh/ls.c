@@ -510,7 +510,21 @@ int psh_ls(int argc, char **argv)
 
 	/* Try to stat all the given paths */
 	for (i = 0; i < npaths; i++) {
-		if ((ret = lstat(paths[i], &psh_ls_common.files[nfiles].stat)) < 0) {
+		c = strlen(paths[i]);
+
+		if (paths[i][c - 1] == '/') {
+			paths[i][c - 1] = '\0';
+
+			if ((ret = lstat(paths[i], &psh_ls_common.files[nfiles].stat)) < 0) {
+				printf("ls: can't access %s/: no such file or directory\n", paths[i]);
+				continue;
+			}
+			else if (!S_ISDIR(psh_ls_common.files[nfiles].stat.st_mode)) {
+				printf("ls: can't access %s/: not a directory\n", paths[i]);
+				continue;
+			}
+		}
+		else if ((ret = lstat(paths[i], &psh_ls_common.files[nfiles].stat)) < 0) {
 			printf("ls: can't access %s: no such file or directory\n", paths[i]);
 			continue;
 		}
@@ -557,7 +571,7 @@ int psh_ls(int argc, char **argv)
 		}
 
 		if ((stream = opendir(path)) == NULL) {
-			printf("%s: no such directory\n", path);
+			printf("ls: %s: no such directory\n", path);
 			break;
 		}
 
