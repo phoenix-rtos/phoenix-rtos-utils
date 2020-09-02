@@ -320,7 +320,7 @@ static int psh_completepath(char *base, char *prefix, char ***files)
 		}
 
 		while (readdir(dir) != NULL) {
-			if (memcmp(dir->dirent->d_name, prefix, plen))
+			if ((dir->dirent->d_namlen < plen) || memcmp(dir->dirent->d_name, prefix, plen))
 				continue;
 
 			i = blen + dir->dirent->d_namlen;
