@@ -301,17 +301,22 @@ static void psh_printhistent(psh_histent_t *entry)
 }
 
 
-static int psh_completepath(char *base, char *prefix, char ***files)
+static int psh_completepath(char *dir, char *base, char ***files)
 {
-	size_t i, size = 32, blen = strlen(base), plen = strlen(prefix);
+	size_t i, size = 32, dlen = strlen(dir), blen = strlen(base);
 	int nfiles = 0, err = EOK;
 	char *path, **rfiles;
 	struct stat stat;
-	DIR *dir;
+	DIR *stream;
+
+	*files = NULL;
 
 	do {
-		if ((dir = opendir(base)) == NULL)
+		if ((stream = opendir(dir)) == NULL)
 			break;
+
+		if (dir[dlen - 1] != '/')
+			dir[dlen++] = '/';
 
 		if ((*files = malloc(size * sizeof(char *))) == NULL) {
 			printf("\r\npsh: out of memory\r\n");
@@ -319,19 +324,21 @@ static int psh_completepath(char *base, char *prefix, char ***files)
 			break;
 		}
 
-		while (readdir(dir) != NULL) {
-			if ((dir->dirent->d_namlen < plen) || memcmp(dir->dirent->d_name, prefix, plen))
+		while (readdir(stream) != NULL) {
+			if ((stream->dirent->d_namlen < blen) || strncmp(stream->dirent->d_name, base, blen))
 				continue;
 
-			i = blen + dir->dirent->d_namlen;
+			if (!blen && (!strcmp(stream->dirent->d_name, ".") || !strcmp(stream->dirent->d_name, "..")))
+				continue;
+
+			i = dlen + stream->dirent->d_namlen;
 			if ((path = malloc(i + 1)) == NULL) {
 				printf("\r\npsh: out of memory\r\n");
 				err = -ENOMEM;
 				break;
 			}
-			memcpy(path, base, blen);
-			memcpy(path + blen, dir->dirent->d_name, dir->dirent->d_namlen);
-			path[i] = '\0';
+			memcpy(path, dir, dlen);
+			strcpy(path + dlen, stream->dirent->d_name);
 
 			if ((err = lstat(path, &stat)) < 0) {
 				printf("\r\npsh: can't stat file %s\r\n", path);
@@ -340,16 +347,7 @@ static int psh_completepath(char *base, char *prefix, char ***files)
 			}
 			free(path);
 
-			if (((*files)[nfiles] = malloc(dir->dirent->d_namlen + 2)) == NULL) {
-				printf("\r\npsh: out of memory\r\n");
-				err = -ENOMEM;
-				break;
-			}
-			memcpy((*files)[nfiles], dir->dirent->d_name, dir->dirent->d_namlen);
-			(*files)[nfiles][dir->dirent->d_namlen] = (S_ISDIR(stat.st_mode)) ? '/' : ' ';
-			(*files)[nfiles][dir->dirent->d_namlen + 1] = '\0';
-
-			if (++nfiles == size) {
+			if (nfiles == size) {
 				if ((rfiles = realloc(*files, 2 * size * sizeof(char *))) == NULL) {
 					printf("\r\npsh: out of memory\r\n");
 					err = -ENOMEM;
@@ -358,6 +356,16 @@ static int psh_completepath(char *base, char *prefix, char ***files)
 				*files = rfiles;
 				size *= 2;
 			}
+
+			if (((*files)[nfiles] = malloc(stream->dirent->d_namlen + 2)) == NULL) {
+				printf("\r\npsh: out of memory\r\n");
+				err = -ENOMEM;
+				break;
+			}
+			memcpy((*files)[nfiles], stream->dirent->d_name, stream->dirent->d_namlen);
+			(*files)[nfiles][stream->dirent->d_namlen] = (S_ISDIR(stat.st_mode)) ? '/' : ' ';
+			(*files)[nfiles][stream->dirent->d_namlen + 1] = '\0';
+			nfiles++;
 		}
 	} while (0);
 
@@ -411,8 +419,8 @@ static void psh_movecursor(int col, int n)
 
 static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
 {
-	int i, j, nfiles, err, esc = 0, n = 0, m = 0, ln = 0, hp = cmdhist->he, cmdsz = 128;
-	char c, *path, *base, *prefix, **files, buff[8];
+	int i, nfiles, err, esc = 0, n = 0, m = 0, ln = 0, hp = cmdhist->he, cmdsz = 128;
+	char c, *path, *fpath, *dir, *base, **files, buff[8];
 
 	if ((*cmd = (char *)malloc(cmdsz)) == NULL) {
 		printf("psh: out of memory\n");
@@ -493,23 +501,19 @@ static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
 				i = n - i;
 				c = path[i];
 				path[i] = '\0';
-				if ((base = canonicalize_file_name(path)) == NULL) {
+				if ((fpath = canonicalize_file_name(path)) == NULL) {
 					printf("\r\npsh: out of memory\r\n");
 					path[i] = c;
 					return -ENOMEM;
 				}
 				path[i] = c;
 
-				for (j = strlen(base); base[j - 1] != '/'; j--);
-				if ((prefix = strdup(base + j)) == NULL) {
-					printf("\r\npsh: out of memory\r\n");
-					free(base);
-					return -ENOMEM;
-				}
-				base[j] = '\0';
+				if (i && (path[i - 1] == '/') && (fpath[strlen(fpath) - 1] == '.'))
+					fpath[strlen(fpath) - 1] = '\0';
+				splitname(fpath, &base, &dir);
 
 				do {
-					if ((err = psh_completepath(base, prefix, &files)) < 0)
+					if ((err = psh_completepath(dir, base, &files)) < 0)
 						break;
 
 					/* Complete path */
@@ -519,19 +523,19 @@ static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
 								break;
 							hp = cmdhist->he;
 						}
-						i = strlen(files[0]) - strlen(prefix);
+						i = strlen(files[0]) - strlen(base);
 						if ((n + m + i + 1 > cmdsz) && ((err = psh_extendcmd(cmd, &cmdsz, 2 * (n + m + i) + 1)) < 0)) {
+							free(dir);
 							free(base);
-							free(prefix);
 							break;
 						}
 						memmove(*cmd + n + i, *cmd + n, m);
-						memcpy(*cmd + n, files[0] + strlen(prefix), i);
+						memcpy(*cmd + n, files[0] + strlen(base), i);
 						write(STDOUT_FILENO, *cmd + n, i + m);
 						n += i;
 						psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
 					}
-					/* Print suggestions */
+					/* Print hits */
 					else {
 						//psh_printhints();
 					}
@@ -540,9 +544,7 @@ static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
 				for (i = 0; i < nfiles; i++)
 					free(files[i]);
 				free(files);
-				free(base);
-				free(prefix);
-				files = NULL;
+				free(fpath);
 
 				if (err < 0)
 					return err;
