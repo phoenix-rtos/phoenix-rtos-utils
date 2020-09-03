@@ -512,8 +512,9 @@ int psh_ls(int argc, char **argv)
 	for (i = 0; i < npaths; i++) {
 		c = strlen(paths[i]);
 
-		if ((c > 1) && (paths[i][c - 1] == '/')) {
-			paths[i][c - 1] = '\0';
+		if (paths[i][c - 1] == '/') {
+			if (c > 1)
+				paths[i][c - 1] = '\0';
 
 			if ((ret = lstat(paths[i], &psh_ls_common.files[nfiles].stat)) < 0) {
 				printf("ls: can't access %s/: no such file or directory\n", paths[i]);
