@@ -381,6 +381,62 @@ static int psh_completepath(char *dir, char *base, char ***files)
 }
 
 
+static int psh_printfiles(char **files, int nfiles)
+{
+	int i, row, col, rows, cols, *colsz, len = 0;
+	struct winsize ws;
+
+	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) < 0) {
+		ws.ws_row = 25;
+		ws.ws_col = 80;
+	}
+
+	for (i = 0; i < nfiles; i++)
+		len += strlen(files[i]);
+
+	rows = len / ws.ws_col + 1;
+	cols = nfiles / rows + 1;
+
+	if ((colsz = malloc(cols * sizeof(int))) == NULL) {
+		printf("psh: out of memory\r\n");
+		return -ENOMEM;
+	}
+
+	for (; rows <= nfiles; rows++) {
+		cols = nfiles / rows + !!(nfiles % rows);
+
+		for (i = 0; i < cols; i++)
+			colsz[i] = 0;
+		
+		for (i = 0; i < nfiles; i++) {
+			col = i / rows;
+			if ((len = strlen(files[i])) + 2 > colsz[col])
+				colsz[col] = len + 2;
+		}
+		colsz[cols - 1] -= 2;
+
+		for (len = 0, col = 0; col < cols; col++)
+			len += colsz[col];
+		
+		if (len < ws.ws_col)
+			break;
+	}
+
+	for (row = 0; row < rows; row++) {
+		for (col = 0; col < cols; col++) {
+			if ((i = col * rows + row) >= nfiles)
+				continue;
+			if ((len = colsz[col]) > ws.ws_col)
+				len = ws.ws_col;
+			printf("%-*s", len, files[i]);
+		}
+		printf("\r\n");
+	}
+
+	return EOK;
+}
+
+
 static void psh_movecursor(int col, int n)
 {
 	struct winsize ws;
@@ -414,6 +470,12 @@ static void psh_movecursor(int col, int n)
 		sprintf(buff, "\033[%dD", -n);
 		write(STDOUT_FILENO, buff, strlen(buff));
 	}
+}
+
+
+static int psh_cmpname(const void *n1, const void *n2)
+{
+	return strcasecmp(*(char **)n1, *(char **)n2);
 }
 
 
@@ -513,11 +575,28 @@ static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
 				splitname(fpath, &base, &dir);
 
 				do {
-					if ((err = psh_completepath(dir, base, &files)) < 0)
+					if ((nfiles = psh_completepath(dir, base, &files)) <= 0) {
+						err = nfiles;
 						break;
+					}
 
+					/* Print hints */
+					if (nfiles > 1) {
+						psh_movecursor(n + sizeof(PROMPT) - 1, m);
+						printf("\r\n");
+						qsort(files, nfiles, sizeof(char *), psh_cmpname);
+						if ((err = psh_printfiles(files, nfiles)) < 0)
+							break;
+						write(STDOUT_FILENO, "\r\033[0J", 5);
+						write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
+						if (hp == cmdhist->he)
+							write(STDOUT_FILENO, *cmd, n + m);
+						else
+							psh_printhistent(cmdhist->entries + hp);
+						psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
+					}
 					/* Complete path */
-					if ((nfiles = err) == 1) {
+					else {
 						if (hp != cmdhist->he) {
 							if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
 								break;
@@ -534,10 +613,6 @@ static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
 						write(STDOUT_FILENO, *cmd + n, i + m);
 						n += i;
 						psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
-					}
-					/* Print hits */
-					else {
-						//psh_printhints();
 					}
 				} while (0);
 
