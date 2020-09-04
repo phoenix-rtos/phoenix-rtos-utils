@@ -587,6 +587,7 @@ static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
 						qsort(files, nfiles, sizeof(char *), psh_cmpname);
 						if ((err = psh_printfiles(files, nfiles)) < 0)
 							break;
+						fflush(NULL);
 						write(STDOUT_FILENO, "\r\033[0J", 5);
 						write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
 						if (hp == cmdhist->he)
