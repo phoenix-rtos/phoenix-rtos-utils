@@ -74,15 +74,15 @@ int psh_ps(int argc, char **argv)
 	}
 
 	if ((info = malloc(n * sizeof(threadinfo_t))) == NULL) {
-		printf("ps: out of memory\n");
+		fprintf(stderr, "ps: out of memory\n");
 		return -ENOMEM;
 	}
 
 	while ((tcnt = threadsinfo(n, info)) >= n) {
 		n *= 2;
 		if ((rinfo = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
+			fprintf(stderr, "ps: out of memory\n");
 			free(info);
-			printf("ps: out of memory\n");
 			return -ENOMEM;
 		}
 		info = rinfo;
@@ -116,10 +116,10 @@ int psh_ps(int argc, char **argv)
 	qsort(info, tcnt, sizeof(threadinfo_t), cmp);
 
 	for (i = 0; i < tcnt; i++) {
-		psh_prefix(10, info[i].wait, -6, 1, buff);
 		info[i].cpuTime /= 10000;
 		h = info[i].cpuTime / 3600;
 		m = (info[i].cpuTime - h * 3600) / 60;
+		psh_prefix(10, info[i].wait, -6, 1, buff);
 		printf("%5u %5u %2d %5s %3u.%u %4ss %4u:%02u ", info[i].pid, info[i].ppid, info[i].priority, (info[i].state) ? "sleep" : "ready",
 			info[i].load / 10, info[i].load % 10, buff, h, m);
 

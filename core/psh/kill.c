@@ -25,13 +25,13 @@ int psh_kill(int argc, char **argv)
 	char *end;
 
 	if (argc != 2) {
-		printf("usage: %s <pid>\n", argv[0]);
+		fprintf(stderr, "usage: %s <pid>\n", argv[0]);
 		return -EINVAL;
 	}
 
 	pid = strtoul(argv[1], &end, 10);
 	if (*end != '\0') {
-		printf("kill: could not parse process id: %s\n", argv[1]);
+		fprintf(stderr, "kill: could not parse process id: %s\n", argv[1]);
 		return -EINVAL;
 	}
 

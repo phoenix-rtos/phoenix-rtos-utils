@@ -31,7 +31,7 @@ int psh_perf(int argc, char **argv)
 		timeout = strtoul(argv[1], &end, 10);
 
 		if (*end != '\0' || !timeout) {
-			printf("perf: timeout argument must be integer greater than 0\n");
+			fprintf(stderr, "perf: timeout argument must be integer greater than 0\n");
 			return -EINVAL;
 		}
 		timeout *= 1000 * 1000;
@@ -45,8 +45,8 @@ int psh_perf(int argc, char **argv)
 	while ((tcnt = threadsinfo(n, info)) >= n) {
 		n *= 2;
 		if ((rinfo = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
-			free(info);
 			fprintf(stderr, "perf: out of memory\n");
+			free(info);
 			return -ENOMEM;
 		}
 		info = rinfo;
@@ -55,13 +55,13 @@ int psh_perf(int argc, char **argv)
 	if (fwrite(&tcnt, sizeof(tcnt), 1, stdout) != 1) {
 		fprintf(stderr, "perf: failed or partial write\n");
 		free(info);
-		return -1;
+		return -EIO;
 	}
 
 	if (fwrite(info, sizeof(threadinfo_t), tcnt, stdout) != tcnt) {
 		fprintf(stderr, "perf: failed or partial write\n");
 		free(info);
-		return -1;
+		return -EIO;
 	}
 
 	free(info);

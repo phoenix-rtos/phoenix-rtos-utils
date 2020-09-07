@@ -43,14 +43,14 @@ int psh_cat(int argc, char **argv)
 		}
 	}
 
-	if ((buff = (char *)malloc(1024)) == NULL) {
-		printf("cat: out of memory\n");
+	if ((buff = malloc(1024)) == NULL) {
+		fprintf(stderr, "cat: out of memory\n");
 		return -ENOMEM;
 	}
 
 	for (; !psh_common.sigint && !psh_common.sigquit && !psh_common.sigstop && (optind < argc); optind++) {
 		if ((file = fopen(argv[optind], "r")) == NULL) {
-			printf("cat: %s no such file\n", argv[optind]);
+			fprintf(stderr, "cat: %s no such file\n", argv[optind]);
 		}
 		else {
 			while (!psh_common.sigint && !psh_common.sigquit && !psh_common.sigstop && ((ret = fread(buff, 1, 1024, file)) > 0))

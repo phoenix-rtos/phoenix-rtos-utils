@@ -269,7 +269,7 @@ int psh_top(int argc, char **argv)
 		case 'd':
 			delay = strtoul(optarg, &end, 10);
 			if (*end != '\0' || !delay) {
-				printf("top: -d option requires integer greater than 0\n");
+				fprintf(stderr, "top: -d option requires integer greater than 0\n");
 				return -EINVAL;
 			}
 			break;
@@ -277,7 +277,7 @@ int psh_top(int argc, char **argv)
 		case 'n':
 			niter = strtoul(optarg, &end, 10);
 			if (*end != '\0' || !niter) {
-				printf("top: -n option requires integer greater than 0\n");
+				fprintf(stderr, "top: -n option requires integer greater than 0\n");
 				return -EINVAL;
 			}
 			break;
@@ -290,12 +290,12 @@ int psh_top(int argc, char **argv)
 	}
 
 	if ((info = malloc(n * sizeof(threadinfo_t))) == NULL) {
-		printf("top: out of memory\n");
+		fprintf(stderr, "top: out of memory\n");
 		return -ENOMEM;
 	}
 
 	if ((previnfo = malloc(n * sizeof(threadinfo_t))) == NULL) {
-		printf("top: out of memory\n");
+		fprintf(stderr, "top: out of memory\n");
 		free(info);
 		return -ENOMEM;
 	}
@@ -318,13 +318,13 @@ int psh_top(int argc, char **argv)
 		while ((totcnt = threadsinfo(n, info)) >= n) {
 			n *= 2;
 			if ((rinfo = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
-				printf("ps: out of memory\n");
+				fprintf(stderr, "ps: out of memory\n");
 				psh_top_free(info, previnfo);
 				return -ENOMEM;
 			}
 			info = rinfo;
 			if ((rinfo = realloc(previnfo, n * sizeof(threadinfo_t))) == NULL) {
-				printf("ps: out of memory\n");
+				fprintf(stderr, "ps: out of memory\n");
 				psh_top_free(info, previnfo);
 				return -ENOMEM;
 			}

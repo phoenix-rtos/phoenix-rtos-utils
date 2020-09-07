@@ -193,7 +193,6 @@ int psh_prefix(unsigned int base, int x, int y, unsigned int prec, char *buff)
 	int offs, ipart, fpart;
 	const char *(*fp)(int);
 	const char *prefix;
-	char fmt[11];
 
 	/* Support precision for up to 8 decimal places */
 	if (prec > 8)
@@ -250,13 +249,10 @@ int psh_prefix(unsigned int base, int x, int y, unsigned int prec, char *buff)
 	if (x < 0)
 		*buff++ = '-';
 
-	if (fpart) {
-		sprintf(fmt, "%%d.%%0%ud%%s", prec);
-		sprintf(buff, fmt, ipart, fpart, prefix);
-	}
-	else {
+	if (fpart)
+		sprintf(buff, "%d.%0*d%s", ipart, prec, fpart, prefix);
+	else
 		sprintf(buff, "%d%s", ipart, prefix);
-	}
 
 	return EOK;
 }
@@ -266,8 +262,8 @@ static int psh_extendcmd(char **cmd, int *cmdsz, int n)
 {
 	char *rcmd;
 
-	if ((rcmd = (char *)realloc(*cmd, n)) == NULL) {
-		printf("\r\npsh: out of memory\r\n");
+	if ((rcmd = realloc(*cmd, n)) == NULL) {
+		fprintf(stderr, "\r\npsh: out of memory\r\n");
 		free(*cmd);
 		return -ENOMEM;
 	}
@@ -319,7 +315,7 @@ static int psh_completepath(char *dir, char *base, char ***files)
 			dir[dlen++] = '/';
 
 		if ((*files = malloc(size * sizeof(char *))) == NULL) {
-			printf("\r\npsh: out of memory\r\n");
+			fprintf(stderr, "\r\npsh: out of memory\r\n");
 			err = -ENOMEM;
 			break;
 		}
@@ -333,7 +329,7 @@ static int psh_completepath(char *dir, char *base, char ***files)
 
 			i = dlen + stream->dirent->d_namlen;
 			if ((path = malloc(i + 1)) == NULL) {
-				printf("\r\npsh: out of memory\r\n");
+				fprintf(stderr, "\r\npsh: out of memory\r\n");
 				err = -ENOMEM;
 				break;
 			}
@@ -341,7 +337,7 @@ static int psh_completepath(char *dir, char *base, char ***files)
 			strcpy(path + dlen, stream->dirent->d_name);
 
 			if ((err = lstat(path, &stat)) < 0) {
-				printf("\r\npsh: can't stat file %s\r\n", path);
+				fprintf(stderr, "\r\npsh: can't stat file %s\r\n", path);
 				free(path);
 				break;
 			}
@@ -349,7 +345,7 @@ static int psh_completepath(char *dir, char *base, char ***files)
 
 			if (nfiles == size) {
 				if ((rfiles = realloc(*files, 2 * size * sizeof(char *))) == NULL) {
-					printf("\r\npsh: out of memory\r\n");
+					fprintf(stderr, "\r\npsh: out of memory\r\n");
 					err = -ENOMEM;
 					break;
 				}
@@ -358,7 +354,7 @@ static int psh_completepath(char *dir, char *base, char ***files)
 			}
 
 			if (((*files)[nfiles] = malloc(stream->dirent->d_namlen + 2)) == NULL) {
-				printf("\r\npsh: out of memory\r\n");
+				fprintf(stderr, "\r\npsh: out of memory\r\n");
 				err = -ENOMEM;
 				break;
 			}
@@ -398,7 +394,7 @@ static int psh_printfiles(char **files, int nfiles)
 	cols = nfiles / rows + 1;
 
 	if ((colsz = malloc(cols * sizeof(int))) == NULL) {
-		printf("psh: out of memory\r\n");
+		fprintf(stderr, "\r\npsh: out of memory\r\n");
 		return -ENOMEM;
 	}
 
@@ -422,6 +418,7 @@ static int psh_printfiles(char **files, int nfiles)
 			break;
 	}
 
+	printf("\r\n");
 	for (row = 0; row < rows; row++) {
 		for (col = 0; col < cols; col++) {
 			if ((i = col * rows + row) >= nfiles)
@@ -432,6 +429,7 @@ static int psh_printfiles(char **files, int nfiles)
 		}
 		printf("\r\n");
 	}
+	fflush(stdout);
 
 	return EOK;
 }
@@ -440,7 +438,6 @@ static int psh_printfiles(char **files, int nfiles)
 static void psh_movecursor(int col, int n)
 {
 	struct winsize ws;
-	char buff[8];
 	int p;
 
 	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) < 0) {
@@ -452,24 +449,20 @@ static void psh_movecursor(int col, int n)
 	if (col + n < 0) {
 		p = (-(col + n) + ws.ws_col - 1) / ws.ws_col;
 		n += p * ws.ws_col;
-		sprintf(buff, "\033[%dA", p);
-		write(STDOUT_FILENO, buff, strlen(buff));
+		printf("\033[%dA", p);
 	}
 	else if (col + n > ws.ws_col - 1) {
 		p = (col + n) / ws.ws_col;
 		n -= p * ws.ws_col;
-		sprintf(buff, "\033[%dB", p);
-		write(STDOUT_FILENO, buff, strlen(buff));
+		printf("\033[%dB", p);
 	}
 
-	if (n > 0) {
-		sprintf(buff, "\033[%dC", n);
-		write(STDOUT_FILENO, buff, strlen(buff));
-	}
-	else if (n < 0) {
-		sprintf(buff, "\033[%dD", -n);
-		write(STDOUT_FILENO, buff, strlen(buff));
-	}
+	if (n > 0)
+		printf("\033[%dC", n);
+	else if (n < 0)
+		printf("\033[%dD", -n);
+
+	fflush(stdout);
 }
 
 
@@ -484,8 +477,8 @@ static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
 	int i, nfiles, err, esc = 0, n = 0, m = 0, ln = 0, hp = cmdhist->he, cmdsz = 128;
 	char c, *path, *fpath, *dir, *base, **files, buff[8];
 
-	if ((*cmd = (char *)malloc(cmdsz)) == NULL) {
-		printf("psh: out of memory\n");
+	if ((*cmd = malloc(cmdsz)) == NULL) {
+		fprintf(stderr, "\r\npsh: out of memory\r\n");
 		return -ENOMEM;
 	}
 
@@ -513,10 +506,10 @@ static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
 
 			/* ETX => cancel command */
 			if (c == '\003') {
-				write(STDOUT_FILENO, "^C", 2);
+				printf("^C");
 				if (m > 2)
 					psh_movecursor(n + sizeof(PROMPT) + 1, m - 2);
-				write(STDOUT_FILENO, "\r\n", 2);
+				printf("\r\n");
 				n = m = 0;
 				break;
 			}
@@ -534,7 +527,7 @@ static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
 					psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
 				}
 				else if (!(n + m)) {
-					write(STDOUT_FILENO, "exit\r\n", 6);
+					printf("exit\r\n");
 					exit(EXIT_SUCCESS);
 				}
 			}
@@ -564,7 +557,7 @@ static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
 				c = path[i];
 				path[i] = '\0';
 				if ((fpath = canonicalize_file_name(path)) == NULL) {
-					printf("\r\npsh: out of memory\r\n");
+					fprintf(stderr, "\r\npsh: out of memory\r\n");
 					path[i] = c;
 					return -ENOMEM;
 				}
@@ -583,11 +576,9 @@ static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
 					/* Print hints */
 					if (nfiles > 1) {
 						psh_movecursor(n + sizeof(PROMPT) - 1, m);
-						printf("\r\n");
 						qsort(files, nfiles, sizeof(char *), psh_cmpname);
 						if ((err = psh_printfiles(files, nfiles)) < 0)
 							break;
-						fflush(NULL);
 						write(STDOUT_FILENO, "\r\033[0J", 5);
 						write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
 						if (hp == cmdhist->he)
@@ -776,7 +767,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 	/* Enable raw mode for command processing */
 	cfmakeraw(&raw);
 	if ((err = tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw)) < 0) {
-		printf("psh: failed to enable raw mode\n");
+		fprintf(stderr, "psh: failed to enable raw mode\n");
 		return err;
 	}
 
@@ -805,14 +796,14 @@ static int psh_parsecmd(char *line, int *argc, char ***argv)
 	if ((cmd = strtok(line, "\t ")) == NULL)
 		return -EINVAL;
 
-	if ((*argv = (char **)malloc(2 * sizeof(char *))) == NULL)
+	if ((*argv = malloc(2 * sizeof(char *))) == NULL)
 		return -ENOMEM;
 
 	*argc = 0;
 	(*argv)[(*argc)++] = cmd;
 
 	while ((arg = strtok(NULL, "\t ")) != NULL) {
-		if ((rargv = (char **)realloc(*argv, (*argc + 2) * sizeof(char *))) == NULL) {
+		if ((rargv = realloc(*argv, (*argc + 2) * sizeof(char *))) == NULL) {
 			free(*argv);
 			return -ENOMEM;
 		}
@@ -820,7 +811,6 @@ static int psh_parsecmd(char *line, int *argc, char ***argv)
 		*argv = rargv;
 		(*argv)[(*argc)++] = arg;
 	}
-
 	(*argv)[*argc] = NULL;
 
 	return EOK;
@@ -833,14 +823,14 @@ static int psh_runfile(char **argv)
 	pid_t pid;
 
 	if ((pid = vfork()) < 0) {
-		printf("psh: vfork failed\n");
+		fprintf(stderr, "psh: vfork failed\n");
 		return pid;
 	}
 	else if (!pid) {
 		/* Put process in its own process group */
 		pid = getpid();
 		if (setpgid(pid, pid) < 0) {
-			printf("psh: failed to put %s process in its own process group\n", argv[0]);
+			fprintf(stderr, "psh: failed to put %s process in its own process group\n", argv[0]);
 			exit(EXIT_FAILURE);
 		}
 
@@ -857,15 +847,15 @@ static int psh_runfile(char **argv)
 		break;
 
 	case -ENOMEM:
-		printf("psh: out of memory\n");
+		fprintf(stderr, "psh: out of memory\n");
 		break;
 
 	case -EINVAL:
-		printf("psh: invalid executable\n");
+		fprintf(stderr, "psh: invalid executable\n");
 		break;
 
 	default:
-		printf("psh: exec failed with code %d\n", err);
+		fprintf(stderr, "psh: exec failed with code %d\n", err);
 	}
 
 	/* Take back terminal control */
@@ -885,12 +875,12 @@ static int psh_runscript(char *path)
 	pid_t pid;
 
 	if ((stream = fopen(path, "r")) == NULL) {
-		printf("psh: failed to open file %s\n", path);
+		fprintf(stderr, "psh: failed to open file %s\n", path);
 		return -EINVAL;
 	}
 
 	if ((getline(&line, &n, stream) < sizeof(SCRIPT_MAGIC)) || strncmp(line, SCRIPT_MAGIC, sizeof(SCRIPT_MAGIC) - 1)) {
-		printf("psh: %s is not a psh script\n", path);
+		fprintf(stderr, "psh: %s is not a psh script\n", path);
 		free(line);
 		fclose(stream);
 		return -EINVAL;
@@ -907,23 +897,23 @@ static int psh_runscript(char *path)
 
 			do {
 				if ((err = psh_parsecmd(line + 1, &argc, &argv)) < 0) {
-					printf("psh: failed to parse line %d\n", i);
+					fprintf(stderr, "psh: failed to parse line %d\n", i);
 					break;
 				}
 
 				if ((pid = vfork()) < 0) {
-					printf("psh: vfork failed in line %d\n", i);
+					fprintf(stderr, "psh: vfork failed in line %d\n", i);
 					err = pid;
 					break;
 				}
 				else if (!pid) {
 					err = execve(argv[0], argv, NULL);
-					printf("psh: exec failed in line %d\n", i);
+					fprintf(stderr, "psh: exec failed in line %d\n", i);
 					exit(EXIT_FAILURE);
 				}
 
 				if ((line[0] == 'W') && ((err = waitpid(pid, NULL, 0)) < 0)) {
-					printf("psh: waitpid failed in line %d\n", i);
+					fprintf(stderr, "psh: waitpid failed in line %d\n", i);
 					break;
 				}
 			} while (0);
@@ -952,7 +942,7 @@ static int psh_exec(int argc, char **argv)
 	int err;
 
 	if (argc < 2) {
-		printf("usage: %s command [args]...\n", argv[0]);
+		fprintf(stderr, "usage: %s command [args]...\n", argv[0]);
 		return -EINVAL;
 	}
 
@@ -961,15 +951,15 @@ static int psh_exec(int argc, char **argv)
 		break;
 
 	case -ENOMEM:
-		printf("psh: out of memory\n");
+		fprintf(stderr, "psh: out of memory\n");
 		break;
 
 	case -EINVAL:
-		printf("psh: invalid executable\n");
+		fprintf(stderr, "psh: invalid executable\n");
 		break;
 
 	default:
-		printf("psh: exec failed with code %d\n", err);
+		fprintf(stderr, "psh: exec failed with code %d\n", err);
 	}
 
 	return err;
@@ -1001,10 +991,8 @@ static void psh_help(void)
 
 static int psh_history(int argc, char **argv, psh_hist_t *cmdhist)
 {
-	psh_histent_t *entry;
 	unsigned char clear = 0;
-	int c, i, j, size;
-	char fmt[12];
+	int c, i, size;
 
 	while ((c = getopt(argc, argv, "ch")) != -1) {
 		switch (c) {
@@ -1028,14 +1016,13 @@ static int psh_history(int argc, char **argv, psh_hist_t *cmdhist)
 	}
 	else {
 		size = (cmdhist->hb < cmdhist->he) ? cmdhist->he - cmdhist->hb : HISTSZ - cmdhist->hb + cmdhist->he;
-		sprintf(fmt, "  %%%du  ", psh_log(10, size) + 1);
+		c = psh_log(10, size) + 1;
 
 		for (i = 0; i < size; i++) {
-			entry = cmdhist->entries + (cmdhist->hb + i) % HISTSZ;
-			printf(fmt, i + 1);
-			for (j = 0; j < entry->n; j++)
-				printf("%c", (entry->cmd[j] == '\0') ? ' ' : entry->cmd[j]);
-			printf("\n");
+			printf("  %*u  ", c, i + 1);
+			fflush(stdout);
+			psh_printhistent(cmdhist->entries + (cmdhist->hb + i) % HISTSZ);
+			putchar('\n');
 		}
 	}
 
@@ -1091,19 +1078,19 @@ static int psh_run(void)
 	/* Put ourselves in our own process group */
 	pgrp = getpid();
 	if ((err = setpgid(pgrp, pgrp)) < 0) {
-		printf("psh: failed to put shell in its own process group\n");
+		fprintf(stderr, "psh: failed to put shell in its own process group\n");
 		return err;
 	}
 
 	/* Save original terminal settings */
 	if ((err = tcgetattr(STDIN_FILENO, &orig)) < 0) {
-		printf("psh: failed to save terminal settings\n");
+		fprintf(stderr, "psh: failed to save terminal settings\n");
 		return err;
 	}
 
 	/* Take terminal control */
 	if ((err = tcsetpgrp(STDIN_FILENO, pgrp)) < 0) {
-		printf("psh: failed to take terminal control\n");
+		fprintf(stderr, "psh: failed to take terminal control\n");
 		return err;
 	}
 
@@ -1275,7 +1262,7 @@ int main(int argc, char **argv)
 		psh_top(argc, argv);
 	}
 	else {
-		printf("psh: %s: unknown command\n", argv[0]);
+		fprintf(stderr, "psh: %s: unknown command\n", argv[0]);
 	}
 
 	return EOK;

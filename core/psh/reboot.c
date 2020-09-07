@@ -38,7 +38,7 @@ int psh_reboot(int argc, char **argv)
 #endif
 
 	if (reboot(magic) < 0) {
-		printf("reboot: failed to restart the machine\n");
+		fprintf(stderr, "reboot: failed to restart the machine\n");
 		return -1;
 	}
 

@@ -113,7 +113,7 @@ static int psh_mem_process(char *memarg)
 		do {
 			mapsz = info.entry.kmapsz;
 			if ((rmap = realloc(info.entry.kmap, mapsz * sizeof(entryinfo_t))) == NULL) {
-				printf("mem: out of memory\n");
+				fprintf(stderr, "mem: out of memory\n");
 				free(info.entry.kmap);
 				return -ENOMEM;
 			}
@@ -130,7 +130,7 @@ static int psh_mem_process(char *memarg)
 			info.entry.pid = strtoul(memarg, &end, 10);
 
 			if (*end != '\0') {
-				printf("mem: could not parse process id: '%s'\n", memarg);
+				fprintf(stderr, "mem: could not parse process id: '%s'\n", memarg);
 				return -EINVAL;
 			}
 		}
@@ -144,7 +144,7 @@ static int psh_mem_process(char *memarg)
 		do {
 			mapsz = info.entry.mapsz;
 			if ((rmap = realloc(info.entry.map, mapsz * sizeof(entryinfo_t))) == NULL) {
-				printf("mem: out of memory\n");
+				fprintf(stderr, "mem: out of memory\n");
 				free(info.page.map);
 				return -ENOMEM;
 			}
@@ -154,7 +154,7 @@ static int psh_mem_process(char *memarg)
 		while (info.entry.mapsz > mapsz);
 
 		if (info.entry.mapsz < 0) {
-			printf("mem: process with pid %u not found\n", info.entry.pid);
+			fprintf(stderr, "mem: process with pid %u not found\n", info.entry.pid);
 			free(info.entry.map);
 			return -EINVAL;
 		}
@@ -187,7 +187,7 @@ static int psh_mem_page(void)
 	do {
 		mapsz = info.page.mapsz;
 		if ((rmap = realloc(info.page.map, mapsz * sizeof(pageinfo_t))) == NULL) {
-			printf("psh: out of memory\n");
+			fprintf(stderr, "mem: out of memory\n");
 			free(info.page.map);
 			return -ENOMEM;
 		}
@@ -233,16 +233,18 @@ int psh_mem(int argc, char **argv)
 		switch (c) {
 		case 'm':
 			return psh_mem_process(argv[optind]);
+
 		case 'p':
 			return psh_mem_page();
+
 		default:
 			return EOK;
 		}
 	}
 
 	if (optind < argc) {
-		printf("mem: unknown argument: %s\n", argv[optind]);
-		return -1;
+		fprintf(stderr, "mem: unknown argument: %s\n", argv[optind]);
+		return -EINVAL;
 	}
 
 	return EOK;

@@ -29,12 +29,12 @@ int psh_mount(int argc, char **argv)
 	int err;
 
 	if (argc != 6) {
-		printf("usage: %s <source> <target> <fstype> <mode> <data>\n", argv[0]);
-		return -1;
+		fprintf(stderr, "usage: %s <source> <target> <fstype> <mode> <data>\n", argv[0]);
+		return -EINVAL;
 	}
 
 	if ((err = mount(argv[1], argv[2], argv[3], atoi(argv[4]), argv[5])) < 0)
-		printf("mount: %s\n", strerror(err));
+		fprintf(stderr, "mount: %s\n", strerror(err));
 
 	return EOK;
 }
@@ -48,8 +48,8 @@ int psh_bind(int argc, char **argv)
 	int err;
 
 	if (argc != 3) {
-		printf("usage: %s <source> <target>\n", argv[0]);
-		return -1;
+		fprintf(stderr, "usage: %s <source> <target>\n", argv[0]);
+		return -EINVAL;
 	}
 
 	if (lookup(argv[1], NULL, &soid) < 0)
@@ -83,12 +83,12 @@ int psh_sync(int argc, char **argv)
 	oid_t oid;
 
 	if (argc != 2) {
-		printf("usage: %s <device path>\n", argv[0]);
-		return -1;
+		fprintf(stderr, "usage: %s <device path>\n", argv[0]);
+		return -EINVAL;
 	}
 
 	if (lookup(argv[1], NULL, &oid) < 0)
-		return -1;
+		return -ENXIO;
 
 	msg.type = mtSync;
 
@@ -102,13 +102,13 @@ int psh_touch(int argc, char **argv)
 	int i;
 
 	if (argc < 2) {
-		printf("usage: %s <file path>...\n", argv[0]);
-		return -1;
+		fprintf(stderr, "usage: %s <file path>...\n", argv[0]);
+		return -EINVAL;
 	}
 
 	for (i = 1; i < argc; i++) {
 		if ((file = fopen(argv[i], "w")) == NULL)
-			printf("touch: failed to open %s\n", argv[i]);
+			fprintf(stderr, "touch: failed to open %s\n", argv[i]);
 		else
 			fclose(file);
 	}
@@ -122,13 +122,13 @@ int psh_mkdir(int argc, char **argv)
 	int i;
 
 	if (argc < 2) {
-		printf("usage: %s <dir path>...\n", argv[0]);
-		return -1;
+		fprintf(stderr, "usage: %s <dir path>...\n", argv[0]);
+		return -EINVAL;
 	}
 
 	for (i = 1; i < argc; i++) {
 		if (mkdir(argv[i], 0) < 0)
-			printf("mkdir: failed to create %s directory\n", argv[i]);
+			fprintf(stderr, "mkdir: failed to create %s directory\n", argv[i]);
 	}
 
 	return EOK;

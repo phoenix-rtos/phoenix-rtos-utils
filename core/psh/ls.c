@@ -109,8 +109,8 @@ static size_t *psh_ls_computerows(size_t *rows, size_t *cols, size_t nfiles)
 	nrows = sum / psh_ls_common.ws.ws_col + 1;
 	ncols = nfiles / nrows + 1;
 
-	if ((colsz = (size_t *)malloc(ncols * sizeof(size_t))) == NULL) {
-		printf("ls: out of memory\n");
+	if ((colsz = malloc(ncols * sizeof(size_t))) == NULL) {
+		fprintf(stderr, "ls: out of memory\n");
 		return NULL;
 	}
 
@@ -143,9 +143,6 @@ static size_t *psh_ls_computerows(size_t *rows, size_t *cols, size_t nfiles)
 
 static void psh_ls_printfile(fileinfo_t *file, size_t width)
 {
-	char fmt[8];
-
-	sprintf(fmt, "%%-%ds", width);
 	if (S_ISREG(file->stat.st_mode) && file->stat.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH))
 		printf(EXE_COLOR);
 	else if (S_ISDIR(file->stat.st_mode))
@@ -155,7 +152,7 @@ static void psh_ls_printfile(fileinfo_t *file, size_t width)
 	else if (S_ISLNK(file->stat.st_mode))
 		printf(SYM_COLOR);
 
-	printf(fmt, file->name);
+	printf("%-*s", width, file->name);
 	printf("\033[0m");
 }
 
@@ -167,7 +164,7 @@ static int psh_ls_copyname(fileinfo_t *file, const char *name)
 
 	if (file->memlen <= namelen) {
 		if ((rname = realloc(file->name, namelen + 1)) == NULL) {
-			printf("ls: out of memory\n");
+			fprintf(stderr, "ls: out of memory\n");
 			return -ENOMEM;
 		}
 		file->memlen = namelen + 1;
@@ -190,8 +187,8 @@ static int psh_ls_readentry(fileinfo_t *file, struct dirent *dir, const char *pa
 	if ((ret = psh_ls_copyname(file, dir->d_name)) < 0)
 		return ret;
 
-	if ((fullname = (char *)malloc((file->namelen + pathlen + 2) * sizeof(char))) == NULL) {
-		printf("ls: out of memory\n");
+	if ((fullname = malloc((file->namelen + pathlen + 2) * sizeof(char))) == NULL) {
+		fprintf(stderr, "ls: out of memory\n");
 		return -ENOMEM;
 	}
 	strcpy(fullname, path);
@@ -205,7 +202,7 @@ static int psh_ls_readentry(fileinfo_t *file, struct dirent *dir, const char *pa
 	}
 
 	if ((ret = lstat(fullname, &file->stat)) < 0) {
-		printf("ls: can't stat file %s\n", dir->d_name);
+		fprintf(stderr, "ls: can't stat file %s\n", dir->d_name);
 		free(fullname);
 		return ret;
 	}
@@ -252,7 +249,7 @@ static unsigned int psh_ls_numplaces(unsigned int n)
 static void psh_ls_printlong(size_t nfiles)
 {
 	fileinfo_t *files = psh_ls_common.files;
-	char fmt[8], perms[11], buf[80];
+	char perms[11], buff[80];
 	size_t linksz = 1;
 	size_t usersz = 3;
 	size_t grpsz = 3;
@@ -313,32 +310,16 @@ static void psh_ls_printlong(size_t nfiles)
 		if (files[i].stat.st_mode & S_IXOTH)
 			perms[9] = 'x';
 
-		printf("%s ", perms);
-		sprintf(fmt, "%%%dd ", linksz);
-		printf(fmt, files[i].stat.st_nlink);
-		sprintf(fmt, "%%-%ds ", usersz);
-
-		if (files[i].pw)
-			printf(fmt, files[i].pw->pw_name);
-		else
-			printf(fmt, "---");
-
-		sprintf(fmt, "%%-%ds ", grpsz);
 		files[i].gr = getgrgid(files[i].stat.st_gid);
-		if (files[i].gr)
-			printf(fmt, files[i].gr->gr_name);
-		else
-			printf(fmt, "---");
-
-		sprintf(fmt, "%%%dd ", sizesz);
-		printf(fmt, files[i].stat.st_size);
-
 		localtime_r(&files[i].stat.st_mtime, &t);
-		strftime(buf, 80, "%b ", &t);
-		sprintf(fmt, "%%%dd ", daysz);
-		sprintf(buf + 4, fmt, t.tm_mday);
-		strftime(buf + 5 + daysz, 75 - daysz, "%H:%M", &t);
-		printf("%s ", buf);
+		strftime(buff, 80, "%b ", &t);
+		sprintf(buff + 4, "%*d ", daysz, t.tm_mday);
+		strftime(buff + 5 + daysz, 75 - daysz, "%H:%M", &t);
+
+		printf("%s %*d ", perms, linksz, files[i].stat.st_nlink);
+		printf("%-*s ", usersz, (files[i].pw != NULL) ? files[i].pw->pw_name : "---");
+		printf("%-*s ", grpsz, (files[i].gr != NULL) ? files[i].gr->gr_name : "---");
+		printf("%*d %s ", sizesz, files[i].stat.st_size, buff);
 
 		psh_ls_printfile(&files[i], files[i].namelen);
 		putchar('\n');
@@ -396,8 +377,8 @@ static int psh_ls_expandbuff(size_t size)
 	fileinfo_t *rptr;
 	size_t i;
 
-	if ((rptr = (fileinfo_t *)realloc(psh_ls_common.files, size * sizeof(fileinfo_t))) == NULL) {
-		printf("ls: out of memory\n");
+	if ((rptr = realloc(psh_ls_common.files, size * sizeof(fileinfo_t))) == NULL) {
+		fprintf(stderr, "ls: out of memory\n");
 		return -ENOMEM;
 	}
 
@@ -428,7 +409,7 @@ static void psh_ls_free(void)
 int psh_ls(int argc, char **argv)
 {
 	unsigned int i, npaths = 0;
-	int c, ret = EOK, nfiles = 0;
+	int c, nfiles = 0, ret = EOK;
 	char **paths = NULL;
 	struct dirent *dir;
 	const char *path;
@@ -499,7 +480,7 @@ int psh_ls(int argc, char **argv)
 	}
 
 	if ((npaths > 0) && ((psh_ls_common.odir = calloc(npaths, sizeof(int *))) == NULL)) {
-		printf("ls: out of memory\n");
+		fprintf(stderr, "ls: out of memory\n");
 		return -ENOMEM;
 	}
 
@@ -517,16 +498,16 @@ int psh_ls(int argc, char **argv)
 				paths[i][c - 1] = '\0';
 
 			if ((ret = lstat(paths[i], &psh_ls_common.files[nfiles].stat)) < 0) {
-				printf("ls: can't access %s/: no such file or directory\n", paths[i]);
+				fprintf(stderr, "ls: can't access %s/: no such file or directory\n", paths[i]);
 				continue;
 			}
 			else if (!S_ISDIR(psh_ls_common.files[nfiles].stat.st_mode)) {
-				printf("ls: can't access %s/: not a directory\n", paths[i]);
+				fprintf(stderr, "ls: can't access %s/: not a directory\n", paths[i]);
 				continue;
 			}
 		}
 		else if ((ret = lstat(paths[i], &psh_ls_common.files[nfiles].stat)) < 0) {
-			printf("ls: can't access %s: no such file or directory\n", paths[i]);
+			fprintf(stderr, "ls: can't access %s: no such file or directory\n", paths[i]);
 			continue;
 		}
 
@@ -552,6 +533,7 @@ int psh_ls(int argc, char **argv)
 	if (nfiles > 0) {
 		if (psh_ls_common.cmp != NULL)
 			qsort(psh_ls_common.files, nfiles, sizeof(fileinfo_t), psh_ls_common.cmp);
+
 		if ((ret = psh_ls_printfiles(nfiles)) < 0) {
 			psh_ls_free();
 			return ret;
@@ -572,7 +554,7 @@ int psh_ls(int argc, char **argv)
 		}
 
 		if ((stream = opendir(path)) == NULL) {
-			printf("ls: %s: no such directory\n", path);
+			fprintf(stderr, "ls: failed to open directory %s\n", path);
 			break;
 		}
 
