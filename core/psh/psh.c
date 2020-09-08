@@ -403,7 +403,7 @@ static int psh_printfiles(char **files, int nfiles)
 
 		for (i = 0; i < cols; i++)
 			colsz[i] = 0;
-		
+
 		for (i = 0; i < nfiles; i++) {
 			col = i / rows;
 			if ((len = strlen(files[i])) + 2 > colsz[col])
@@ -413,7 +413,7 @@ static int psh_printfiles(char **files, int nfiles)
 
 		for (len = 0, col = 0; col < cols; col++)
 			len += colsz[col];
-		
+
 		if (len < ws.ws_col)
 			break;
 	}
