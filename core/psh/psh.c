@@ -429,7 +429,9 @@ static int psh_printfiles(char **files, int nfiles)
 		}
 		printf("\r\n");
 	}
+
 	fflush(stdout);
+	free(colsz);
 
 	return EOK;
 }
