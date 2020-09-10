@@ -1113,7 +1113,7 @@ static int psh_run(void)
 		/* Select command history entry */
 		if (cmdhist.he != cmdhist.hb) {
 			entry = &cmdhist.entries[(cmdhist.he) ? cmdhist.he - 1 : HISTSZ - 1];
-			if ((n == entry->n) && !memcmp(cmd, entry->cmd, err)) {
+			if ((n == entry->n) && !memcmp(cmd, entry->cmd, n)) {
 				cmdhist.he = (cmdhist.he) ? cmdhist.he - 1 : HISTSZ - 1;
 				free(entry->cmd);
 			}
