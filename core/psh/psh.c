@@ -474,14 +474,26 @@ static int psh_cmpname(const void *n1, const void *n2)
 }
 
 
-static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
+extern void cfmakeraw(struct termios *termios);
+
+
+static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 {
-	int i, nfiles, err, esc = 0, n = 0, m = 0, ln = 0, hp = cmdhist->he, cmdsz = 128;
+	int i, nfiles, err = EOK, esc = 0, n = 0, m = 0, ln = 0, hp = cmdhist->he, cmdsz = 128;
 	char c, *path, *fpath, *dir, *base, **files, buff[8];
+	struct termios raw = *orig;
 
 	if ((*cmd = malloc(cmdsz)) == NULL) {
-		fprintf(stderr, "\r\npsh: out of memory\r\n");
+		fprintf(stderr, "\npsh: out of memory\n");
 		return -ENOMEM;
+	}
+
+	/* Enable raw mode for command processing */
+	cfmakeraw(&raw);
+	if ((err = tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw)) < 0) {
+		fprintf(stderr, "\npsh: failed to enable raw mode\n");
+		free(*cmd);
+		return err;
 	}
 
 	for (;;) {
@@ -493,11 +505,11 @@ static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
 			if (esc) {
 				if (hp != cmdhist->he) {
 					if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
-						return err;
+						break;
 					hp = cmdhist->he;
 				}
 				if ((n + m + esc + 1 > cmdsz) && ((err = psh_extendcmd(cmd, &cmdsz, 2 * (n + m + esc) + 1)) < 0))
-					return err;
+					break;
 				memmove(*cmd + n + esc, *cmd + n, m);
 				memcpy(*cmd + n, buff, esc);
 				write(STDOUT_FILENO, *cmd + n, esc + m);
@@ -520,7 +532,7 @@ static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
 				if (m) {
 					if (hp != cmdhist->he) {
 						if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
-							return err;
+							break;
 						hp = cmdhist->he;
 					}
 					memmove(*cmd + n, *cmd + n + 1, --m);
@@ -530,7 +542,9 @@ static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
 				}
 				else if (!(n + m)) {
 					printf("exit\r\n");
-					exit(EXIT_SUCCESS);
+					free(*cmd);
+					*cmd = NULL;
+					break;
 				}
 			}
 			/* BS => remove last character */
@@ -538,7 +552,7 @@ static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
 				if (n) {
 					if (hp != cmdhist->he) {
 						if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
-							return err;
+							break;
 						hp = cmdhist->he;
 					}
 					write(STDOUT_FILENO, "\b", 1);
@@ -561,7 +575,8 @@ static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
 				if ((fpath = canonicalize_file_name(path)) == NULL) {
 					fprintf(stderr, "\r\npsh: out of memory\r\n");
 					path[i] = c;
-					return -ENOMEM;
+					err = -ENOMEM;
+					break;
 				}
 				path[i] = c;
 
@@ -616,7 +631,7 @@ static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
 				free(fpath);
 
 				if (err < 0)
-					return err;
+					break;
 			}
 			/* FF => clear screen */
 			else if (c == '\014') {
@@ -633,7 +648,7 @@ static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
 			else if ((c == '\r') || (c == '\n')) {
 				if (hp != cmdhist->he) {
 					if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
-						return err;
+						break;
 					hp = cmdhist->he;
 				}
 				psh_movecursor(n + sizeof(PROMPT) - 1, m);
@@ -651,143 +666,126 @@ static int psh_readcmdraw(psh_hist_t *cmdhist, char **cmd)
 			if (!esc) {
 				if (hp != cmdhist->he) {
 					if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
-						return err;
+						break;
 					hp = cmdhist->he;
 				}
 				if ((n + m + 2 > cmdsz) && ((err = psh_extendcmd(cmd, &cmdsz, 2 * (n + m + 1) + 1)) < 0))
-					return err;
+					break;
 				memmove(*cmd + n + 1, *cmd + n, m);
 				(*cmd)[n++] = c;
 				write(STDOUT_FILENO, *cmd + n - 1, m + 1);
 				psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
+				continue;
 			}
-			else {
-				buff[esc++] = c;
 
-				if (!strncmp(buff, UP, esc)) {
-					if (esc == sizeof(UP) - 1) {
-						if (hp != cmdhist->hb) {
-							if (hp == cmdhist->he)
-								ln = n + m;
-							psh_movecursor(n + sizeof(PROMPT) - 1, -(n + sizeof(PROMPT) - 1));
-							write(STDOUT_FILENO, "\r\033[0J", 5);
-							write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
-							psh_printhistent(cmdhist->entries + (hp = (hp) ? hp - 1 : HISTSZ - 1));
-							n = cmdhist->entries[hp].n;
-							m = 0;
-						}
-						esc = 0;
+			buff[esc++] = c;
+
+			if (!strncmp(buff, UP, esc)) {
+				if (esc == sizeof(UP) - 1) {
+					if (hp != cmdhist->hb) {
+						if (hp == cmdhist->he)
+							ln = n + m;
+						psh_movecursor(n + sizeof(PROMPT) - 1, -(n + sizeof(PROMPT) - 1));
+						write(STDOUT_FILENO, "\r\033[0J", 5);
+						write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
+						psh_printhistent(cmdhist->entries + (hp = (hp) ? hp - 1 : HISTSZ - 1));
+						n = cmdhist->entries[hp].n;
+						m = 0;
 					}
-				}
-				else if (!strncmp(buff, DOWN, esc)) {
-					if (esc == sizeof(DOWN) - 1) {
-						if (hp != cmdhist->he) {
-							psh_movecursor(n + sizeof(PROMPT) - 1, -(n + sizeof(PROMPT) - 1));
-							write(STDOUT_FILENO, "\r\033[0J", 5);
-							write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
-							if ((hp = (hp + 1) % HISTSZ) == cmdhist->he) {
-								n = ln;
-								write(STDOUT_FILENO, *cmd, n);
-							}
-							else {
-								n = cmdhist->entries[hp].n;
-								psh_printhistent(cmdhist->entries + hp);
-							}
-							m = 0;
-						}
-						esc = 0;
-					}
-				}
-				else if (!strncmp(buff, RIGHT, esc)) {
-					if (esc == sizeof(RIGHT) - 1) {
-						if (m) {
-							psh_movecursor(n + sizeof(PROMPT) - 1, 1);
-							n++;
-							m--;
-						}
-						esc = 0;
-					}
-				}
-				else if (!strncmp(buff, LEFT, esc)) {
-					if (esc == sizeof(LEFT) - 1) {
-						if (n) {
-							psh_movecursor(n + sizeof(PROMPT) - 1, -1);
-							n--;
-							m++;
-						}
-						esc = 0;
-					}
-				}
-				else if (!strncmp(buff, DELETE, esc)) {
-					if (esc == sizeof(DELETE) - 1) {
-						if (m) {
-							if (hp != cmdhist->he) {
-								if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
-									return err;
-								hp = cmdhist->he;
-							}
-							memmove(*cmd + n, *cmd + n + 1, --m);
-							write(STDOUT_FILENO, "\033[0J", 4);
-							write(STDOUT_FILENO, *cmd + n, m);
-							psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
-						}
-						esc = 0;
-					}
-				}
-				else {
-					if (hp != cmdhist->he) {
-						if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
-							return err;
-						hp = cmdhist->he;
-					}
-					if ((n + m + esc + 1 > cmdsz) && ((err = psh_extendcmd(cmd, &cmdsz, 2 * (n + m + esc) + 1)) < 0))
-						return err;
-					memmove(*cmd + n + esc, *cmd + n, m);
-					memcpy(*cmd + n, buff, esc);
-					write(STDOUT_FILENO, *cmd + n, esc + m);
-					n += esc;
-					psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
 					esc = 0;
 				}
 			}
+			else if (!strncmp(buff, DOWN, esc)) {
+				if (esc == sizeof(DOWN) - 1) {
+					if (hp != cmdhist->he) {
+						psh_movecursor(n + sizeof(PROMPT) - 1, -(n + sizeof(PROMPT) - 1));
+						write(STDOUT_FILENO, "\r\033[0J", 5);
+						write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
+						if ((hp = (hp + 1) % HISTSZ) == cmdhist->he) {
+							n = ln;
+							write(STDOUT_FILENO, *cmd, n);
+						}
+						else {
+							n = cmdhist->entries[hp].n;
+							psh_printhistent(cmdhist->entries + hp);
+						}
+						m = 0;
+					}
+					esc = 0;
+				}
+			}
+			else if (!strncmp(buff, RIGHT, esc)) {
+				if (esc == sizeof(RIGHT) - 1) {
+					if (m) {
+						psh_movecursor(n + sizeof(PROMPT) - 1, 1);
+						n++;
+						m--;
+					}
+					esc = 0;
+				}
+			}
+			else if (!strncmp(buff, LEFT, esc)) {
+				if (esc == sizeof(LEFT) - 1) {
+					if (n) {
+						psh_movecursor(n + sizeof(PROMPT) - 1, -1);
+						n--;
+						m++;
+					}
+					esc = 0;
+				}
+			}
+			else if (!strncmp(buff, DELETE, esc)) {
+				if (esc == sizeof(DELETE) - 1) {
+					if (m) {
+						if (hp != cmdhist->he) {
+							if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
+								break;
+							hp = cmdhist->he;
+						}
+						memmove(*cmd + n, *cmd + n + 1, --m);
+						write(STDOUT_FILENO, "\033[0J", 4);
+						write(STDOUT_FILENO, *cmd + n, m);
+						psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
+					}
+					esc = 0;
+				}
+			}
+			else {
+				if (hp != cmdhist->he) {
+					if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
+						break;
+					hp = cmdhist->he;
+				}
+				if ((n + m + esc + 1 > cmdsz) && ((err = psh_extendcmd(cmd, &cmdsz, 2 * (n + m + esc) + 1)) < 0))
+					break;
+				memmove(*cmd + n + esc, *cmd + n, m);
+				memcpy(*cmd + n, buff, esc);
+				write(STDOUT_FILENO, *cmd + n, esc + m);
+				n += esc;
+				psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
+				esc = 0;
+			}
 		}
 	}
-	(*cmd)[n + m] = '\0';
-
-	return n + m;
-}
-
-
-extern void cfmakeraw(struct termios *termios);
-
-
-static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
-{
-	struct termios raw = *orig;
-	int err, ret;
-
-	/* Enable raw mode for command processing */
-	cfmakeraw(&raw);
-	if ((err = tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw)) < 0) {
-		fprintf(stderr, "psh: failed to enable raw mode\n");
-		return err;
-	}
-
-	ret = psh_readcmdraw(cmdhist, cmd);
 
 	/* Restore original terminal settings */
-	if ((err = tcsetattr(STDIN_FILENO, TCSAFLUSH, orig)) < 0)
-		printf("psh: failed to restore terminal settings\r\n");
-
-	if (ret < 0)
-		err = ret;
+	if ((esc = tcsetattr(STDIN_FILENO, TCSAFLUSH, orig)) < 0) {
+		fprintf(stderr, "\r\npsh: failed to restore terminal settings\r\n");
+		if (err >= 0)
+			err = esc;
+	}
 
 	if (err < 0) {
 		free(*cmd);
-		ret = err;
+		return err;
 	}
 
-	return ret;
+	if (*cmd == NULL)
+		exit(EXIT_SUCCESS);
+
+	(*cmd)[n + m] = '\0';
+
+	return n + m;
 }
 
 
