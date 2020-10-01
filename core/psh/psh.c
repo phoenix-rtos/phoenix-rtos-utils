@@ -819,11 +819,10 @@ static int psh_parsecmd(char *line, int *argc, char ***argv)
 
 static int psh_runfile(char **argv)
 {
-	volatile int err = EOK;
 	pid_t pid;
 
 	if ((pid = vfork()) < 0) {
-		fprintf(stderr, "psh: vfork failed\n");
+		fprintf(stderr, "psh: vfork failed with code %d\n", pid);
 		return pid;
 	}
 	else if (!pid) {
@@ -831,37 +830,42 @@ static int psh_runfile(char **argv)
 		pid = getpid();
 		if (setpgid(pid, pid) < 0) {
 			fprintf(stderr, "psh: failed to put %s process in its own process group\n", argv[0]);
-			exit(EXIT_FAILURE);
+			_exit(EXIT_FAILURE);
 		}
 
 		/* Take terminal control */
 		tcsetpgrp(STDIN_FILENO, pid);
 
 		/* Execute the file */
-		exit(err = execve(argv[0], argv, NULL));
+		execve(argv[0], argv, NULL);
+
+		switch (errno) {
+		case EIO:
+			fprintf(stderr, "psh: failed to load %s executable\n", argv[0]);
+			break;
+
+		case ENOMEM:
+			fprintf(stderr, "psh: out of memory\n");
+			break;
+
+		case EINVAL:
+		case ENOENT:
+			fprintf(stderr, "psh: invalid executable\n");
+			break;
+
+		default:
+			fprintf(stderr, "psh: exec failed with code %d\n", -errno);
+		}
+
+		_exit(EXIT_FAILURE);
 	}
 
-	switch (err) {
-	case EOK:
-		err = waitpid(pid, NULL, 0);
-		break;
-
-	case -ENOMEM:
-		fprintf(stderr, "psh: out of memory\n");
-		break;
-
-	case -EINVAL:
-		fprintf(stderr, "psh: invalid executable\n");
-		break;
-
-	default:
-		fprintf(stderr, "psh: exec failed with code %d\n", err);
-	}
+	waitpid(pid, NULL, 0);
 
 	/* Take back terminal control */
 	tcsetpgrp(STDIN_FILENO, getpgid(getpid()));
 
-	return err;
+	return EOK;
 }
 
 
@@ -907,9 +911,9 @@ static int psh_runscript(char *path)
 					break;
 				}
 				else if (!pid) {
-					err = execve(argv[0], argv, NULL);
+					execve(argv[0], argv, NULL);
 					fprintf(stderr, "psh: exec failed in line %d\n", i);
-					exit(EXIT_FAILURE);
+					_exit(EXIT_FAILURE);
 				}
 
 				if ((line[0] == 'W') && ((err = waitpid(pid, NULL, 0)) < 0)) {
