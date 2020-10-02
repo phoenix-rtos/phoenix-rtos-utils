@@ -71,9 +71,9 @@ static void psh_mem_procprint(entryinfo_t *e, int mapsz)
 		printf("%p:%p  %-4s  %-5s", e->vaddr, e->vaddr + e->size - 1, prot, flags);
 
 		if (e->offs != -1)
-			printf("  %16llx", e->offs);
+			printf("  %*llx", 2 * sizeof(e->offs), e->offs);
 		else
-			printf("  %16s", "");
+			printf("  %*s", 2 * sizeof(e->offs), "");
 
 		if (e->object == OBJECT_ANONYMOUS)
 			printf("  %s", "(anonymous)");
