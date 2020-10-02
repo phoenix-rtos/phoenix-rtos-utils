@@ -41,36 +41,34 @@ static int psh_mem_summary(void)
 
 static void psh_mem_procprint(entryinfo_t *e, int mapsz)
 {
-	char flags[8], prot[5];
-	unsigned int i, j;
+	char flags[5], prot[4];
+	unsigned int i;
 
-	printf("%-17s  PROT  FLAGS  %16s  OBJECT\n", "SEGMENT", "OFFSET");
+	printf("%-*s  PROT  FLAGS  %*s  OBJECT\n", 4 * sizeof(e->vaddr) + 1, "SEGMENT", 2 * sizeof(e->offs), "OFFSET");
 
 	e += mapsz - 1;
 	for (i = 0; i < mapsz; ++i, --e) {
-
-		j = 0;
+		memset(flags, ' ', sizeof(flags));
 		if (e->flags & MAP_NEEDSCOPY)
-			flags[j++] = 'C';
+			flags[0] = 'C';
 		if (e->flags & MAP_PRIVATE)
-			flags[j++] = 'P';
+			flags[1] = 'P';
 		if (e->flags & MAP_FIXED)
-			flags[j++] = 'F';
+			flags[2] = 'F';
 		if (e->flags & MAP_ANONYMOUS)
-			flags[j++] = 'A';
-		flags[j] = '\0';
+			flags[3] = 'A';
+		flags[4] = '\0';
 
 		memset(prot, '-', sizeof(prot));
-
 		if (e->prot & PROT_READ)
 			prot[0] = 'r';
 		if (e->prot & PROT_WRITE)
 			prot[1] = 'w';
 		if (e->prot & PROT_EXEC)
 			prot[2] = 'x';
-		prot[4] = '\0';
+		prot[3] = '\0';
 
-		printf("%p:%p  %4s  %5s", e->vaddr, e->vaddr + e->size - 1, prot, flags);
+		printf("%p:%p  %-4s  %-5s", e->vaddr, e->vaddr + e->size - 1, prot, flags);
 
 		if (e->offs != -1)
 			printf("  %16llx", e->offs);
