@@ -490,6 +490,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 
 	/* Enable raw mode for command processing */
 	cfmakeraw(&raw);
+
 	if ((err = tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw)) < 0) {
 		fprintf(stderr, "\npsh: failed to enable raw mode\n");
 		free(*cmd);
@@ -1054,7 +1055,7 @@ static void psh_signalstop(int sig)
 
 static int psh_run(void)
 {
-	psh_hist_t cmdhist = { .hb = 0, .he = 0 };
+	psh_hist_t *cmdhist;
 	psh_histent_t *entry;
 	struct termios orig;
 	char *cmd, **argv;
@@ -1098,11 +1099,16 @@ static int psh_run(void)
 		return err;
 	}
 
+	if ((cmdhist = calloc(1, sizeof(*cmdhist))) == NULL) {
+		fprintf(stderr, "psh: failed to allocated command history storage\n");
+		return -ENOMEM;
+	}
+
 	for (;;) {
 		write(STDOUT_FILENO, "\r\033[0J", 5);
 		write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
 
-		if ((n = psh_readcmd(&orig, &cmdhist, &cmd)) < 0) {
+		if ((n = psh_readcmd(&orig, cmdhist, &cmd)) < 0) {
 			err = n;
 			break;
 		}
@@ -1115,26 +1121,27 @@ static int psh_run(void)
 		}
 
 		/* Select command history entry */
-		if (cmdhist.he != cmdhist.hb) {
-			entry = &cmdhist.entries[(cmdhist.he) ? cmdhist.he - 1 : HISTSZ - 1];
+		if (cmdhist->he != cmdhist->hb) {
+			entry = &cmdhist->entries[(cmdhist->he) ? cmdhist->he - 1 : HISTSZ - 1];
 			if ((n == entry->n) && !memcmp(cmd, entry->cmd, n)) {
-				cmdhist.he = (cmdhist.he) ? cmdhist.he - 1 : HISTSZ - 1;
+				cmdhist->he = (cmdhist->he) ? cmdhist->he - 1 : HISTSZ - 1;
 				free(entry->cmd);
 			}
 			else {
-				entry = cmdhist.entries + cmdhist.he;
+				entry = cmdhist->entries + cmdhist->he;
 			}
 		}
 		else {
-			entry = cmdhist.entries + cmdhist.he;
+			entry = cmdhist->entries + cmdhist->he;
 		}
 
 		/* Update command history */
 		entry->cmd = cmd;
 		entry->n = n;
-		if ((cmdhist.he = (cmdhist.he + 1) % HISTSZ) == cmdhist.hb) {
-			free(cmdhist.entries[cmdhist.hb].cmd);
-			cmdhist.hb = (cmdhist.hb + 1) % HISTSZ;
+		if ((cmdhist->he = (cmdhist->he + 1) % HISTSZ) == cmdhist->hb) {
+			free(cmdhist->entries[cmdhist->hb].cmd);
+			cmdhist->entries[cmdhist->hb].cmd = NULL;
+			cmdhist->hb = (cmdhist->hb + 1) % HISTSZ;
 		}
 
 		/* Clear signals */
@@ -1156,7 +1163,7 @@ static int psh_run(void)
 		else if (!strcmp(argv[0], "help"))
 			psh_help();
 		else if (!strcmp(argv[0], "history"))
-			psh_history(argc, argv, &cmdhist);
+			psh_history(argc, argv, cmdhist);
 		else if (!strcmp(argv[0], "kill"))
 			psh_kill(argc, argv);
 		else if (!strcmp(argv[0], "ls"))
@@ -1189,8 +1196,10 @@ static int psh_run(void)
 	}
 
 	/* Free command history */
-	for (; cmdhist.hb != cmdhist.he; cmdhist.hb = (cmdhist.hb + 1) % HISTSZ)
-		free(cmdhist.entries[cmdhist.hb].cmd);
+	for (; cmdhist->hb != cmdhist->he; cmdhist->hb = (cmdhist->hb + 1) % HISTSZ)
+		free(cmdhist->entries[cmdhist->hb].cmd);
+
+	free(cmdhist);
 
 	return err;
 }
