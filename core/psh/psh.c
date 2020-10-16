@@ -25,6 +25,7 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/pwman.h>
 
 #include <posix/utils.h>
 
@@ -118,6 +119,20 @@ static const char* si[] = {
 
 
 psh_common_t psh_common;
+
+
+static void psh_exit(int code)
+{
+	keepidle(0);
+	exit(code);
+}
+
+
+static void _psh_exit(int code)
+{
+	keepidle(0);
+	_exit(code);
+}
 
 
 static int psh_mod(int x, int y)
@@ -782,7 +797,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 	}
 
 	if (*cmd == NULL)
-		exit(EXIT_SUCCESS);
+		psh_exit(EXIT_SUCCESS);
 
 	(*cmd)[n + m] = '\0';
 
@@ -831,7 +846,7 @@ static int psh_runfile(char **argv)
 		pid = getpid();
 		if (setpgid(pid, pid) < 0) {
 			fprintf(stderr, "psh: failed to put %s process in its own process group\n", argv[0]);
-			_exit(EXIT_FAILURE);
+			_psh_exit(EXIT_FAILURE);
 		}
 
 		/* Take terminal control */
@@ -858,7 +873,7 @@ static int psh_runfile(char **argv)
 			fprintf(stderr, "psh: exec failed with code %d\n", -errno);
 		}
 
-		_exit(EXIT_FAILURE);
+		_psh_exit(EXIT_FAILURE);
 	}
 
 	waitpid(pid, NULL, 0);
@@ -914,7 +929,7 @@ static int psh_runscript(char *path)
 				else if (!pid) {
 					execve(argv[0], argv, NULL);
 					fprintf(stderr, "psh: exec failed in line %d\n", i);
-					_exit(EXIT_FAILURE);
+					_psh_exit(EXIT_FAILURE);
 				}
 
 				if ((line[0] == 'W') && ((err = waitpid(pid, NULL, 0)) < 0)) {
@@ -1159,7 +1174,7 @@ static int psh_run(void)
 		else if (!strcmp(argv[0], "exec"))
 			psh_exec(argc, argv);
 		else if (!strcmp(argv[0], "exit"))
-			exit(EXIT_SUCCESS);
+			psh_exit(EXIT_SUCCESS);
 		else if (!strcmp(argv[0], "help"))
 			psh_help();
 		else if (!strcmp(argv[0], "history"))
@@ -1210,6 +1225,8 @@ int main(int argc, char **argv)
 	char *base, *dir, *path = NULL;
 	oid_t oid;
 	int c;
+
+	keepidle(1);
 
 	splitname(argv[0], &base, &dir);
 
@@ -1277,6 +1294,8 @@ int main(int argc, char **argv)
 	else {
 		fprintf(stderr, "psh: %s: unknown command\n", argv[0]);
 	}
+
+	keepidle(0);
 
 	return EOK;
 }
