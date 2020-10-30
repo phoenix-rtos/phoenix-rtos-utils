@@ -136,11 +136,10 @@ static void psh_top_refresh(char cmd, threadinfo_t *info, threadinfo_t *previnfo
 				break;
 			}
 		}
-		if (p) {
-			/* Prevent negative load if a new thread with the same tid has occured */
-			if (info[i].cpuTime >= p->cpuTime)
-				info[i].load = ((info[i].cpuTime - p->cpuTime)) * 1000 / delta;
-		}
+
+		/* Prevent negative load if a new thread with the same tid has occured */
+		if (p)
+			info[i].load = (info[i].cpuTime > p->cpuTime) ? (info[i].cpuTime - p->cpuTime) * 1000 / delta : 0;
 	}
 
 	prevcnt = totcnt;
