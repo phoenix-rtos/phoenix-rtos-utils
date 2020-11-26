@@ -141,7 +141,7 @@ static size_t *psh_ls_computerows(size_t *rows, size_t *cols, size_t nfiles)
 }
 
 
-static void psh_ls_printfile(fileinfo_t *file, size_t width)
+static void psh_ls_printfile(fileinfo_t *file, int width)
 {
 	if (S_ISREG(file->stat.st_mode) && file->stat.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH))
 		printf(EXE_COLOR);
@@ -250,11 +250,11 @@ static void psh_ls_printlong(size_t nfiles)
 {
 	fileinfo_t *files = psh_ls_common.files;
 	char perms[11], buff[80];
-	size_t linksz = 1;
-	size_t usersz = 3;
-	size_t grpsz = 3;
-	size_t sizesz = 1;
-	size_t daysz = 1;
+	int linksz = 1;
+	int usersz = 3;
+	int grpsz = 3;
+	int sizesz = 1;
+	int daysz = 1;
 	unsigned int i, j;
 	struct tm t;
 
@@ -319,7 +319,7 @@ static void psh_ls_printlong(size_t nfiles)
 		printf("%s %*d ", perms, linksz, files[i].stat.st_nlink);
 		printf("%-*s ", usersz, (files[i].pw != NULL) ? files[i].pw->pw_name : "---");
 		printf("%-*s ", grpsz, (files[i].gr != NULL) ? files[i].gr->gr_name : "---");
-		printf("%*d %s ", sizesz, files[i].stat.st_size, buff);
+		printf("%*ld %s ", sizesz, files[i].stat.st_size, buff);
 
 		psh_ls_printfile(&files[i], files[i].namelen);
 		putchar('\n');

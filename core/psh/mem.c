@@ -44,7 +44,7 @@ static void psh_mem_procprint(entryinfo_t *e, int mapsz)
 	char flags[5], prot[4];
 	unsigned int i;
 
-	printf("%-*s  PROT  FLAGS  %*s  OBJECT\n", 4 * sizeof(e->vaddr) + 1, "SEGMENT", 2 * sizeof(e->offs), "OFFSET");
+	printf("%-*s  PROT  FLAGS  %*s  OBJECT\n", (int)(4 * sizeof(e->vaddr) + 1), "SEGMENT", (int)(2 * sizeof(e->offs)), "OFFSET");
 
 	e += mapsz - 1;
 	for (i = 0; i < mapsz; ++i, --e) {
@@ -71,9 +71,9 @@ static void psh_mem_procprint(entryinfo_t *e, int mapsz)
 		printf("%p:%p  %-4s  %-5s", e->vaddr, e->vaddr + e->size - 1, prot, flags);
 
 		if (e->offs != -1)
-			printf("  %*llx", 2 * sizeof(e->offs), e->offs);
+			printf("  %*llx", (int)(2 * sizeof(e->offs)), e->offs);
 		else
-			printf("  %*s", 2 * sizeof(e->offs), "");
+			printf("  %*s", (int)(2 * sizeof(e->offs)), "");
 
 		if (e->object == OBJECT_ANONYMOUS)
 			printf("  %s", "(anonymous)");
