@@ -26,6 +26,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/pwman.h>
+#include <sys/threads.h>
 
 #include <posix/utils.h>
 
@@ -988,6 +989,40 @@ static int psh_exec(int argc, char **argv)
 }
 
 
+static int psh_sysexec(int argc, char **argv)
+{
+	int err;
+	char **args;
+
+	if (argc < 3) {
+		fprintf(stderr, "usage: %s map progname [args]...\n", argv[0]);
+		return -EINVAL;
+	}
+
+	args = argv[3] == NULL ? NULL : argv + 2;
+	err = spawnSyspage(argv[1], argv[2], args);
+
+	if (err > 0)
+		return EOK;
+
+	switch (err) {
+		case -ENOMEM:
+			fprintf(stderr, "psh: out of memory\n");
+			break;
+
+		case -EINVAL:
+			fprintf(stderr, "psh: no exec %s or no map %s defined\n",
+				argv[2], argv[1]);
+			break;
+
+		default:
+			fprintf(stderr, "psh: sysexec failed with code %d\n", err);
+	}
+
+	return EOK;
+}
+
+
 static void psh_help(void)
 {
 	printf("Available commands:\n");
@@ -1006,6 +1041,7 @@ static void psh_help(void)
 	printf("  ps      - prints processes and threads\n");
 	printf("  reboot  - restarts the machine\n");
 	printf("  sync    - synchronizes device\n");
+	printf("  sysexec - launch program from syspage using given map\n");
 	printf("  top     - top utility\n");
 	printf("  touch   - changes file timestamp\n");
 }
@@ -1199,6 +1235,8 @@ static int psh_run(void)
 			psh_reboot(argc, argv);
 		else if (!strcmp(argv[0], "sync"))
 			psh_sync(argc, argv);
+		else if (!strcmp(argv[0], "sysexec"))
+			psh_sysexec(argc, argv);
 		else if (!strcmp(argv[0], "top"))
 			psh_top(argc, argv);
 		else if (!strcmp(argv[0], "touch"))
