@@ -992,15 +992,13 @@ static int psh_exec(int argc, char **argv)
 static int psh_sysexec(int argc, char **argv)
 {
 	int err;
-	char **args;
 
 	if (argc < 3) {
 		fprintf(stderr, "usage: %s map progname [args]...\n", argv[0]);
 		return -EINVAL;
 	}
 
-	args = argv[3] == NULL ? NULL : argv + 2;
-	err = spawnSyspage(argv[1], argv[2], args);
+	err = spawnSyspage(argv[1], argv[2], argv + 2);
 
 	if (err > 0)
 		return EOK;
