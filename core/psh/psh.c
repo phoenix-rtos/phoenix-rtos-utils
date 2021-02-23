@@ -991,19 +991,21 @@ static int psh_exec(int argc, char **argv)
 
 static int psh_sysexec(int argc, char **argv)
 {
-	int err;
+	int pid;
 
 	if (argc < 3) {
 		fprintf(stderr, "usage: %s map progname [args]...\n", argv[0]);
 		return -EINVAL;
 	}
 
-	err = spawnSyspage(argv[1], argv[2], argv + 2);
+	pid = spawnSyspage(argv[1], argv[2], argv + 2);
 
-	if (err > 0)
+	if (pid > 0) {
+		waitpid(pid, NULL, 0);
 		return EOK;
+	}
 
-	switch (err) {
+	switch (pid) {
 		case -ENOMEM:
 			fprintf(stderr, "psh: out of memory\n");
 			break;
@@ -1014,7 +1016,7 @@ static int psh_sysexec(int argc, char **argv)
 			break;
 
 		default:
-			fprintf(stderr, "psh: sysexec failed with code %d\n", err);
+			fprintf(stderr, "psh: sysexec failed with code %d\n", pid);
 	}
 
 	return EOK;
