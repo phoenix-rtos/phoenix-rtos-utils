@@ -3,8 +3,8 @@
  *
  * kill - send signal_kill to process
  *
- * Copyright 2017, 2018, 2020 Phoenix Systems
- * Author: Pawel Pisarczyk, Jan Sikorski, Maciej Purski, Lukasz Kosinski
+ * Copyright 2017, 2018, 2020, 2021 Phoenix Systems
+ * Author: Pawel Pisarczyk, Jan Sikorski, Maciej Purski, Lukasz Kosinski, Mateusz Niewiadomski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -17,6 +17,12 @@
 #include <string.h>
 
 #include <sys/threads.h>
+
+
+void psh_killinfo(void)
+{
+	printf("  kill    - terminates process\n");
+}
 
 
 int psh_kill(int argc, char **argv)

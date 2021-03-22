@@ -3,8 +3,8 @@
  *
  * mem - view process or kernel memory map
  *
- * Copyright 2017, 2018, 2020 Phoenix Systems
- * Author: Pawel Pisarczyk, Jan Sikorski, Maciej Purski
+ * Copyright 2017, 2018, 2020, 2021 Phoenix Systems
+ * Author: Pawel Pisarczyk, Jan Sikorski, Maciej Purski, Mateusz Niewiadomski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -217,6 +217,11 @@ static int psh_mem_page(void)
 
 	free(info.page.map);
 	return EOK;
+}
+
+
+void psh_meminfo(void){
+	printf("  mem     - prints memory map\n");
 }
 
 

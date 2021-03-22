@@ -32,4 +32,7 @@ extern psh_common_t psh_common;
 extern int psh_prefix(unsigned int base, int x, int y, unsigned int prec, char *buff);
 
 
+extern void _psh_exit(int code);
+
+
 #endif

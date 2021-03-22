@@ -3,8 +3,8 @@
  *
  * perf - track kernel performance events
  *
- * Copyright 2017, 2018, 2020 Phoenix Systems
- * Author: Pawel Pisarczyk, Jan Sikorski, Maciej Purski
+ * Copyright 2017, 2018, 2020, 2021 Phoenix Systems
+ * Author: Pawel Pisarczyk, Jan Sikorski, Maciej Purski, Mateusz Niewiadomski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -16,6 +16,12 @@
 #include <unistd.h>
 
 #include <sys/threads.h>
+
+
+void psh_perfinfo(void)
+{
+	return;
+}
 
 
 int psh_perf(int argc, char **argv)

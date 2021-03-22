@@ -3,8 +3,8 @@
  *
  * top - prints threads and processes
  *
- * Copyright 2020 Phoenix Systems
- * Author: Maciej Purski, Lukasz Kosinski
+ * Copyright 2020, 2021 Phoenix Systems
+ * Author: Maciej Purski, Lukasz Kosinski, Mateusz Niewiadomski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -239,6 +239,13 @@ static void psh_top_free(threadinfo_t *info, threadinfo_t *previnfo)
 	psh_top_switchmode(1);
 	setvbuf(stdout, NULL, _IOLBF, 0);
 }
+
+
+void psh_topinfo(void)
+{
+	printf("  top     - top utility\n");
+}
+
 
 
 int psh_top(int argc, char **argv)

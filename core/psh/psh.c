@@ -3,8 +3,8 @@
  *
  * Phoenix-RTOS SHell
  *
- * Copyright 2017, 2018, 2020 Phoenix Systems
- * Author: Pawel Pisarczyk, Jan Sikorski, Lukasz Kosinski
+ * Copyright 2017, 2018, 2020, 2021 Phoenix Systems
+ * Author: Pawel Pisarczyk, Jan Sikorski, Lukasz Kosinski, Mateusz Niewiadomski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -70,6 +70,8 @@ typedef struct {
 /* Shell commands */
 extern int psh_bind(int argc, char **argv);
 extern int psh_cat(int argc, char **argv);
+extern int psh_exec(int argc, char **argv);
+extern int psh_help(void);
 extern int psh_kill(int argc, char **argv);
 extern int psh_ls(int argc, char **argv);
 extern int psh_mem(int argc, char **argv);
@@ -78,7 +80,9 @@ extern int psh_mount(int argc, char **argv);
 extern int psh_perf(int argc, char **argv);
 extern int psh_ps(int argc, char **argv);
 extern int psh_reboot(int argc, char **argv);
+extern int psh_runfile(char **argv);
 extern int psh_sync(int argc, char **argv);
+extern int psh_sysexec(int argc, char **argv);
 extern int psh_top(int argc, char **argv);
 extern int psh_touch(int argc, char **argv);
 
@@ -129,7 +133,7 @@ static void psh_exit(int code)
 }
 
 
-static void _psh_exit(int code)
+void _psh_exit(int code)
 {
 	keepidle(0);
 	_exit(code);
@@ -144,6 +148,7 @@ static int psh_mod(int x, int y)
 		ret += abs(y);
 
 	return ret;
+	
 }
 
 
@@ -836,58 +841,6 @@ static int psh_parsecmd(char *line, int *argc, char ***argv)
 }
 
 
-static int psh_runfile(char **argv)
-{
-	pid_t pid;
-
-	if ((pid = vfork()) < 0) {
-		fprintf(stderr, "psh: vfork failed with code %d\n", pid);
-		return pid;
-	}
-	else if (!pid) {
-		/* Put process in its own process group */
-		pid = getpid();
-		if (setpgid(pid, pid) < 0) {
-			fprintf(stderr, "psh: failed to put %s process in its own process group\n", argv[0]);
-			_psh_exit(EXIT_FAILURE);
-		}
-
-		/* Take terminal control */
-		tcsetpgrp(STDIN_FILENO, pid);
-
-		/* Execute the file */
-		execve(argv[0], argv, NULL);
-
-		switch (errno) {
-		case EIO:
-			fprintf(stderr, "psh: failed to load %s executable\n", argv[0]);
-			break;
-
-		case ENOMEM:
-			fprintf(stderr, "psh: out of memory\n");
-			break;
-
-		case EINVAL:
-		case ENOENT:
-			fprintf(stderr, "psh: invalid executable\n");
-			break;
-
-		default:
-			fprintf(stderr, "psh: exec failed with code %d\n", -errno);
-		}
-
-		_psh_exit(EXIT_FAILURE);
-	}
-
-	waitpid(pid, NULL, 0);
-
-	/* Take back terminal control */
-	tcsetpgrp(STDIN_FILENO, getpgid(getpid()));
-
-	return EOK;
-}
-
-
 static int psh_runscript(char *path)
 {
 	char **argv = NULL, *line = NULL;
@@ -958,94 +911,6 @@ static int psh_runscript(char *path)
 
 	return EOK;
 }
-
-
-static int psh_exec(int argc, char **argv)
-{
-	int err;
-
-	if (argc < 2) {
-		fprintf(stderr, "usage: %s command [args]...\n", argv[0]);
-		return -EINVAL;
-	}
-
-	switch (err = execve(argv[1], argv + 1, NULL)) {
-	case EOK:
-		break;
-
-	case -ENOMEM:
-		fprintf(stderr, "psh: out of memory\n");
-		break;
-
-	case -EINVAL:
-		fprintf(stderr, "psh: invalid executable\n");
-		break;
-
-	default:
-		fprintf(stderr, "psh: exec failed with code %d\n", err);
-	}
-
-	return err;
-}
-
-
-static int psh_sysexec(int argc, char **argv)
-{
-	int pid;
-
-	if (argc < 3) {
-		fprintf(stderr, "usage: %s map progname [args]...\n", argv[0]);
-		return -EINVAL;
-	}
-
-	pid = spawnSyspage(argv[1], argv[2], argv + 2);
-
-	if (pid > 0) {
-		waitpid(pid, NULL, 0);
-		return EOK;
-	}
-
-	switch (pid) {
-		case -ENOMEM:
-			fprintf(stderr, "psh: out of memory\n");
-			break;
-
-		case -EINVAL:
-			fprintf(stderr, "psh: no exec %s or no map %s defined\n",
-				argv[2], argv[1]);
-			break;
-
-		default:
-			fprintf(stderr, "psh: sysexec failed with code %d\n", pid);
-	}
-
-	return EOK;
-}
-
-
-static void psh_help(void)
-{
-	printf("Available commands:\n");
-	printf("  bind    - binds device to directory\n");
-	printf("  cat     - concatenate file(s) to standard output\n");
-	printf("  exec    - replace shell with the given command\n");
-	printf("  exit    - exits the shell\n");
-	printf("  help    - prints this help message\n");
-	printf("  history - prints command history\n");
-	printf("  kill    - terminates process\n");
-	printf("  ls      - lists files in the namespace\n");
-	printf("  mem     - prints memory map\n");
-	printf("  mkdir   - creates directory\n");
-	printf("  mount   - mounts a filesystem\n");
-	printf("  perf    - tracks kernel performance\n");
-	printf("  ps      - prints processes and threads\n");
-	printf("  reboot  - restarts the machine\n");
-	printf("  sync    - synchronizes device\n");
-	printf("  sysexec - launch program from syspage using given map\n");
-	printf("  top     - top utility\n");
-	printf("  touch   - changes file timestamp\n");
-}
-
 
 static int psh_history(int argc, char **argv, psh_hist_t *cmdhist)
 {
@@ -1153,7 +1018,7 @@ static int psh_run(void)
 	}
 
 	if ((cmdhist = calloc(1, sizeof(*cmdhist))) == NULL) {
-		fprintf(stderr, "psh: failed to allocated command history storage\n");
+		fprintf(stderr, "psh: failed to allocate command history storage\n");
 		return -ENOMEM;
 	}
 
