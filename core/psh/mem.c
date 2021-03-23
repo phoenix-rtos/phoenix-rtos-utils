@@ -220,7 +220,8 @@ static int psh_mem_page(void)
 }
 
 
-void psh_meminfo(void){
+void psh_meminfo(void)
+{
 	printf("  mem     - prints memory map\n");
 }
 

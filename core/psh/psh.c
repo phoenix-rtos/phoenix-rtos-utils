@@ -123,7 +123,7 @@ static const char* si[] = {
 };
 
 
-psh_common_t psh_common;
+psh_common_t psh_common = {.unkncmd = "Unknown command!\n"};
 
 
 static void psh_exit(int code)
@@ -148,7 +148,6 @@ static int psh_mod(int x, int y)
 		ret += abs(y);
 
 	return ret;
-	
 }
 
 

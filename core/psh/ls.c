@@ -1,7 +1,7 @@
 /*
  * Phoenix-RTOS
  *
- * fs - lists files and directories, based on GNU implementation
+ * ls - lists files and directories, based on GNU implementation
  *
  * Copyright 2017, 2018, 2020, 2021 Phoenix Systems
  * Author: Maciej Purski, Lukasz Kosinski, Mateusz Niewiadomski

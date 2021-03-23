@@ -19,6 +19,7 @@ typedef struct {
 	volatile unsigned char sigint;  /* Received SIGINT */
 	volatile unsigned char sigquit; /* Received SIGQUIT */
 	volatile unsigned char sigstop; /* Received SIGTSTP */
+	char* unkncmd;// = "Command not supported!\n";
 } psh_common_t;
 
 
