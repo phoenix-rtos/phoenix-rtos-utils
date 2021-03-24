@@ -1,10 +1,10 @@
 /*
  * Phoenix-RTOS
  *
- * fs - lists files and directories, based on GNU implementation
+ * ls - lists files and directories, based on GNU implementation
  *
- * Copyright 2017, 2018, 2020 Phoenix Systems
- * Author: Maciej Purski, Lukasz Kosinski
+ * Copyright 2017, 2018, 2020, 2021 Phoenix Systems
+ * Author: Maciej Purski, Lukasz Kosinski, Mateusz Niewiadomski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -403,6 +403,11 @@ static void psh_ls_free(void)
 		free(psh_ls_common.files);
 	}
 	free(psh_ls_common.odir);
+}
+
+
+void psh_lsinfo(void){
+	printf("  ls      - lists files in the namespace\n");
 }
 
 

@@ -3,8 +3,8 @@
  *
  * ps - prints threads and processes
  *
- * Copyright 2020 Phoenix Systems
- * Author: Pawel Pisarczyk, Jan Sikorski, Lukasz Kosinski, Maciej Purski
+ * Copyright 2020, 2021 Phoenix Systems
+ * Author: Pawel Pisarczyk, Jan Sikorski, Lukasz Kosinski, Maciej Purski, Mateusz Niewiadomski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -39,6 +39,12 @@ static int psh_ps_cmppid(const void *t1, const void *t2)
 static int psh_ps_cmpcpu(const void *t1, const void *t2)
 {
 	return ((threadinfo_t *)t2)->load - ((threadinfo_t *)t1)->load;
+}
+
+
+void psh_psinfo(void)
+{
+	printf("  ps      - prints processes and threads\n");
 }
 
 

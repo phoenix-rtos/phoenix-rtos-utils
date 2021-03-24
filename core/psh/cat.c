@@ -3,8 +3,8 @@
  *
  * cat - concatenate file(s) to standard output
  *
- * Copyright 2017, 2018, 2020 Phoenix Systems
- * Author: Pawel Pisarczyk, Jan Sikorski, Lukasz Kosinski
+ * Copyright 2017, 2018, 2020, 2021 Phoenix Systems
+ * Author: Pawel Pisarczyk, Jan Sikorski, Lukasz Kosinski, Mateusz Niewiadomski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -19,6 +19,10 @@
 
 #include "psh.h"
 
+void psh_catinfo(void)
+{
+	printf("  cat     - concatenate file(s) to standard output\n");
+}
 
 static void psh_cat_help(const char *prog)
 {

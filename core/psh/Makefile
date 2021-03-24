@@ -1,10 +1,14 @@
 #
 # Makefile for Phoenix-RTOS psh (Phoenix SHell)
 #
-# Copyright 2018, 2019, 2020 Phoenix Systems
+# Copyright 2018, 2019, 2020, 2021 Phoenix Systems
 #
 
-$(PREFIX_PROG)psh: $(addprefix $(PREFIX_O)core/psh/, cat.o fs.o kill.o ls.o mem.o perf.o ps.o psh.o reboot.o top.o)
+OBJS = $(filter-out psh psh-empties, $(subst .c,,$(subst ./core/psh/,, $(shell find ./core/psh/ -name '*.c'))))
+PSH_COMMANDS ?= $(OBJS)
+OBJ_FEATURED = $(addsuffix .o,$(filter $(PSH_COMMANDS),$(OBJS)))
+
+$(PREFIX_PROG)psh: $(addprefix $(PREFIX_O)core/psh/, psh.o psh-empties.o $(OBJ_FEATURED))
 	$(LINK)
 
 all: $(PREFIX_PROG_STRIPPED)psh

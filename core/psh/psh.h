@@ -19,6 +19,7 @@ typedef struct {
 	volatile unsigned char sigint;  /* Received SIGINT */
 	volatile unsigned char sigquit; /* Received SIGQUIT */
 	volatile unsigned char sigstop; /* Received SIGTSTP */
+	char* unkncmd;// = "Command not supported!\n";
 } psh_common_t;
 
 
@@ -30,6 +31,9 @@ extern psh_common_t psh_common;
 /* utils_prefix(10, -15496, 3, 2, buff) saves "-15.5M" in buff */
 /* utils_prefix(2, 2000, 10, 3, buff) saves "1.953M" in buff */
 extern int psh_prefix(unsigned int base, int x, int y, unsigned int prec, char *buff);
+
+
+extern void _psh_exit(int code);
 
 
 #endif
