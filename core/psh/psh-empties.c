@@ -134,6 +134,19 @@ int __attribute__((weak)) psh_mount(int argc, char **argv)
 }
 
 
+void __attribute__((weak)) psh_ncinfo(void)
+{
+	return;
+}
+
+
+int __attribute__((weak)) psh_nc(int argc, char **argv)
+{
+	fprintf(stderr,psh_common.unkncmd);
+	return -ENOTSUP;
+}
+
+
 void __attribute__((weak)) psh_perfinfo(void)
 {
 	return;

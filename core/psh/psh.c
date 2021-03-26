@@ -85,6 +85,7 @@ extern int psh_sync(int argc, char **argv);
 extern int psh_sysexec(int argc, char **argv);
 extern int psh_top(int argc, char **argv);
 extern int psh_touch(int argc, char **argv);
+extern int psh_nc(int argc, char **argv);
 
 
 /* Binary (base 2) prefixes */
@@ -1091,6 +1092,8 @@ static int psh_run(void)
 			psh_mkdir(argc, argv);
 		else if (!strcmp(argv[0], "mount"))
 			psh_mount(argc, argv);
+		else if (!strcmp(argv[0], "nc"))
+			psh_nc(argc, argv);
 		else if (!strcmp(argv[0], "perf"))
 			psh_perf(argc, argv);
 		else if (!strcmp(argv[0], "ps"))
@@ -1179,6 +1182,9 @@ int main(int argc, char **argv)
 	}
 	else if (!strcmp(base, "mount")) {
 		psh_mount(argc, argv);
+	}
+	else if (!strcmp(base, "nc")) {
+		psh_nc(argc, argv);
 	}
 	else if (!strcmp(base, "perf")) {
 		psh_perf(argc, argv);
