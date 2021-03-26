@@ -85,6 +85,7 @@ extern int psh_sync(int argc, char **argv);
 extern int psh_sysexec(int argc, char **argv);
 extern int psh_top(int argc, char **argv);
 extern int psh_touch(int argc, char **argv);
+extern int psh_login(void);
 
 
 /* Binary (base 2) prefixes */
@@ -123,7 +124,7 @@ static const char* si[] = {
 };
 
 
-psh_common_t psh_common = {.unkncmd = "Unknown command!\n"};
+psh_common_t psh_common = {.unkncmd = "Unknown command!\n", .passwd = "phoenix"};
 
 
 static void psh_exit(int code)
@@ -1132,17 +1133,20 @@ int main(int argc, char **argv)
 
 	keepidle(1);
 
+	/* Wait for root filesystem */
+	while (lookup("/", NULL, &oid) < 0)
+		usleep(10000);
+
+	/* Wait for console */
+	while (write(1, "", 0) < 0)
+		usleep(50000);
+
+	if (psh_login() < 0)
+		return -EACCES;
+
 	splitname(argv[0], &base, &dir);
 
 	if (!strcmp(base, "psh")) {
-		/* Wait for root filesystem */
-		while (lookup("/", NULL, &oid) < 0)
-			usleep(10000);
-
-		/* Wait for console */
-		while (write(1, "", 0) < 0)
-			usleep(50000);
-
 		/* Run shell script */
 		if (argc > 1) {
 			while ((c = getopt(argc, argv, "i:h")) != -1) {
