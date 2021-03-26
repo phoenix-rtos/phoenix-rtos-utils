@@ -25,6 +25,7 @@ extern void psh_mkdirinfo(void);
 extern void psh_mountinfo(void);
 extern void psh_ncinfo(void);
 extern void psh_perfinfo(void);
+extern void psh_pinginfo(void);
 extern void psh_psinfo(void);
 extern void psh_rebootinfo(void);
 extern void psh_syncinfo(void);
@@ -55,6 +56,7 @@ void psh_help(void)
 	psh_mountinfo();
 	psh_ncinfo();
 	psh_perfinfo();
+	psh_pinginfo();
 	psh_psinfo();
 	psh_rebootinfo();
 	psh_syncinfo();

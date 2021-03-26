@@ -79,6 +79,7 @@ extern int psh_mkdir(int argc, char **argv);
 extern int psh_mount(int argc, char **argv);
 extern int psh_perf(int argc, char **argv);
 extern int psh_ps(int argc, char **argv);
+extern int psh_ping(int argc, char **argv);
 extern int psh_reboot(int argc, char **argv);
 extern int psh_runfile(char **argv);
 extern int psh_sync(int argc, char **argv);
@@ -1098,6 +1099,8 @@ static int psh_run(void)
 			psh_perf(argc, argv);
 		else if (!strcmp(argv[0], "ps"))
 			psh_ps(argc, argv);
+		else if (!strcmp(argv[0], "ping"))
+			psh_ping(argc, argv);
 		else if (!strcmp(argv[0], "reboot"))
 			psh_reboot(argc, argv);
 		else if (!strcmp(argv[0], "sync"))

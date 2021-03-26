@@ -159,6 +159,18 @@ int __attribute__((weak)) psh_perf(int argc, char **argv)
 	return -ENOTSUP;
 }
 
+void __attribute__((weak)) psh_pinginfo(void)
+{
+	return;
+}
+
+
+int __attribute__((weak)) psh_ping(int argc, char **argv)
+{
+	fprintf(stderr, psh_common.unkncmd);
+	return -ENOTSUP;
+}
+
 
 void __attribute__((weak)) psh_psinfo(void)
 {
