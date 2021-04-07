@@ -135,7 +135,7 @@ static int psh_ping_send(int fd, uint8_t *data, int len)
 static int psh_ping_recv(int fd, uint8_t *data, int len, char *infostr, int infostrlen)
 {
 	struct sockaddr_in rsin;
-	socklen_t rlen;
+	socklen_t rlen = sizeof(rsin);
 	struct iphdr *iphdr;
 	struct icmphdr *icmphdr;
 	int bytes;
@@ -155,6 +155,8 @@ static int psh_ping_recv(int fd, uint8_t *data, int len, char *infostr, int info
 		return -1;
 	}
 
+	bytes -= sizeof(struct iphdr);
+
 	if (inet_ntop(ping_common.af, &rsin.sin_addr, addrstr, sizeof(addrstr)) == NULL) {
 		fprintf(stderr, "ping: Invalid address received!\n");
 		return -1;
@@ -170,13 +172,13 @@ static int psh_ping_recv(int fd, uint8_t *data, int len, char *infostr, int info
 	chksum = ntohs(icmphdr->checksum);
 	icmphdr->checksum = 0;
 
-	if (psh_ping_chksum(data, bytes) != chksum) {
+	if (psh_ping_chksum((uint8_t *) icmphdr, bytes) != chksum) {
 		fprintf(stderr, "ping: Response invalid checksum!\n");
 		return -1;
 	}
 
 	return snprintf(infostr, infostrlen, "%d bytes received from %s: ttl=%u icmp_seq=%u",
-	                bytes - sizeof(struct iphdr), addrstr, iphdr->ttl, ntohs(icmphdr->un.echo.sequence));
+	                bytes, addrstr, iphdr->ttl, ntohs(icmphdr->un.echo.sequence));
 }
 
 
