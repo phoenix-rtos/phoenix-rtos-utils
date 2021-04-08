@@ -20,7 +20,6 @@ typedef struct {
 	volatile unsigned char sigquit; /* Received SIGQUIT */
 	volatile unsigned char sigstop; /* Received SIGTSTP */
 	char* unkncmd;
-	char* passwd;
 } psh_common_t;
 
 

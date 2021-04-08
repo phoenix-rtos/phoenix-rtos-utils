@@ -82,11 +82,6 @@ int __attribute__((weak)) psh_kill(int argc, char **argv)
 }
 
 
-int __attribute__((weak)) psh_login(void){
-	return 0;
-}
-
-
 void __attribute__((weak)) psh_lsinfo(void)
 {
 	return;

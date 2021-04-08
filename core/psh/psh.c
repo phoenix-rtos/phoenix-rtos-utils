@@ -85,7 +85,6 @@ extern int psh_sync(int argc, char **argv);
 extern int psh_sysexec(int argc, char **argv);
 extern int psh_top(int argc, char **argv);
 extern int psh_touch(int argc, char **argv);
-extern int psh_login(void);
 
 
 /* Binary (base 2) prefixes */
@@ -124,7 +123,7 @@ static const char* si[] = {
 };
 
 
-psh_common_t psh_common = {.unkncmd = "Unknown command!\n", .passwd = "phoenix"};
+psh_common_t psh_common = {.unkncmd = "Unknown command!\n"};
 
 
 static void psh_exit(int code)
@@ -971,7 +970,181 @@ static void psh_signalstop(int sig)
 }
 
 
-static int psh_run(void)
+static int psh_login(void)
+{
+	int insz = -1, shdwlines = 0, code;
+	const int maxinsz = 16;
+	char c, indata[maxinsz+1], indatasave[maxinsz+1];
+	char shdw[30+1];
+	struct termios mode;
+
+	tcgetattr(0, &mode);
+    mode.c_lflag &= ~(ECHO | ICANON);
+    tcsetattr(0, TCSANOW, &mode);
+
+	/* Get login from user */
+	memset(indata,'\0',16);
+	for (;;) {
+		if (insz < 0) {
+			fprintf(stdout,"Login: ");
+			fflush(0);
+			insz++;
+		}
+
+		read(STDIN_FILENO, &c, 1);
+		if (c == '\n') {
+			fprintf(stdout,"\n");
+			if (insz <= maxinsz && insz > 0) {
+				memset(indatasave,'\0',17);
+				memcpy(indatasave,indata,sizeof(char)*16);
+				memset(indata,'\0',17);
+				break;
+			}
+			else {
+				memset(indata,'\0',16);
+				insz = -1;
+				continue;
+			}
+		}
+		else if (c > 31 && c < 127) {
+			fprintf(stdout,"%c",c);
+			fflush(stdout);
+			if (insz < maxinsz)
+				indata[insz] = c;
+			insz++;
+			continue;
+		}
+		else if (c == 8 || c==127) {
+			if (insz > 0) {
+				insz--;
+				fprintf(stdout,"\b \b");
+				fflush(stdout);
+				if (insz < maxinsz)
+					indata[insz] = '\0';
+			}
+		}
+	}
+
+	/* Get password from user */
+	memset(shdw,'\0',31);
+	memset(indata,'\0',16);
+	insz = -1;
+	for (;;) {
+		if (insz < 0) {
+			printf("Password: ");
+			fflush(0);
+			insz++;
+		}
+
+		read(STDIN_FILENO, &c, 1);
+		if (c == '\n') {
+			memset(shdw,'\0',12);
+			if (insz <= maxinsz) {
+				memcpy(shdw,crypt(indata,"ABCD"),sizeof(char)*31); 
+				memset(indata,'\0',16);
+				insz = 0;
+				break;
+			}
+			else {
+				memset(indata,'\0',16);
+				insz = -1;
+				break;
+			}
+		}
+		else if (c > 31 && c < 127) {
+			if (insz < maxinsz)
+				indata[insz] = c;
+			insz++;
+		}
+		else if (c == 8) {
+			if (insz > 0) {
+				insz--;
+				if (insz < maxinsz) {
+					indata[insz] = '\0';
+				}
+			}
+		}
+	}
+	fprintf(stdout,"\n");
+	mode.c_lflag |= (ECHO | ICANON);
+	tcsetattr(0, TCSANOW, &mode);
+
+	/* Try to access /etc/passwd file */
+	FILE *shadows = NULL;
+	if (access("/etc/passwd",R_OK) == 0) {
+		shadows = fopen("/etc/passwd","r");
+		while ((c = fgetc(shadows)) != EOF) {
+			if (c=='\n')
+				shdwlines++;
+		}
+		rewind(shadows);
+		if (shdwlines == 0) {
+			fclose(shadows);
+			shadows = NULL;
+		} 
+	}
+
+	/* Compare login and shadow against /etc/passwd */
+	code = -EACCES;
+	if (shadows != NULL) {
+		for (int ii = 0; ii <= shdwlines; ii++) {
+			insz = 0;
+			memset(indata,'\0',16);
+			while ((c = fgetc(shadows)) != ':' && c > 0) {
+				if (insz < maxinsz)
+					indata[insz] = c;
+				insz++;
+			}
+			/* if login matches then check password */
+			code = -EACCES;
+			if (strcmp(indata,indatasave) ==0 && (insz <= maxinsz)) {
+				c = fgetc(shadows);
+				int gg=0;
+				while (c > 0 && c != ':') {
+					if (c != shdw[gg++]) {
+						code = -EACCES;
+						break;
+					}
+					c = fgetc(shadows);
+				}
+				/* success exit only if shadow matches or shadow is empty */
+				if (c == ':' && (shdw[gg] == '\0' || gg == 0)) {
+					code = 0;
+					break;
+				}
+			}
+			memset(indata,'\0',16);
+
+			/* File exit decision */
+			if (code != 0) {
+				while (c != '\n' && c != EOF)
+					c = fgetc(shadows);
+				code = -EACCES;
+				continue;
+			}
+			else {
+				break;
+			}
+		}
+		fclose(shadows);
+	}
+
+	#ifdef DEFUSR_PASSWD
+	if (!strcmp(indatasave,"defuser") && !strcmp(shdw,DEFUSR_PASSWD) && code == -EACCES) {
+		code = 0; 
+	}
+	#endif
+
+	if (code != 0) {
+		sleep(2);
+		fprintf(stdout,"Login failed!\n");
+		return -EACCES;
+	}
+	return 1;
+}
+
+
+static int psh_run(int exitable)
 {
 	psh_hist_t *cmdhist;
 	psh_histent_t *entry;
@@ -1076,8 +1249,11 @@ static int psh_run(void)
 			psh_cat(argc, argv);
 		else if (!strcmp(argv[0], "exec"))
 			psh_exec(argc, argv);
-		else if (!strcmp(argv[0], "exit"))
+		else if (!strcmp(argv[0], "exit")) {
+			if(!exitable)
+				break;
 			psh_exit(EXIT_SUCCESS);
+		}
 		else if (!strcmp(argv[0], "help"))
 			psh_help();
 		else if (!strcmp(argv[0], "history"))
@@ -1141,12 +1317,10 @@ int main(int argc, char **argv)
 	while (write(1, "", 0) < 0)
 		usleep(50000);
 
-	if (psh_login() < 0)
-		return -EACCES;
-
 	splitname(argv[0], &base, &dir);
 
 	if (!strcmp(base, "psh")) {
+
 		/* Run shell script */
 		if (argc > 1) {
 			while ((c = getopt(argc, argv, "i:h")) != -1) {
@@ -1172,7 +1346,14 @@ int main(int argc, char **argv)
 		}
 		/* Run shell interactively */
 		else {
-			psh_run();
+			psh_run(1);
+		}
+	}
+	else if (!strcmp(base, "pshlogin")) {
+		int code = -1;
+		while ((code = psh_login()) != 0) {
+			if (code > 0)
+				psh_run(0);
 		}
 	}
 	else if (!strcmp(base, "bind")) {
