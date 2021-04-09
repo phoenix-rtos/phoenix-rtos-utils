@@ -4,11 +4,15 @@
 # Copyright 2018, 2019, 2020, 2021 Phoenix Systems
 #
 
-OBJS = $(filter-out psh psh-empties help, $(subst .c,,$(subst ./core/psh/,, $(shell find ./core/psh -name '*.c'))))
-PSH_COMMANDS ?= $(OBJS)
-OBJ_FEATURED = $(addsuffix .o,$(filter $(PSH_COMMANDS), $(OBJS)))
+ifdef PSH_DEFUSRPWDHASH
+CFLAGS += -DPSH_DEFUSRPWDHASH=\"$(PSH_DEFUSRPWDHASH)\"
+endif
 
-$(PREFIX_PROG)psh: $(addprefix $(PREFIX_O)core/psh/, psh.o psh-empties.o help.o $(OBJ_FEATURED))
+PSH_ALLCOMMANDS = bind cat exec kill ls mem mkdir mount nc perf ping ps reboot runfile sync sysexec top touch
+PSH_COMMANDS ?= $(PSH_ALLCOMMANDS)
+OBJS = $(addsuffix .o,$(filter $(PSH_COMMANDS), $(PSH_ALLCOMMANDS)))
+
+$(PREFIX_PROG)psh: $(addprefix $(PREFIX_O)core/psh/, psh.o psh-empties.o help.o $(OBJS))
 	$(LINK)
 
 all: $(PREFIX_PROG_STRIPPED)psh
