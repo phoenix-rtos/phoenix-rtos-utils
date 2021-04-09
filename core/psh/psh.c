@@ -11,8 +11,10 @@
  * %LICENSE%
  */
 
+#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
+#include <pwd.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -805,8 +807,9 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 		return err;
 	}
 
-	if (*cmd == NULL)
-		psh_exit(EXIT_SUCCESS);
+	if (*cmd == NULL) {
+		return -ENODEV;
+	}
 
 	(*cmd)[n + m] = '\0';
 
@@ -972,7 +975,125 @@ static void psh_signalstop(int sig)
 }
 
 
-static int psh_run(void)
+static int psh_logincredentget(char *buff, int ispasswd, int maxinlen)
+{
+	int inputlen = -1;
+	char c;
+	struct termios origattr, ttyattr;
+
+	/* Setting terminal attributes */
+	if (tcgetattr(STDIN_FILENO, &origattr) < 0) {
+		fprintf(stderr, "psh: saving tty settings fail\n");
+		return -ENOTTY;
+	}
+	ttyattr = origattr;
+	if (ispasswd)
+		ttyattr.c_lflag &= ~(ECHO);
+	else
+		ttyattr.c_lflag |= (ICANON | ECHO);
+
+	if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &ttyattr) < 0) {
+		fprintf(stderr, "psh: setting tty attributes fail\n");
+		return -ENOTTY;
+	}
+	/* user input */
+	for (;;) {
+		if (inputlen < 0) {
+			if (ispasswd)
+				fprintf(stdout, "Password: ");
+			else
+				fprintf(stdout, "Login: ");
+
+			fflush(stdout);
+			inputlen++;
+		}
+
+		if (read(STDIN_FILENO, &c, 1) != 1)
+			continue;
+			
+		if (c == '\n') {
+			if (inputlen <= maxinlen && inputlen > 0) {
+				buff[inputlen] = '\0';
+				inputlen--;
+				break;
+			}
+			else {
+				inputlen = -1;
+				if (ispasswd) {
+					inputlen = 0;
+					memset(buff, '\0', maxinlen);
+					break;
+				}
+				else
+					continue;
+			}
+		}
+		else if (isprint(c)) {
+			if (inputlen < maxinlen)
+				buff[inputlen] = c;
+			inputlen++;
+			continue;
+		}
+	}
+	
+	if (ispasswd)
+		fprintf(stdout, "\n");
+
+	if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &origattr) < 0) {
+		fprintf(stderr, "psh: setting tty attributes fail\n");
+		return -ENOTTY;
+	}
+	
+	if (inputlen >= 0)
+		return inputlen;
+
+	return -EINTR;
+}
+
+
+static int psh_login(void)
+{
+	const int maxlen = 32;
+	char username[maxlen+1], passwd[maxlen+1], *shadow;
+	struct passwd *userdata;
+
+	/* check tty */
+	if (isatty(STDOUT_FILENO) == 0) {
+		sleep(1);
+		fprintf(stderr, "psh: unable to login, not a tty\n");
+		return -ENOTTY;
+	}
+
+	/* Get login from user */
+	psh_logincredentget(username, 0, maxlen);
+	userdata = getpwnam(username);
+
+	/* Get password from user */
+	psh_logincredentget(passwd, 1, maxlen);
+
+	/* validate against /etc/passwd */
+	if (userdata != NULL) {
+		shadow = crypt(passwd, userdata->pw_passwd);
+		if (shadow != NULL && strcmp(userdata->pw_passwd, shadow) == 0) {
+			memset(passwd, '\0', maxlen);
+			return 1;
+		}
+	}
+
+#ifdef PSH_DEFUSRPWDHASH
+	/* validate against defuser */
+	shadow = crypt(passwd, PSH_DEFUSRPWDHASH);
+	memset(passwd, '\0', maxlen);
+	if (shadow != NULL && strcmp(username, "defuser") == 0 && strcmp(shadow, PSH_DEFUSRPWDHASH) == 0)
+		return 1;
+#endif
+	memset(passwd, '\0', maxlen);
+	sleep(2);
+	return -1;
+}
+
+
+static int psh_run(int exitable)
 {
 	psh_hist_t *cmdhist;
 	psh_histent_t *entry;
@@ -1077,8 +1198,11 @@ static int psh_run(void)
 			psh_cat(argc, argv);
 		else if (!strcmp(argv[0], "exec"))
 			psh_exec(argc, argv);
-		else if (!strcmp(argv[0], "exit"))
+		else if (!strcmp(argv[0], "exit")) {
+			if (!exitable)
+				break;
 			psh_exit(EXIT_SUCCESS);
+		}
 		else if (!strcmp(argv[0], "help"))
 			psh_help();
 		else if (!strcmp(argv[0], "history"))
@@ -1138,16 +1262,17 @@ int main(int argc, char **argv)
 
 	keepidle(1);
 
+	/* Wait for root filesystem */
+	while (lookup("/", NULL, &oid) < 0)
+		usleep(10000);
+
+	/* Wait for console */
+	while (write(1, "", 0) < 0)
+		usleep(50000);
+
 	splitname(argv[0], &base, &dir);
 
 	if (!strcmp(base, "psh")) {
-		/* Wait for root filesystem */
-		while (lookup("/", NULL, &oid) < 0)
-			usleep(10000);
-
-		/* Wait for console */
-		while (write(1, "", 0) < 0)
-			usleep(50000);
 
 		/* Run shell script */
 		if (argc > 1) {
@@ -1170,11 +1295,17 @@ int main(int argc, char **argv)
 				path = argv[optind];
 
 			if (path != NULL)
-				psh_runscript(path);
+				return psh_runscript(path);
 		}
 		/* Run shell interactively */
 		else {
-			psh_run();
+			psh_run(1);
+		}
+	}
+	else if (!strcmp(base, "pshlogin")) {
+		while (1) {
+			if (psh_login() == 1)
+				psh_run(0);
 		}
 	}
 	else if (!strcmp(base, "bind")) {
