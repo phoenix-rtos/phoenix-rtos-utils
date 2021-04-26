@@ -4,9 +4,11 @@
 # Copyright 2018, 2019, 2020, 2021 Phoenix Systems
 #
 
-ifdef PSH_DEFUSRPWDHASH
+PSH_DEFUSRPWDHASH ?= ""
 CFLAGS += -DPSH_DEFUSRPWDHASH=\"$(PSH_DEFUSRPWDHASH)\"
-endif
+
+PSH_SYSEXECWL ?= ""
+CFLAGS += -DPSH_SYSEXECWL='"$(PSH_SYSEXECWL)"'
 
 PSH_ALLCOMMANDS = bind cat exec kill ls mem mkdir mount nc perf ping ps reboot runfile sync sysexec top touch
 PSH_COMMANDS ?= $(PSH_ALLCOMMANDS)

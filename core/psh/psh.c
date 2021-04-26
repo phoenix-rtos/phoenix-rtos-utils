@@ -1080,14 +1080,12 @@ static int psh_login(void)
 		}
 	}
 
-#ifdef PSH_DEFUSRPWDHASH
 	/* validate against defuser */
 	shadow = crypt(passwd, PSH_DEFUSRPWDHASH);
 	memset(passwd, '\0', maxlen);
 	if (shadow != NULL && strcmp(username, "defuser") == 0 && strcmp(shadow, PSH_DEFUSRPWDHASH) == 0)
 		return 1;
-#endif
-	memset(passwd, '\0', maxlen);
+
 	sleep(2);
 	return -1;
 }
