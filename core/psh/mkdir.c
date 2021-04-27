@@ -17,7 +17,8 @@
 #include <sys/stat.h>
 
 
-void psh_mkdirinfo(void){
+void psh_mkdirinfo(void)
+{
 	printf("  mkdir   - creates directory\n");
 }
 

@@ -25,7 +25,7 @@ void __attribute__((weak)) psh_bindinfo(void)
 
 int __attribute__((weak)) psh_bind(int argc, char **argv)
 {
-	fprintf(stderr,psh_common.unkncmd);
+	fprintf(stderr, psh_common.unkncmd);
 	return -ENOTSUP;
 }
 
@@ -38,7 +38,7 @@ void __attribute__((weak)) psh_catinfo(void)
 
 int __attribute__((weak)) psh_cat(int argc, char **argv)
 {
-	fprintf(stderr,psh_common.unkncmd);
+	fprintf(stderr, psh_common.unkncmd);
 	return -ENOTSUP;
 }
 
@@ -51,7 +51,7 @@ void __attribute__((weak)) psh_execinfo(void)
 
 int __attribute__((weak)) psh_exec(int argc, char **argv)
 {
-	fprintf(stderr,psh_common.unkncmd);
+	fprintf(stderr, psh_common.unkncmd);
 	return -ENOTSUP;
 }
 
@@ -64,7 +64,7 @@ void __attribute__((weak)) psh_helpinfo(void)
 
 int __attribute__((weak)) psh_help(void)
 {
-	fprintf(stderr,psh_common.unkncmd);
+	fprintf(stderr, psh_common.unkncmd);
 	return -ENOTSUP;
 }
 
@@ -77,7 +77,7 @@ void __attribute__((weak)) psh_killinfo(void)
 
 int __attribute__((weak)) psh_kill(int argc, char **argv)
 {
-	fprintf(stderr,psh_common.unkncmd);
+	fprintf(stderr, psh_common.unkncmd);
 	return -ENOTSUP;
 }
 
@@ -90,7 +90,7 @@ void __attribute__((weak)) psh_lsinfo(void)
 
 int __attribute__((weak)) psh_ls(int argc, char **argv)
 {
-	fprintf(stderr,psh_common.unkncmd);
+	fprintf(stderr, psh_common.unkncmd);
 	return -ENOTSUP;
 }
 
@@ -103,7 +103,7 @@ void __attribute__((weak)) psh_meminfo(void)
 
 int __attribute__((weak)) psh_mem(int argc, char **argv)
 {
-	fprintf(stderr,psh_common.unkncmd);
+	fprintf(stderr, psh_common.unkncmd);
 	return -ENOTSUP;
 }
 
@@ -116,7 +116,7 @@ void __attribute__((weak)) psh_mkdirinfo(void)
 
 int __attribute__((weak)) psh_mkdir(int argc, char **argv)
 {
-	fprintf(stderr,psh_common.unkncmd);
+	fprintf(stderr, psh_common.unkncmd);
 	return -ENOTSUP;
 }
 
@@ -129,7 +129,7 @@ void __attribute__((weak)) psh_mountinfo(void)
 
 int __attribute__((weak)) psh_mount(int argc, char **argv)
 {
-	fprintf(stderr,psh_common.unkncmd);
+	fprintf(stderr, psh_common.unkncmd);
 	return -ENOTSUP;
 }
 
@@ -142,7 +142,7 @@ void __attribute__((weak)) psh_ncinfo(void)
 
 int __attribute__((weak)) psh_nc(int argc, char **argv)
 {
-	fprintf(stderr,psh_common.unkncmd);
+	fprintf(stderr, psh_common.unkncmd);
 	return -ENOTSUP;
 }
 
@@ -155,7 +155,7 @@ void __attribute__((weak)) psh_perfinfo(void)
 
 int __attribute__((weak)) psh_perf(int argc, char **argv)
 {
-	fprintf(stderr,psh_common.unkncmd);
+	fprintf(stderr, psh_common.unkncmd);
 	return -ENOTSUP;
 }
 
@@ -180,7 +180,7 @@ void __attribute__((weak)) psh_psinfo(void)
 
 int __attribute__((weak)) psh_ps(int argc, char **argv)
 {
-	fprintf(stderr,psh_common.unkncmd);
+	fprintf(stderr, psh_common.unkncmd);
 	return -ENOTSUP;
 }
 
@@ -194,14 +194,14 @@ void __attribute__((weak)) psh_rebootinfo(void)
 
 int __attribute__((weak)) psh_reboot(int argc, char **argv)
 {
-	printf("Command not supported!");
+	fprintf(stderr, psh_common.unkncmd);
 	return -ENOTSUP;
 }
 
 
 int __attribute__((weak)) psh_runfile(int argc, char **argv)
 {
-	fprintf(stderr,psh_common.unkncmd);
+	fprintf(stderr, psh_common.unkncmd);
 	return -ENOTSUP;
 }
 
@@ -214,7 +214,7 @@ void __attribute__((weak)) psh_syncinfo(void)
 
 int __attribute__((weak)) psh_sync(int argc, char **argv)
 {
-	fprintf(stderr,psh_common.unkncmd);
+	fprintf(stderr, psh_common.unkncmd);
 	return -ENOTSUP;
 }
 
@@ -227,7 +227,7 @@ void __attribute__((weak)) psh_sysexecinfo(void)
 
 int __attribute__((weak)) psh_sysexec(int argc, char **argv)
 {
-	fprintf(stderr,psh_common.unkncmd);
+	fprintf(stderr, psh_common.unkncmd);
 	return -ENOTSUP;
 }
 
@@ -240,7 +240,7 @@ void __attribute__((weak)) psh_topinfo(void)
 
 int __attribute__((weak)) psh_top(int argc, char **argv)
 {
-	fprintf(stderr,psh_common.unkncmd);
+	fprintf(stderr, psh_common.unkncmd);
 	return -ENOTSUP;
 }
 
@@ -253,6 +253,6 @@ void __attribute__((weak)) psh_touchinfo(void)
 
 int __attribute__((weak)) psh_touch(int argc, char **argv)
 {
-	fprintf(stderr,psh_common.unkncmd);
+	fprintf(stderr, psh_common.unkncmd);
 	return -ENOTSUP;
 }
