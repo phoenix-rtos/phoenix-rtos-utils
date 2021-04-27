@@ -94,7 +94,7 @@ int psh_perf(int argc, char **argv)
 			break;
 		}
 
-		fprintf(stderr, "perf: wrote %d/%ld bytes\n", bcount, bufsz);
+		fprintf(stderr, "perf: wrote %d/%zd bytes\n", bcount, bufsz);
 
 		usleep(sleeptime);
 		elapsed += sleeptime;

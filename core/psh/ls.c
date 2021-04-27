@@ -1,7 +1,7 @@
 /*
  * Phoenix-RTOS
  *
- * ls - lists files and directories, based on GNU implementation
+ * ls - lists files and directories
  *
  * Copyright 2017, 2018, 2020, 2021 Phoenix Systems
  * Author: Maciej Purski, Lukasz Kosinski, Mateusz Niewiadomski
@@ -406,7 +406,8 @@ static void psh_ls_free(void)
 }
 
 
-void psh_lsinfo(void){
+void psh_lsinfo(void)
+{
 	printf("  ls      - lists files in the namespace\n");
 }
 
@@ -421,7 +422,7 @@ int psh_ls(int argc, char **argv)
 	DIR *stream;
 
 	/* In case of ioctl fail set default window size */
-	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &psh_ls_common.ws)) {
+	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &psh_ls_common.ws) != 0) {
 		psh_ls_common.ws.ws_col = 80;
 		psh_ls_common.ws.ws_row = 25;
 	}

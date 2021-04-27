@@ -247,7 +247,6 @@ void psh_topinfo(void)
 }
 
 
-
 int psh_top(int argc, char **argv)
 {
 	int c, err = 0, cmd = 0, itermode = 1, run = 1, ret = EOK;
