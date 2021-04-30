@@ -18,7 +18,7 @@ LOCAL_CFLAGS := -DPSH_DEFUSRPWDHASH=\"$(PSH_DEFUSRPWDHASH)\"
 LOCAL_CFLAGS += -DPSH_SYSEXECWL='"$(PSH_SYSEXECWL)"'
 
 # TODO: search for dirs?
-PSH_ALLCOMMANDS := bind cat edit exec kill ls mem mkdir mount nc perf ping ps reboot runfile sync sysexec top touch
+PSH_ALLCOMMANDS := bind cat edit exec kill ls mem mkdir mount nc nslookup perf ping ps reboot runfile sync sysexec top touch
 PSH_COMMANDS ?= $(PSH_ALLCOMMANDS)
 PSH_APPLETS := pshapp help login $(filter $(PSH_ALLCOMMANDS), $(PSH_COMMANDS))
 
