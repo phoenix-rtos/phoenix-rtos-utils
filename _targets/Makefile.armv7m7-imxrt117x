@@ -7,3 +7,4 @@
 #
 
 include core/psd/imxrt/Makefile
+include cpu/cm4-tool/Makefile
