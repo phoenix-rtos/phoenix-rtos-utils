@@ -25,7 +25,7 @@
 
 void psh_sysexecinfo(void)
 {
-	printf("launch program from syspage using given map\n");
+	printf("launch program from syspage using given map");
 }
 
 

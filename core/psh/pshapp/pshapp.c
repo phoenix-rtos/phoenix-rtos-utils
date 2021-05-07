@@ -1070,7 +1070,9 @@ static int psh_run(int exitable)
 		optind = 1;
 
 		/* Find and run */
-		app = psh_findapp(argv[0]);
+		if ((app = psh_findapp(argv[0])) == NULL && argv[0][0] == '/')
+			app = psh_findapp("/");
+
 		if (app != NULL)
 			app->run(argc, argv);
 		else
