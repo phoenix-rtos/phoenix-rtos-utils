@@ -17,9 +17,12 @@
 
 #include <sys/threads.h>
 
+#include "../psh.h"
+
 
 void psh_perfinfo(void)
 {
+	printf("track kernel performance events");
 	return;
 }
 
@@ -104,4 +107,11 @@ int psh_perf(int argc, char **argv)
 	free(buffer);
 
 	return EOK;
+}
+
+
+void __attribute__((constructor)) perf_registerapp(void)
+{
+	static psh_appentry_t app = {.name = "perf", .run = psh_perf, .info = psh_perfinfo};
+	psh_registerapp(&app);
 }

@@ -22,12 +22,12 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#include "psh.h"
+#include "../psh.h"
 
 
 void psh_ncinfo(void)
 {
-	printf("  nc      - TCP and UDP connections and listens\n");
+	printf("TCP and UDP connections and listens");
 }
 
 
@@ -346,4 +346,11 @@ int psh_nc(int argc, char **argv)
 	close(fd);
 
 	return 0;
+}
+
+
+void __attribute__((constructor)) nc_registerapp(void)
+{
+	static psh_appentry_t app = {.name = "nc", .run = psh_nc, .info = psh_ncinfo};
+	psh_registerapp(&app);
 }

@@ -20,10 +20,12 @@
 #include <sys/threads.h>
 #include <sys/types.h>
 
+#include "../psh.h"
+
 
 void psh_sysexecinfo(void)
 {
-	printf("  sysexec - launch program from syspage using given map\n");
+	printf("launch program from syspage using given map\n");
 }
 
 
@@ -132,4 +134,11 @@ int psh_sysexec(int argc, char **argv)
 	}
 
 	return EOK;
+}
+
+
+void __attribute__((constructor)) sysexec_registerapp(void)
+{
+	static psh_appentry_t app = {.name = "sysexec", .run = psh_sysexec, .info = psh_sysexecinfo};
+	psh_registerapp(&app);
 }

@@ -16,10 +16,12 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#include "../psh.h"
+
 
 void psh_execinfo(void)
 {
-	printf("  exec    - replace shell with the given command\n");
+	printf("replace shell with the given command");
 }
 
 
@@ -49,4 +51,11 @@ int psh_exec(int argc, char **argv)
 	}
 
 	return err;
+}
+
+
+void __attribute__((constructor)) exec_registerapp(void)
+{
+	static psh_appentry_t app = {.name = "exec", .run = psh_exec, .info = psh_execinfo};
+	psh_registerapp(&app);
 }

@@ -16,10 +16,12 @@
 
 #include <sys/stat.h>
 
+#include "../psh.h"
+
 
 void psh_mkdirinfo(void)
 {
-	printf("  mkdir   - creates directory\n");
+	printf("creates directory");
 }
 
 
@@ -38,4 +40,11 @@ int psh_mkdir(int argc, char **argv)
 	}
 
 	return EOK;
+}
+
+
+void __attribute__((constructor)) mkdir_registerapp(void)
+{
+	static psh_appentry_t app = {.name = "mkdir", .run = psh_mkdir, .info = psh_mkdirinfo};
+	psh_registerapp(&app);
 }

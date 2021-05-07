@@ -29,6 +29,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include "../psh.h"
+
 
 #define DIR_COLOR "\033[34m"    /* Blue */
 #define EXE_COLOR "\033[32m"    /* Green */
@@ -408,7 +410,7 @@ static void psh_ls_free(void)
 
 void psh_lsinfo(void)
 {
-	printf("  ls      - lists files in the namespace\n");
+	printf("lists files in the namespace");
 }
 
 
@@ -604,4 +606,11 @@ int psh_ls(int argc, char **argv)
 	psh_ls_free();
 
 	return ret;
+}
+
+
+void __attribute__((constructor)) ls_registerapp(void)
+{
+	static psh_appentry_t app = {.name = "ls", .run = psh_ls, .info = psh_lsinfo};
+	psh_registerapp(&app);
 }

@@ -15,11 +15,19 @@
 #define _PSH_H_
 
 
+typedef struct psh_app {
+	const char name[16]; 
+	const int (*run)(int argc, char **argv);
+	const void (*info)(void);
+	struct psh_app *next;
+} psh_appentry_t;
+
+
 typedef struct {
+	psh_appentry_t *pshapplist;
 	volatile unsigned char sigint;  /* Received SIGINT */
 	volatile unsigned char sigquit; /* Received SIGQUIT */
 	volatile unsigned char sigstop; /* Received SIGTSTP */
-	char* unkncmd;// = "Command not supported!\n";
 } psh_common_t;
 
 
@@ -34,6 +42,15 @@ extern int psh_prefix(unsigned int base, int x, int y, unsigned int prec, char *
 
 
 extern void _psh_exit(int code);
+
+
+extern void psh_registerapp(psh_appentry_t *newapp);
+
+
+extern const psh_appentry_t *psh_findapp(char *appname);
+
+
+extern const psh_appentry_t *psh_getapp(int n);
 
 
 #endif

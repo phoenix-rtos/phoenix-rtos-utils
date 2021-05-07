@@ -14,10 +14,12 @@
 #include <errno.h>
 #include <stdio.h>
 
+#include "../psh.h"
+
 
 void psh_touchinfo(void)
 {
-	printf("  touch   - changes file timestamp\n");
+	printf("changes file timestamp");
 }
 
 
@@ -39,4 +41,11 @@ int psh_touch(int argc, char **argv)
 	}
 
 	return EOK;
+}
+
+
+void __attribute__((constructor)) touch_registerapp(void)
+{
+	static psh_appentry_t app = {.name = "touch", .run = psh_touch, .info = psh_touchinfo};
+	psh_registerapp(&app);
 }
