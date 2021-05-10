@@ -18,10 +18,12 @@
 #include <sys/msg.h>
 #include <sys/stat.h>
 
+#include "../psh.h"
+
 
 void psh_bindinfo(void)
 {
-	printf("  bind    - binds device to directory\n");
+	printf("binds device to directory");
 }
 
 
@@ -59,4 +61,10 @@ int psh_bind(int argc, char **argv)
 		return err;
 
 	return msg.o.attr.val;
+}
+
+void __attribute__((constructor)) bind_registerapp(void)
+{
+	static psh_appentry_t app = {.name = "bind", .run = psh_bind, .info = psh_bindinfo};
+	psh_registerapp(&app);
 }

@@ -17,11 +17,11 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "psh.h"
+#include "../psh.h"
 
 void psh_catinfo(void)
 {
-	printf("  cat     - concatenate file(s) to standard output\n");
+	printf("concatenate file(s) to standard output");
 }
 
 static void psh_cat_help(const char *prog)
@@ -65,4 +65,11 @@ int psh_cat(int argc, char **argv)
 	free(buff);
 
 	return EOK;
+}
+
+
+void __attribute__((constructor)) cat_registerapp(void)
+{
+	static psh_appentry_t app = {.name = "cat", .run = psh_cat, .info = psh_catinfo};
+	psh_registerapp(&app);
 }

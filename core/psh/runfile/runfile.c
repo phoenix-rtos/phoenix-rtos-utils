@@ -20,10 +20,10 @@
 
 #include <sys/pwman.h>
 
-#include "psh.h"
+#include "../psh.h"
 
 
-int psh_runfile(char **argv)
+int psh_runfile(int argc, char **argv)
 {
 	pid_t pid;
 
@@ -72,4 +72,11 @@ int psh_runfile(char **argv)
 	tcsetpgrp(STDIN_FILENO, getpgid(getpid()));
 
 	return EOK;
+}
+
+
+void __attribute__((constructor)) runfile_registerapp(void)
+{
+	static psh_appentry_t app = {.name = "/", .run = psh_runfile, .info = NULL};
+	psh_registerapp(&app);
 }

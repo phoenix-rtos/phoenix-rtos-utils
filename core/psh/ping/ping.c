@@ -25,7 +25,7 @@
 #include <sys/time.h>
 #include <errno.h>
 
-#include "psh.h"
+#include "../psh.h"
 
 static struct {
 	struct sockaddr_in raddr;
@@ -40,7 +40,7 @@ static struct {
 
 void psh_pinginfo(void)
 {
-	printf("  ping    - ICMP ECHO requests\n");
+	printf("ICMP ECHO requests");
 	return;
 }
 
@@ -276,4 +276,11 @@ int psh_ping(int argc, char **argv)
 	close(fd);
 
 	return 0;
+}
+
+
+void __attribute__((constructor)) ping_registerapp(void)
+{
+	static psh_appentry_t app = {.name = "ping", .run = psh_ping, .info = psh_pinginfo};
+	psh_registerapp(&app);
 }

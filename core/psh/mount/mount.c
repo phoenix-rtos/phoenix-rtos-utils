@@ -18,10 +18,12 @@
 
 #include <sys/mount.h>
 
+#include "../psh.h"
+
 
 void psh_mountinfo(void)
 {
-	printf("  mount   - mounts a filesystem\n");
+	printf("mounts a filesystem");
 }
 
 
@@ -38,4 +40,11 @@ int psh_mount(int argc, char **argv)
 		fprintf(stderr, "mount: %s\n", strerror(err));
 
 	return EOK;
+}
+
+
+void __attribute__((constructor)) mount_registerapp(void)
+{
+	static psh_appentry_t app = {.name = "mount", .run = psh_mount, .info = psh_mountinfo};
+	psh_registerapp(&app);
 }

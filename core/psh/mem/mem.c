@@ -20,6 +20,8 @@
 #include <sys/mman.h>
 #include <sys/threads.h>
 
+#include "../psh.h"
+
 
 static int psh_mem_summary(void)
 {
@@ -222,7 +224,7 @@ static int psh_mem_page(void)
 
 void psh_meminfo(void)
 {
-	printf("  mem     - prints memory map\n");
+	printf("prints memory map");
 }
 
 
@@ -252,4 +254,11 @@ int psh_mem(int argc, char **argv)
 	}
 
 	return EOK;
+}
+
+
+void __attribute__((constructor)) mem_registerapp(void)
+{
+	static psh_appentry_t app = {.name = "mem", .run = psh_mem, .info = psh_meminfo};
+	psh_registerapp(&app);
 }

@@ -18,10 +18,12 @@
 
 #include <sys/threads.h>
 
+#include "../psh.h"
+
 
 void psh_killinfo(void)
 {
-	printf("  kill    - terminates process\n");
+	printf("terminates process");
 }
 
 
@@ -42,4 +44,11 @@ int psh_kill(int argc, char **argv)
 	}
 
 	return signalPost(pid, -1, signal_kill);
+}
+
+
+void __attribute__((constructor)) kill_registerapp(void)
+{
+	static psh_appentry_t app = {.name = "kill", .run = psh_kill, .info = psh_killinfo};
+	psh_registerapp(&app);
 }

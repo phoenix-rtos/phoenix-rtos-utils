@@ -25,7 +25,7 @@
 #include <sys/threads.h>
 #include <sys/time.h>
 
-#include "psh.h"
+#include "../psh.h"
 
 
 static struct {
@@ -243,7 +243,7 @@ static void psh_top_free(threadinfo_t *info, threadinfo_t *previnfo)
 
 void psh_topinfo(void)
 {
-	printf("  top     - top utility\n");
+	printf("top utility");
 }
 
 
@@ -392,4 +392,11 @@ int psh_top(int argc, char **argv)
 	psh_top_free(info, previnfo);
 
 	return ret;
+}
+
+
+void __attribute__((constructor)) top_registerapp(void)
+{
+	static psh_appentry_t app = {.name = "top", .run = psh_top, .info = psh_topinfo};
+	psh_registerapp(&app);
 }

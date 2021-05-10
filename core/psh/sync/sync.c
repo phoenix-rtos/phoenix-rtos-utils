@@ -18,10 +18,12 @@
 #include <sys/mount.h>
 #include <sys/msg.h>
 
+#include "../psh.h"
+
 
 void psh_syncinfo(void)
 {
-	printf("  sync    - synchronizes device\n");
+	printf("synchronizes device");
 }
 
 
@@ -43,3 +45,9 @@ int psh_sync(int argc, char **argv)
 	return msgSend(oid.port, &msg);
 }
 
+
+void __attribute__((constructor)) sync_registerapp(void)
+{
+	static psh_appentry_t app = {.name = "sync", .run = psh_sync, .info = psh_syncinfo};
+	psh_registerapp(&app);
+}

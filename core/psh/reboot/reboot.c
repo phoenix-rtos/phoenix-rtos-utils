@@ -17,10 +17,12 @@
 
 #include <sys/reboot.h>
 
+#include "../psh.h"
+
 
 void psh_rebootinfo(void)
 {
-	printf("  reboot  - restarts the machine\n");
+	printf("restarts the machine");
 }
 
 
@@ -49,4 +51,11 @@ int psh_reboot(int argc, char **argv)
 	}
 
 	return EOK;
+}
+
+
+void __attribute__((constructor)) reboot_registerapp(void)
+{
+	static psh_appentry_t app = {.name = "reboot", .run = psh_reboot, .info = psh_rebootinfo};
+	psh_registerapp(&app);
 }

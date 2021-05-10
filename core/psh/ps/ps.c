@@ -21,7 +21,7 @@
 #include <sys/minmax.h>
 #include <sys/threads.h>
 
-#include "psh.h"
+#include "../psh.h"
 
 
 static int psh_ps_cmpname(const void *t1, const void *t2)
@@ -44,7 +44,7 @@ static int psh_ps_cmpcpu(const void *t1, const void *t2)
 
 void psh_psinfo(void)
 {
-	printf("  ps      - prints processes and threads\n");
+	printf("prints processes and threads");
 }
 
 
@@ -140,4 +140,11 @@ int psh_ps(int argc, char **argv)
 
 	free(info);
 	return EOK;
+}
+
+
+void __attribute__((constructor)) ps_registerapp(void)
+{
+	static psh_appentry_t app = {.name = "ps", .run = psh_ps, .info = psh_psinfo};
+	psh_registerapp(&app);
 }
