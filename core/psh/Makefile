@@ -17,7 +17,7 @@ PSH_ALLCOMMANDS = bind cat exec kill ls mem mkdir mount nc perf ping ps reboot r
 PSH_COMMANDS ?= $(PSH_ALLCOMMANDS)
 PSH_APPLETS = pshapp help login $(filter $(PSH_ALLCOMMANDS), $(PSH_COMMANDS))
 
-SRCS := $(foreach app, $(PSH_APPLETS), $(wildcard $(LOCAL_DIR)$(app)/*.c))
+SRCS := $(foreach app, $(PSH_APPLETS), $(wildcard $(LOCAL_PATH)$(app)/*.c))
 
 include $(binary.mk)
 
