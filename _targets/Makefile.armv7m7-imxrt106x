@@ -6,4 +6,4 @@
 # Copyright 2019 Phoenix Systems
 #
 
-include core/psd/imxrt/Makefile
+DEFAULT_COMPONENTS := psh psd
