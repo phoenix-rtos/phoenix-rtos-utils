@@ -25,7 +25,7 @@
 #include <sys/platform.h>
 #include <sys/reboot.h>
 
-#include <flashsrv.h>
+#include <imxrt-flashsrv.h>
 #include <phoenix/arch/imxrt.h>
 
 #include "../common/sdp.h"

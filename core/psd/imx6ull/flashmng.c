@@ -15,7 +15,7 @@
 
 
 #include "flashmng.h"
-#include <flashsrv.h>
+#include <imx6ull-flashsrv.h>
 
 #include <sys/mman.h>
 #include <stdint.h>

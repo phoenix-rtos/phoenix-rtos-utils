@@ -6,5 +6,4 @@
 # Copyright 2019 Phoenix Systems
 #
 
-include core/psd/imxrt/Makefile
-include core/cm4-tool/Makefile
+DEFAULT_COMPONENTS := psh psd cm4-tool

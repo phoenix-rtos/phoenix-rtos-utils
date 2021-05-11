@@ -25,7 +25,7 @@
 #include "bcb.h"
 #include "bch.h"
 
-#include <flashsrv.h>
+#include <imx6ull-flashsrv.h>
 
 uint32_t bcb_checksum(uint8_t *bcb, int size)
 {

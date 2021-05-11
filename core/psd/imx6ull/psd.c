@@ -11,7 +11,7 @@
  * %LICENSE%
  */
 
-#include <flashsrv.h>
+#include <imx6ull-flashsrv.h>
 
 #include <stdio.h>
 #include <stdint.h>

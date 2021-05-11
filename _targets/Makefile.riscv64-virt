@@ -6,3 +6,4 @@
 # Copyright 2019 Phoenix Systems
 #
 
+DEFAULT_COMPONENTS := psh
