@@ -8,6 +8,7 @@ NAME := psd
 LOCAL_PATH = $(call my-dir)
 LOCAL_SRCS := common/sdp.c
 LIBS := libusbclass libusbclient
+LOCAL_INSTALL_PATH := /sbin
 
 ifneq (, $(findstring imxrt, $(TARGET)))
   LOCAL_SRCS += imxrt/psd.c
@@ -24,4 +25,5 @@ include $(binary.mk)
 NAME := psd-old
 LOCAL_SRCS := imx6ull/psd-old.c
 LIBS := libusbclient
+LOCAL_INSTALL_PATH := /sbin
 include $(binary.mk)
