@@ -26,12 +26,12 @@ void psh_helpinfo(void)
 int psh_help(int argc, char **argv)
 {
 	const psh_appentry_t *app;
-	int ii = 0;
+	int padding = sizeof(app->name) - 1;
 
 	printf("Available commands:\n");
-	for (app = psh_getapp(ii); app != NULL; app = psh_getapp(++ii) ) {
+	for (app = psh_applist_first(); app != NULL; app = psh_applist_next(app)) {
 		if (app->info != NULL) {
-			printf("%*s - ", 16, app->name);
+			printf("  %-*s - ", padding, app->name);
 			app->info();
 			printf("\n");
 		}
