@@ -16,7 +16,7 @@
 
 
 typedef struct psh_app {
-	const char name[16]; 
+	const char name[11]; 
 	const int (*run)(int argc, char **argv);
 	const void (*info)(void);
 	struct psh_app *next;
@@ -50,7 +50,10 @@ extern void psh_registerapp(psh_appentry_t *newapp);
 extern const psh_appentry_t *psh_findapp(char *appname);
 
 
-extern const psh_appentry_t *psh_getapp(int n);
+extern const psh_appentry_t *psh_applist_first(void);
+
+
+extern const psh_appentry_t *psh_applist_next(const psh_appentry_t *current);
 
 
 #endif

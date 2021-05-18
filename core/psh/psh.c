@@ -28,18 +28,37 @@
 psh_common_t psh_common = {NULL};
 
 
+const psh_appentry_t *psh_applist_first(void)
+{
+	return psh_common.pshapplist;
+}
+
+
+const psh_appentry_t *psh_applist_next(const psh_appentry_t *current)
+{
+	if (current == NULL)
+		return NULL;
+	return current->next;
+}
+
+
 void psh_registerapp(psh_appentry_t *newapp)
 {	
-	psh_appentry_t *appiterator;
+	psh_appentry_t *prevapp = NULL;
 
-	newapp->next = NULL;
-	if (psh_common.pshapplist == NULL) {
-		psh_common.pshapplist = newapp;
-		return;
+	/* find position */
+	newapp->next = psh_common.pshapplist;
+	while (newapp->next != NULL && strcmp(newapp->next->name, newapp->name) < 0) {
+		prevapp = newapp->next;
+		newapp->next = prevapp->next;
 	}
-	for (appiterator = psh_common.pshapplist; appiterator->next != NULL; appiterator = appiterator->next)
-		;
-	appiterator->next = newapp;
+
+	/* insert */
+	if (prevapp == NULL)
+		psh_common.pshapplist = newapp;
+	else
+		prevapp->next = newapp;
+	
 	return;
 }
 
@@ -51,14 +70,6 @@ const psh_appentry_t *psh_findapp(char *appname) {
 			break;
 	}
 	return app;
-}
-
-
-const psh_appentry_t *psh_getapp(int n) {
-	const psh_appentry_t *entry;
-	for (entry = psh_common.pshapplist; (entry != NULL) && (n > 0); entry = entry->next, n--)
-	;
-	return entry;
 }
 
 
