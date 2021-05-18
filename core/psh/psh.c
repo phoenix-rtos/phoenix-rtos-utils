@@ -58,7 +58,7 @@ void psh_registerapp(psh_appentry_t *newapp)
 		psh_common.pshapplist = newapp;
 	else
 		prevapp->next = newapp;
-	
+
 	return;
 }
 

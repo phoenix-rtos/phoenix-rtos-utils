@@ -977,8 +977,6 @@ static int psh_run(int exitable)
 	int err, n, argc;
 	pid_t pgrp;
 
-	pshapp_common.cmdhist = cmdhist;
-
 	/* Check if we run interactively */
 	if (!isatty(STDIN_FILENO))
 		return -ENOTTY;
@@ -1020,6 +1018,7 @@ static int psh_run(int exitable)
 		fprintf(stderr, "psh: failed to allocate command history storage\n");
 		return -ENOMEM;
 	}
+	pshapp_common.cmdhist = cmdhist;
 
 	for (;;) {
 		write(STDOUT_FILENO, "\r\033[0J", 5);
@@ -1156,7 +1155,7 @@ int psh_pshapplogin(int argc, char **argv)
 	while (1) {
 		if (pshapp_common.isrunpsh != 0)
 			return -EACCES;
-		if ( pshapp_common.isrunpsh == 0 && (loginapp == NULL || loginapp->run(argc, argv) == 1 )) {
+		if ((loginapp == NULL || loginapp->run(argc, argv) == 1) && pshapp_common.isrunpsh == 0) {
 			pshapp_common.isrunpsh = 1;
 			psh_run(0);
 			pshapp_common.isrunpsh = 0;
