@@ -20,7 +20,7 @@
 #include <sys/msg.h>
 #include <sys/pwman.h>
 
-#include <posix/utils.h>
+#include <libgen.h>
 
 #include "psh.h"
 
@@ -75,7 +75,7 @@ const psh_appentry_t *psh_findapp(char *appname) {
 
 int main(int argc, char **argv)
 {
-	char *base, *dir;
+	char *base;
 	oid_t oid;
 	const psh_appentry_t *app;
 
@@ -89,7 +89,7 @@ int main(int argc, char **argv)
 	while (write(1, "", 0) < 0)
 		usleep(50000);
 
-	splitname(argv[0], &base, &dir);
+	base = basename(argv[0]);
 
 	/* Run app */
 	if ((app = psh_findapp(base)) != NULL)
