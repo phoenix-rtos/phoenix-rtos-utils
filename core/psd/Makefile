@@ -12,10 +12,8 @@ LOCAL_INSTALL_PATH := /sbin
 
 ifneq (, $(findstring imxrt, $(TARGET)))
   LOCAL_SRCS += imxrt/psd.c
-  LIBS += libflashdrv-imxrt
 else ifneq (, $(findstring imx6ull, $(TARGET)))
-  SRCS := $(filter-out %/psd-old.c, $(wildcard $(LOCAL_PATH)/imx6ull/*.c))
-  LIBS += libflashdrv-imx6ull
+  SRCS := $(filter-out %/psd-old.c, $(wildcard $(LOCAL_PATH)imx6ull/*.c))
 else
 $(NAME): ; $(error $(NAME) for $(TARGET) not implemented)
 endif
