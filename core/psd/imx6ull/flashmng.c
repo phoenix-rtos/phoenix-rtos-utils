@@ -102,7 +102,8 @@ int flashmng_writedev(oid_t oid, uint32_t paddr, void *data, int size, int type)
 }
 
 
-int flashmng_eraseBlock(oid_t oid, int start, int end)
+/* start and end are in "erase blocks" */
+int flashmng_eraseBlock(oid_t oid, int start, int end, int chip_erase)
 {
 	msg_t msg;
 	flash_i_devctl_t *idevctl = NULL;
@@ -118,7 +119,7 @@ int flashmng_eraseBlock(oid_t oid, int start, int end)
 	msg.o.size = 0;
 
 	idevctl = (flash_i_devctl_t *)msg.i.raw;
-	idevctl->type = flashsrv_devctl_chiperase;
+	idevctl->type = chip_erase ? flashsrv_devctl_chiperase : flashsrv_devctl_erase;
 	idevctl->erase.oid = oid;
 	idevctl->erase.size = (end - start) * ERASE_BLOCK_SIZE;
 	idevctl->erase.offset = start * ERASE_BLOCK_SIZE;
@@ -209,6 +210,7 @@ int flashmng_checkRange(oid_t oid, int start, int end, dbbt_t **dbbt)
 	printf("Number of bad blocks:  %d\n", bad);
 	printf("------------------\n");
 
+	/* FIXME: memory leak if dbbt already allocated */
 	if (dbbt != NULL && bbtn < BB_MAX) {
 		dbbtsz = (sizeof(dbbt_t) + (sizeof(uint32_t) * bbtn) + FLASH_PAGE_SIZE - 1) & ~(FLASH_PAGE_SIZE - 1);
 		*dbbt = malloc(dbbtsz);
@@ -222,7 +224,7 @@ int flashmng_checkRange(oid_t oid, int start, int end, dbbt_t **dbbt)
 }
 
 
-int flashmng_cleanMakers(oid_t oid, int start, int end)
+int flashmng_cleanMarkers(oid_t oid, int start, int end)
 {
 	void *metabuf;
 	int i, ret = 0;
