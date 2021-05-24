@@ -40,6 +40,8 @@ static int psh_sysexec_argmatch(const char *cmd, size_t cmdlen, int argc, const 
 		if ((nextc = strchr(currc, ' ')) == NULL || nextc > cmdend)
 			nextc = cmdend;
 		len = nextc - currc;
+		if (*currc == '*') /* "accept all" wildcard */
+			return 1;
 		if (strlen(argv[ii]) != len || memcmp(argv[ii], currc, len) != 0)
 			return -1;
 
