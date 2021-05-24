@@ -74,6 +74,8 @@ struct {
 	unsigned int nfiles;
 	FILE *f;
 	oid_t oid;
+	offs_t partsz;
+	offs_t partOffs;
 
 	FILE *files[FILES_SIZE];
 	oid_t oids[FILES_SIZE];
@@ -101,7 +103,7 @@ const usb_hid_dev_setup_t hid_setup = {
 };
 
 
-int psd_hidResponse(int err, int type)
+static int psd_hidResponse(int err, int type)
 {
 	int res;
 
@@ -148,25 +150,30 @@ int psd_hidResponse(int err, int type)
 }
 
 
-int psd_changePartition(uint8_t number)
+static int psd_changePartition(uint8_t number)
 {
-	int err = hidOK;
-
 	if (number > psd_common.nfiles) {
-		err = -eReport1;
+		return -eReport1;
 	}
 	else {
 		/* Change file */
-		printf("PSD: Changed current partition to flash%d.\n", number);
 		psd_common.f = psd_common.files[number];
 		psd_common.oid = psd_common.oids[number];
+
+		if (flashmng_getAttr(atSize, &psd_common.partsz, psd_common.oid) < 0)
+			return -eReport1;
+
+		if (flashmng_getAttr(atDev, &psd_common.partOffs, psd_common.oid) < 0)
+			return -eReport1;
 	}
 
-	return err;
+	printf("PSD: Changed current partition to flash%d (offs=%llu size=%llu).\n", number, psd_common.partOffs, psd_common.partsz);
+
+	return hidOK;
 }
 
 
-int psd_controlBlock(uint32_t block)
+static int psd_controlBlock(uint32_t block)
 {
 	int err = hidOK;
 	if (block == FCB) {
@@ -188,43 +195,48 @@ int psd_controlBlock(uint32_t block)
 }
 
 
-int psd_eraseFS(uint32_t size)
+static int psd_erasePartition(uint32_t size)
 {
 	int err = hidOK;
 
-	printf("PSD: Erase FS - start: %d end: %d.\n", 0, 64 + (2 * size));
-	if ((err = flashmng_eraseBlock(psd_common.oid, 0, 64 + (2 * size))) < 0)
+	printf("PSD: Erase partition - start: %d end: %d.\n", 0, size);
+	if ((err = flashmng_eraseBlock(psd_common.oid, 0, size, 0)) < 0)
 		return err;
 
-	printf("PSD: Check dbbt - start: %d end: %d.\n", 0, 64 + (2 * size));
-	if ((err = flashmng_checkRange(psd_common.oid, 0, 64 + (2 * size), &psd_common.dbbt)) < 0)
+	/* FIXME: partial dbbt check is not supported, actually causes DBBT overwrite and memory leak */
+#if 0
+	printf("PSD: Check dbbt - start: %d end: %d.\n", 0, BLOCKS_CNT);
+	if ((err = flashmng_checkRange(psd_common.oid, 0, BLOCKS_CNT, &psd_common.dbbt)) < 0)
 		return err;
+#endif
 
 	return err;
 }
 
 
-int psd_eraseAll(uint32_t size)
+static int psd_eraseChip(uint32_t size)
 {
 	int err = hidOK;
 
-	printf("PSD: Erase all - start: %d end: %d.\n", 0, BLOCKS_CNT);
-	if ((err = flashmng_eraseBlock(psd_common.oid, 0, BLOCKS_CNT)) < 0)
+	/* FIXME: don't hardcode flash size */
+	printf("PSD: Erase chip - start: %d end: %d.\n", 0, BLOCKS_CNT);
+	if ((err = flashmng_eraseBlock(psd_common.oid, 0, BLOCKS_CNT, 1)) < 0)
 		return err;
 
 	printf("PSD: Check dbbt - start: %d end: %d.\n", 0, BLOCKS_CNT);
 	if ((err = flashmng_checkRange(psd_common.oid, 0, BLOCKS_CNT, &psd_common.dbbt)) < 0)
 		return err;
 
-	printf("PSD: CleanMakers.\n");
-	if ((err = flashmng_cleanMakers(psd_common.oid, 64 + (2 * size), BLOCKS_CNT)) < 0)
+	/* FIXME: hardcoded JFFS2 cleanmarkers beginning (???) */
+	printf("PSD: CleanMarkers.\n");
+	if ((err = flashmng_cleanMarkers(psd_common.oid, 64 + 2 * size, BLOCKS_CNT)) < 0)
 		return err;
 
 	return err;
 }
 
 
-int psd_checkProduction(void)
+static int psd_checkProduction(void)
 {
 	int err = hidOK;
 
@@ -236,7 +248,7 @@ int psd_checkProduction(void)
 }
 
 
-int psd_blowFuses(void)
+static int psd_blowFuses(void)
 {
 	int err = hidOK;
 
@@ -298,7 +310,7 @@ int psd_blowFuses(void)
 }
 
 
-int psd_writeRegister(sdp_cmd_t *cmd)
+static int psd_writeRegister(sdp_cmd_t *cmd)
 {
 	int err = hidOK;
 	int address = (int)cmd->address;
@@ -310,11 +322,11 @@ int psd_writeRegister(sdp_cmd_t *cmd)
 	else if (address == CONTROL_BLOCK_ADDRESS) {
 		err = psd_controlBlock(data);
 	}
-	else if (address == ERASE_ROOTFS_ADDRESS) {
-		err = psd_eraseFS(data);
+	else if (address == ERASE_PARTITION_ADDRESS) {
+		err = psd_erasePartition(data);
 	}
-	else if (address == ERASE_ALL_ADDRESS) {
-		err = psd_eraseAll(data);
+	else if (address == ERASE_CHIP_ADDRESS) {
+		err = psd_eraseChip(data);
 	}
 	else if (address == CHECK_PRODUCTION) {
 		err = psd_checkProduction();
@@ -336,30 +348,29 @@ int psd_writeRegister(sdp_cmd_t *cmd)
 }
 
 
-int psd_writeFile(sdp_cmd_t *cmd)
+static int psd_writeFile(sdp_cmd_t *cmd)
 {
 	int res, err = hidOK, buffOffset = 0;
-	offs_t writesz, fileOffs, partsz, partOffs;
+	offs_t writesz, fileOffs;
 	uint32_t pagenum, blocknum;
 
 	char *outdata = NULL;
 
 	/* Check command parameters */
 	fileOffs = cmd->address * FLASH_PAGE_SIZE;
-	if (flashmng_getAttr(atSize, &partsz, psd_common.oid) < 0)
-		err = -eReport1;
+	printf("fileOffs: %lld, partsz: %lld partOff: %lld\n", fileOffs, psd_common.partsz, psd_common.partOffs);
 
-	if (!err && flashmng_getAttr(atDev, &partOffs, psd_common.oid) < 0)
-		err = -eReport1;
+	if (cmd->datasz + fileOffs > psd_common.partsz)
+		return -eReport1;
 
-	if (!err && (cmd->datasz + fileOffs) > partsz)
-		err = -eReport1;
+	if (fseek(psd_common.f, fileOffs, SEEK_SET) < 0)
+		return -eReport1;
 
-	if (!err && (fseek(psd_common.f, fileOffs, SEEK_SET) < 0))
-		err = -eReport1;
-
-	if (!err && (psd_common.dbbt == NULL))
-		err = -eReport1;
+#if 0
+	/* FIXME: read dbbt from FLASH at startup */
+	if (psd_common.dbbt == NULL)
+		return -eReport1;
+#endif
 
 	printf("PSD: Writing file.\n");
 
@@ -381,7 +392,7 @@ int psd_writeFile(sdp_cmd_t *cmd)
 
 		if (buffOffset && !err) {
 
-			pagenum = partOffs + fileOffs;
+			pagenum = psd_common.partOffs + fileOffs;
 			blocknum = pagenum / PAGES_PER_BLOCK;
 
 			/* If the current block is bad, the block should be omitted. */
@@ -408,7 +419,7 @@ int psd_writeFile(sdp_cmd_t *cmd)
 }
 
 
-void usage(char *progname)
+static void usage(char *progname)
 {
 	printf("PSD: Usage: %s <device_1> [device_2] ... [device_n] \n", progname);
 }
@@ -447,6 +458,8 @@ int main(int argc, char **argv)
 	psd_common.fcb = malloc(sizeof(fcb_t));
 	psd_common.f = psd_common.files[0];
 	psd_common.oid = psd_common.oids[0];
+
+	/* FIXME: read DBBT from flash */
 
 	printf("PSD: Initializing USB transport\n");
 	if (sdp_init(&hid_setup)) {

@@ -27,14 +27,14 @@
 
 
 /* Addresses definitions for WRITE_REGISTER */
-#define CHANGE_PARTITION -1
-#define ERASE_ROOTFS_ADDRESS -2
-#define ERASE_ALL_ADDRESS -3
-#define CHECK_PRODUCTION -4
-#define CONTROL_BLOCK_ADDRESS -5
-#define BLOW_FUSES -6
-#define CHANGE_FLASH -7
-#define CLOSE_PSD -100
+#define CHANGE_PARTITION        -1
+#define ERASE_PARTITION_ADDRESS -2
+#define ERASE_CHIP_ADDRESS      -3
+#define CHECK_PRODUCTION        -4
+#define CONTROL_BLOCK_ADDRESS   -5
+#define BLOW_FUSES              -6
+#define CHANGE_FLASH            -7
+#define CLOSE_PSD               -100
 
 
 enum {
