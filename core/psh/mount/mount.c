@@ -30,14 +30,20 @@ void psh_mountinfo(void)
 int psh_mount(int argc, char **argv)
 {
 	int err;
+	char *mount_data = NULL;
 
-	if (argc != 6) {
-		fprintf(stderr, "usage: %s <source> <target> <fstype> <mode> <data>\n", argv[0]);
+	if (argc < 5 || argc > 6) {
+		fprintf(stderr, "usage: %s <source> <target> <fstype> <mode> [data]\n", argv[0]);
 		return -EINVAL;
 	}
 
-	if ((err = mount(argv[1], argv[2], argv[3], atoi(argv[4]), argv[5])) < 0)
+	if (argc == 6)
+		mount_data = argv[5];
+
+	if ((err = mount(argv[1], argv[2], argv[3], atoi(argv[4]), mount_data)) < 0) {
 		fprintf(stderr, "mount: %s\n", strerror(err));
+		return 1;
+	}
 
 	return EOK;
 }
