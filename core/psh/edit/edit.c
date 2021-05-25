@@ -870,6 +870,8 @@ static int edit_open(char *filename)
 	struct stat st;
 
 	edit_common.filename = strdup(filename);
+	if (edit_common.filename == NULL)
+		return edit_error(ENOMEM);
 
 	if (stat(filename, &st) < 0) {
 		edit_status("Editing new empty file", colorDefault);
