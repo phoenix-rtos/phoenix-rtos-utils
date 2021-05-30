@@ -561,10 +561,12 @@ static void edit_rowDelete(int cury)
 
 	free(edit_common.row[cury].chars);
 
-	memmove(&edit_common.row[cury], &edit_common.row[cury + 1], sizeof(row_t) * (edit_common.nrows - cury - 1));
+	if (edit_common.nrows > 1) {
+		memmove(&edit_common.row[cury], &edit_common.row[cury + 1], sizeof(row_t) * (edit_common.nrows - cury - 1));
 
-	for (i = cury; i < edit_common.nrows; i++)
-		edit_common.row[i].updated = 1;
+		for (i = cury; i < edit_common.nrows; i++)
+			edit_common.row[i].updated = 1;
+	}
 
 	edit_common.nrows--;
 	edit_common.dirty = 1;
@@ -648,8 +650,11 @@ static void edit_deleteChar(void)
 {
 	row_t *row;
 
-	if (edit_common.nrows == 1 && edit_common.row[0].len == 0)
-		edit_common.nrows = 0;
+	if (edit_common.nrows == 1 && edit_common.row[0].len == 0) {
+		edit_common.cx = edit_common.cy = 0;
+		edit_rowDelete(0);
+		return;
+	}
 
 	if (edit_common.cx == 0 && edit_common.cy == 0)
 		return;
