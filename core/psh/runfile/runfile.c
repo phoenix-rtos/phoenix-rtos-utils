@@ -43,7 +43,7 @@ int psh_runfile(int argc, char **argv)
 		tcsetpgrp(STDIN_FILENO, pid);
 
 		/* Execute the file */
-		execve(argv[0], argv, NULL);
+		execv(argv[0], argv);
 
 		switch (errno) {
 		case EIO:
