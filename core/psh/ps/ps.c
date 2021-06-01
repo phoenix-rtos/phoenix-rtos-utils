@@ -48,6 +48,19 @@ static void psh_psinfo(void)
 }
 
 
+static void usage(const char *progname)
+{
+	printf("Usage: %s [options]\n", progname);
+	printf("\nDisplaying:\n");
+	printf("    -t    Show threads\n");
+	printf("    -h    Show help instead\n");
+	printf("\nSorting:\n");
+	printf("    -c    Sort by current CPU usage [default]\n");
+	printf("    -n    Sort by name\n");
+	printf("    -p    Sort by PID\n");
+}
+
+
 static int psh_ps(int argc, char **argv)
 {
 	int (*cmp)(const void *, const void *) = psh_ps_cmpcpu;
@@ -56,7 +69,7 @@ static int psh_ps(int argc, char **argv)
 	unsigned int h, m;
 	char buff[8];
 
-	while ((c = getopt(argc, argv, "cnpt")) != -1) {
+	while ((c = getopt(argc, argv, "chnpt")) != -1) {
 		switch (c) {
 			case 'c':
 				cmp = psh_ps_cmpcpu;
@@ -74,6 +87,10 @@ static int psh_ps(int argc, char **argv)
 				threads = 1;
 				break;
 
+
+			case 'h':
+				usage(argv[0]);
+				return EOK;
 
 			default:
 				return EOK;
