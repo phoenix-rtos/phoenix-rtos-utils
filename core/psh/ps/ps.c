@@ -42,13 +42,13 @@ static int psh_ps_cmpcpu(const void *t1, const void *t2)
 }
 
 
-void psh_psinfo(void)
+static void psh_psinfo(void)
 {
 	printf("prints processes and threads");
 }
 
 
-int psh_ps(int argc, char **argv)
+static int psh_ps(int argc, char **argv)
 {
 	int (*cmp)(const void *, const void *) = psh_ps_cmpcpu;
 	int c, tcnt, i, j, n = 32, threads = 0;
@@ -58,24 +58,25 @@ int psh_ps(int argc, char **argv)
 
 	while ((c = getopt(argc, argv, "cnpt")) != -1) {
 		switch (c) {
-		case 'c':
-			cmp = psh_ps_cmpcpu;
-			break;
+			case 'c':
+				cmp = psh_ps_cmpcpu;
+				break;
 
-		case 'n':
-			cmp = psh_ps_cmpname;
-			break;
+			case 'n':
+				cmp = psh_ps_cmpname;
+				break;
 
-		case 'p':
-			cmp = psh_ps_cmppid;
-			break;
+			case 'p':
+				cmp = psh_ps_cmppid;
+				break;
 
-		case 't':
-			threads = 1;
-			break;
+			case 't':
+				threads = 1;
+				break;
 
-		default:
-			return EOK;
+
+			default:
+				return EOK;
 		}
 	}
 
@@ -145,6 +146,6 @@ int psh_ps(int argc, char **argv)
 
 void __attribute__((constructor)) ps_registerapp(void)
 {
-	static psh_appentry_t app = {.name = "ps", .run = psh_ps, .info = psh_psinfo};
+	static psh_appentry_t app = { .name = "ps", .run = psh_ps, .info = psh_psinfo };
 	psh_registerapp(&app);
 }
