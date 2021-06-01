@@ -866,7 +866,7 @@ static int psh_runscript(char *path)
 					break;
 				}
 				else if (!pid) {
-					execve(argv[0], argv, NULL);
+					execv(argv[0], argv);
 					fprintf(stderr, "psh: exec failed in line %d\n", i);
 					_psh_exit(EXIT_FAILURE);
 				}

@@ -34,7 +34,7 @@ int psh_exec(int argc, char **argv)
 		return -EINVAL;
 	}
 
-	switch (err = execve(argv[1], argv + 1, NULL)) {
+	switch (err = execv(argv[1], argv + 1)) {
 	case EOK:
 		break;
 
