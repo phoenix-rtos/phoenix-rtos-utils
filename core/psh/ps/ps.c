@@ -53,6 +53,7 @@ static void usage(const char *progname)
 	printf("Usage: %s [options]\n", progname);
 	printf("\nDisplaying:\n");
 	printf("    -t    Show threads\n");
+	printf("    -f    Show full commandline\n");
 	printf("    -h    Show help instead\n");
 	printf("\nSorting:\n");
 	printf("    -c    Sort by current CPU usage [default]\n");
@@ -64,12 +65,13 @@ static void usage(const char *progname)
 static int psh_ps(int argc, char **argv)
 {
 	int (*cmp)(const void *, const void *) = psh_ps_cmpcpu;
-	int c, tcnt, i, j, n = 32, threads = 0;
+	int c, tcnt, i, j, n = 32;
+	unsigned int threads = 0, fullcmd = 0;
 	threadinfo_t *info, *rinfo;
 	unsigned int h, m;
 	char buff[8];
 
-	while ((c = getopt(argc, argv, "chnpt")) != -1) {
+	while ((c = getopt(argc, argv, "cfhnpt")) != -1) {
 		switch (c) {
 			case 'c':
 				cmp = psh_ps_cmpcpu;
@@ -87,6 +89,9 @@ static int psh_ps(int argc, char **argv)
 				threads = 1;
 				break;
 
+			case 'f':
+				fullcmd = 1;
+				break;
 
 			case 'h':
 				usage(argv[0]);
@@ -151,9 +156,9 @@ static int psh_ps(int argc, char **argv)
 		printf("%6s ", buff);
 
 		if (!threads)
-			printf("%3u %-28s\n", info[i].tid, info[i].name);
+			printf("%3u %.*s\n", info[i].tid, (fullcmd ? sizeof(info[i].name) : 28), info[i].name);
 		else
-			printf("%-32s\n", info[i].name);
+			printf("%.*s\n", (fullcmd ? sizeof(info[i].name) : 32), info[i].name);
 	}
 
 	free(info);
