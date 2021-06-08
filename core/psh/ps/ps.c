@@ -56,15 +56,15 @@ static void usage(const char *progname)
 	printf("    -f    Show full commandline\n");
 	printf("    -h    Show help instead\n");
 	printf("\nSorting:\n");
-	printf("    -c    Sort by current CPU usage [default]\n");
+	printf("    -c    Sort by current CPU usage\n");
 	printf("    -n    Sort by name\n");
-	printf("    -p    Sort by PID\n");
+	printf("    -p    Sort by PID [default]\n");
 }
 
 
 static int psh_ps(int argc, char **argv)
 {
-	int (*cmp)(const void *, const void *) = psh_ps_cmpcpu;
+	int (*cmp)(const void *, const void *) = psh_ps_cmppid;
 	int c, tcnt, i, j, n = 32;
 	unsigned int threads = 0, fullcmd = 0;
 	threadinfo_t *info, *rinfo;
