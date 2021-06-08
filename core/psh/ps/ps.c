@@ -156,9 +156,9 @@ static int psh_ps(int argc, char **argv)
 		printf("%6s ", buff);
 
 		if (!threads)
-			printf("%3u %.*s\n", info[i].tid, (fullcmd ? sizeof(info[i].name) : 28), info[i].name);
+			printf("%3u %.*s\n", info[i].tid, (int)(fullcmd ? sizeof(info[i].name) : 28), info[i].name);
 		else
-			printf("%.*s\n", (fullcmd ? sizeof(info[i].name) : 32), info[i].name);
+			printf("%.*s\n", (int)(fullcmd ? sizeof(info[i].name) : 32), info[i].name);
 	}
 
 	free(info);
