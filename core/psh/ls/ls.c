@@ -271,7 +271,7 @@ static void psh_ls_printlong(size_t nfiles)
 			grpsz = max(strlen(files[i].gr->gr_name), grpsz);
 
 		localtime_r(&files[i].stat.st_mtime, &t);
-		if (t.tm_mday > 10)
+		if (t.tm_mday >= 10)
 			daysz = 2;
 	}
 
