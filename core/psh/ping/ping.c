@@ -53,7 +53,7 @@ static void ping_help(void)
 	printf("  -c:  count, number of requests to be sent, default 5\n");
 	printf("  -i:  interval in milliseconds, minimum 200 ms, default 1000\n");
 	printf("  -t:  IP Time To Live, default 64\n");
-	printf("  -W:  socket timetout, default 500\n\n");
+	printf("  -W:  socket timetout, default 2000\n\n");
 }
 
 
@@ -143,7 +143,7 @@ static int ping_recv(int fd, uint8_t *data, int len, char *infostr, int infostrl
 
 	if ((bytes = recvfrom(fd, data, len, 0, (struct sockaddr *)&rsin, &rlen)) <= 0) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK)
-			fprintf(stderr, "Host unreachable\n");
+			fprintf(stderr, "Host timeout\n");
 		else
 			fprintf(stderr, "ping: Fail to receive packet on socket!\n");
 		return -1;
@@ -171,6 +171,9 @@ static int ping_recv(int fd, uint8_t *data, int len, char *infostr, int infostrl
 	chksum = ntohs(icmphdr->checksum);
 	icmphdr->checksum = 0;
 
+	if (ntohs(icmphdr->un.echo.sequence) != ping_common.seq - 1)
+		return -1;
+
 	if (ping_chksum((uint8_t *)icmphdr, bytes) != chksum) {
 		fprintf(stderr, "ping: Response invalid checksum!\n");
 		return -1;
@@ -193,7 +196,7 @@ int psh_ping(int argc, char **argv)
 
 	ping_common.cnt = 5;
 	ping_common.interval = 1000;
-	ping_common.timeout = 500;
+	ping_common.timeout = 2000;
 	ping_common.seq = 1;
 	ping_common.ttl = 64;
 	ping_common.af = AF_INET;
@@ -262,12 +265,14 @@ int psh_ping(int argc, char **argv)
 
 		bzero(infostr, sizeof(infostr));
 		bzero(resp, sizeof(resp));
-		if (ping_recv(fd, resp, sizeof(resp), infostr, sizeof(infostr)) > 0) {
-			clock_gettime(CLOCK_MONOTONIC, &ts);
-			elapsed = ts.tv_sec * 1000000 + ts.tv_nsec / 1000 - sent;
-			printf("%s time=%lu.%02lu ms\n", infostr, (unsigned long)(elapsed / 1000),
-				(unsigned long)((elapsed % 1000) / 10));
+		if (ping_recv(fd, resp, sizeof(resp), infostr, sizeof(infostr)) < 0) {
+			close(fd);
+			return -1;
 		}
+
+		clock_gettime(CLOCK_MONOTONIC, &ts);
+		elapsed = ts.tv_sec * 1000000 + ts.tv_nsec / 1000 - sent;
+		printf("%s time=%llu.%02llu ms\n", infostr, elapsed / 1000, (elapsed % 1000) / 10);
 
 		if (ping_common.cnt > 0)
 			usleep(1000 * ping_common.interval);
