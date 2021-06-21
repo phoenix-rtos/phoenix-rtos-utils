@@ -34,7 +34,7 @@ static struct {
 	int ttl;
 	int af;
 	int interval; /* ms */
-	int timeout; /* ms */
+	int timeout;  /* ms */
 } ping_common;
 
 
@@ -45,7 +45,7 @@ void psh_pinginfo(void)
 }
 
 
-static void psh_ping_help(void)
+static void ping_help(void)
 {
 	printf("Usage: ping [options] address\n");
 	printf("Options\n");
@@ -57,7 +57,7 @@ static void psh_ping_help(void)
 }
 
 
-static uint16_t psh_ping_chksum(uint8_t *data, int len)
+static uint16_t ping_chksum(uint8_t *data, int len)
 {
 	uint32_t sum = 0;
 	int i;
@@ -75,7 +75,7 @@ static uint16_t psh_ping_chksum(uint8_t *data, int len)
 }
 
 
-static int psh_ping_socketConfig(void)
+static int ping_sockconf(void)
 {
 	struct timeval tv;
 	int fd;
@@ -103,36 +103,35 @@ static int psh_ping_socketConfig(void)
 }
 
 
-static void psh_ping_reqInit(uint8_t *data, int len)
+static void ping_reqinit(uint8_t *data, int len)
 {
-	struct icmphdr *hdr = (struct icmphdr *) data;
+	struct icmphdr *hdr = (struct icmphdr *)data;
 	int i;
 
 	hdr->type = ICMP_ECHO;
 	hdr->un.echo.id = htons(getpid());
 
 	for (i = 0; i < len - sizeof(struct icmphdr); i++)
-		data[sizeof(struct icmphdr) + i] = (uint8_t) i;
+		data[sizeof(struct icmphdr) + i] = (uint8_t)i;
 }
 
 
-static int psh_ping_send(int fd, uint8_t *data, int len)
+static int ping_send(int fd, uint8_t *data, int len)
 {
-	struct icmphdr *hdr = (struct icmphdr *) data;
+	struct icmphdr *hdr = (struct icmphdr *)data;
 
 	hdr->un.echo.sequence = htons(ping_common.seq++);
 	hdr->checksum = 0;
-	hdr->checksum = htons(psh_ping_chksum(data, len));
+	hdr->checksum = htons(ping_chksum(data, len));
 
-	if (sendto(fd, data, len, 0, (struct sockaddr *) &ping_common.raddr,
-	           sizeof(ping_common.raddr)) != len)
+	if (sendto(fd, data, len, 0, (struct sockaddr *)&ping_common.raddr, sizeof(ping_common.raddr)) != len)
 		return -1;
 
 	return 0;
 }
 
 
-static int psh_ping_recv(int fd, uint8_t *data, int len, char *infostr, int infostrlen)
+static int ping_recv(int fd, uint8_t *data, int len, char *infostr, int infostrlen)
 {
 	struct sockaddr_in rsin;
 	socklen_t rlen = sizeof(rsin);
@@ -142,7 +141,7 @@ static int psh_ping_recv(int fd, uint8_t *data, int len, char *infostr, int info
 	char addrstr[INET_ADDRSTRLEN];
 	uint16_t chksum;
 
-	if ((bytes = recvfrom(fd, data, len, 0, (struct sockaddr *) &rsin, &rlen)) <= 0) {
+	if ((bytes = recvfrom(fd, data, len, 0, (struct sockaddr *)&rsin, &rlen)) <= 0) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK)
 			fprintf(stderr, "Host unreachable\n");
 		else
@@ -167,18 +166,18 @@ static int psh_ping_recv(int fd, uint8_t *data, int len, char *infostr, int info
 		return -1;
 	}
 
-	iphdr = (struct iphdr *) data;
-	icmphdr = (struct icmphdr *) (data + sizeof(struct iphdr));
+	iphdr = (struct iphdr *)data;
+	icmphdr = (struct icmphdr *)(data + sizeof(struct iphdr));
 	chksum = ntohs(icmphdr->checksum);
 	icmphdr->checksum = 0;
 
-	if (psh_ping_chksum((uint8_t *) icmphdr, bytes) != chksum) {
+	if (ping_chksum((uint8_t *)icmphdr, bytes) != chksum) {
 		fprintf(stderr, "ping: Response invalid checksum!\n");
 		return -1;
 	}
 
 	return snprintf(infostr, infostrlen, "%d bytes received from %s: ttl=%u icmp_seq=%u",
-	                bytes, addrstr, iphdr->ttl, ntohs(icmphdr->un.echo.sequence));
+		bytes, addrstr, iphdr->ttl, ntohs(icmphdr->un.echo.sequence));
 }
 
 
@@ -202,38 +201,38 @@ int psh_ping(int argc, char **argv)
 
 	while ((c = getopt(argc, argv, "i:t:c:W:h")) != -1) {
 		switch (c) {
-		case 'c':
-			ping_common.cnt = strtoul(optarg, &end, 10);
-			if (*end != '\0' || ping_common.cnt <= 0) {
-				fprintf(stderr, "ping: Wrong count value!\n");
-				return -EINVAL;
-			}
-			break;
-		case 't':
-			ping_common.ttl = strtoul(optarg, &end, 10);
-			if (*end != '\0' || ping_common.ttl <= 0) {
-				fprintf(stderr, "ping: Wrong ttl value!\n");
-				return -EINVAL;
-			}
-			break;
-		case 'i':
-			ping_common.interval = strtoul(optarg, &end, 10);
-			if (*end != '\0' || ping_common.interval < 0) {
-				fprintf(stderr, "ping: Wrong interval value!\n");
-				return -EINVAL;
-			}
-			break;
-		case 'W':
-			ping_common.timeout = strtoul(optarg, &end, 10);
-			if (*end != '\0' || ping_common.timeout <= 200) {
-				fprintf(stderr, "ping: Wrong timeout value!\n");
-				return -EINVAL;
-			}
-			break;
-		default:
-		case 'h':
-			psh_ping_help();
-			return 0;
+			case 'c':
+				ping_common.cnt = strtoul(optarg, &end, 10);
+				if (*end != '\0' || ping_common.cnt <= 0) {
+					fprintf(stderr, "ping: Wrong count value!\n");
+					return -EINVAL;
+				}
+				break;
+			case 't':
+				ping_common.ttl = strtoul(optarg, &end, 10);
+				if (*end != '\0' || ping_common.ttl <= 0) {
+					fprintf(stderr, "ping: Wrong ttl value!\n");
+					return -EINVAL;
+				}
+				break;
+			case 'i':
+				ping_common.interval = strtoul(optarg, &end, 10);
+				if (*end != '\0' || ping_common.interval < 0) {
+					fprintf(stderr, "ping: Wrong interval value!\n");
+					return -EINVAL;
+				}
+				break;
+			case 'W':
+				ping_common.timeout = strtoul(optarg, &end, 10);
+				if (*end != '\0' || ping_common.timeout <= 100) {
+					fprintf(stderr, "ping: Wrong timeout value!\n");
+					return -EINVAL;
+				}
+				break;
+			default:
+			case 'h':
+				ping_help();
+				return 0;
 		}
 	}
 
@@ -247,15 +246,15 @@ int psh_ping(int argc, char **argv)
 		return -EINVAL;
 	}
 
-	if ((fd = psh_ping_socketConfig()) <= 0)
+	if ((fd = ping_sockconf()) <= 0)
 		return -EIO;
 
-	psh_ping_reqInit(req, sizeof(req));
+	ping_reqinit(req, sizeof(req));
 
 	while (ping_common.cnt-- && !psh_common.sigint) {
 		clock_gettime(CLOCK_MONOTONIC, &ts);
 		sent = ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
-		if (psh_ping_send(fd, req, sizeof(req)) < 0)	{
+		if (ping_send(fd, req, sizeof(req)) < 0) {
 			close(fd);
 			fprintf(stderr, "ping: Fail to send a packet!\n");
 			return -EINVAL;
@@ -263,11 +262,11 @@ int psh_ping(int argc, char **argv)
 
 		bzero(infostr, sizeof(infostr));
 		bzero(resp, sizeof(resp));
-		if (psh_ping_recv(fd, resp, sizeof(resp), infostr, sizeof(infostr)) > 0) {
+		if (ping_recv(fd, resp, sizeof(resp), infostr, sizeof(infostr)) > 0) {
 			clock_gettime(CLOCK_MONOTONIC, &ts);
 			elapsed = ts.tv_sec * 1000000 + ts.tv_nsec / 1000 - sent;
-			printf("%s time=%lu.%02lu ms\n", infostr, (unsigned long) (elapsed / 1000),
-			                                 (unsigned long) ((elapsed % 1000) / 10));
+			printf("%s time=%lu.%02lu ms\n", infostr, (unsigned long)(elapsed / 1000),
+				(unsigned long)((elapsed % 1000) / 10));
 		}
 
 		if (ping_common.cnt > 0)
@@ -281,6 +280,6 @@ int psh_ping(int argc, char **argv)
 
 void __attribute__((constructor)) ping_registerapp(void)
 {
-	static psh_appentry_t app = {.name = "ping", .run = psh_ping, .info = psh_pinginfo};
+	static psh_appentry_t app = { .name = "ping", .run = psh_ping, .info = psh_pinginfo };
 	psh_registerapp(&app);
 }
