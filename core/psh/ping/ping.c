@@ -35,6 +35,8 @@ static struct {
 	int af;
 	int interval; /* ms */
 	int timeout;  /* ms */
+	int reqsz;
+	int respsz;
 } ping_common;
 
 
@@ -53,6 +55,7 @@ static void ping_help(void)
 	printf("  -c:  count, number of requests to be sent, default 5\n");
 	printf("  -i:  interval in milliseconds, minimum 200 ms, default 1000\n");
 	printf("  -t:  IP Time To Live, default 64\n");
+	printf("  -s:  payload size, default 56, maximum 2040\n");
 	printf("  -W:  socket timetout, default 2000\n\n");
 }
 
@@ -103,7 +106,7 @@ static int ping_sockconf(void)
 }
 
 
-static void ping_reqinit(uint8_t *data, int len)
+static void ping_reqinit(char *data, int len)
 {
 	struct icmphdr *hdr = (struct icmphdr *)data;
 	int i;
@@ -112,17 +115,17 @@ static void ping_reqinit(uint8_t *data, int len)
 	hdr->un.echo.id = htons(getpid());
 
 	for (i = 0; i < len - sizeof(struct icmphdr); i++)
-		data[sizeof(struct icmphdr) + i] = (uint8_t)i;
+		data[sizeof(struct icmphdr) + i] = (char)i;
 }
 
 
-static int ping_send(int fd, uint8_t *data, int len)
+static int ping_echo(int fd, char *data, int len)
 {
 	struct icmphdr *hdr = (struct icmphdr *)data;
 
 	hdr->un.echo.sequence = htons(ping_common.seq++);
 	hdr->checksum = 0;
-	hdr->checksum = htons(ping_chksum(data, len));
+	hdr->checksum = htons(ping_chksum((uint8_t *)data, len));
 
 	if (sendto(fd, data, len, 0, (struct sockaddr *)&ping_common.raddr, sizeof(ping_common.raddr)) != len)
 		return -1;
@@ -131,14 +134,12 @@ static int ping_send(int fd, uint8_t *data, int len)
 }
 
 
-static int ping_recv(int fd, uint8_t *data, int len, char *infostr, int infostrlen)
+static int ping_reply(int fd, char *data, size_t len, char *addrstr, int addrlen)
 {
 	struct sockaddr_in rsin;
 	socklen_t rlen = sizeof(rsin);
-	struct iphdr *iphdr;
 	struct icmphdr *icmphdr;
 	int bytes;
-	char addrstr[INET_ADDRSTRLEN];
 	uint16_t chksum;
 
 	if ((bytes = recvfrom(fd, data, len, 0, (struct sockaddr *)&rsin, &rlen)) <= 0) {
@@ -156,7 +157,7 @@ static int ping_recv(int fd, uint8_t *data, int len, char *infostr, int infostrl
 
 	bytes -= sizeof(struct iphdr);
 
-	if (inet_ntop(ping_common.af, &rsin.sin_addr, addrstr, sizeof(addrstr)) == NULL) {
+	if (inet_ntop(ping_common.af, &rsin.sin_addr, addrstr, addrlen) == NULL) {
 		fprintf(stderr, "ping: Invalid address received!\n");
 		return -1;
 	}
@@ -166,43 +167,79 @@ static int ping_recv(int fd, uint8_t *data, int len, char *infostr, int infostrl
 		return -1;
 	}
 
-	iphdr = (struct iphdr *)data;
 	icmphdr = (struct icmphdr *)(data + sizeof(struct iphdr));
 	chksum = ntohs(icmphdr->checksum);
 	icmphdr->checksum = 0;
 
-	if (ntohs(icmphdr->un.echo.sequence) != ping_common.seq - 1)
+	if (ntohs(icmphdr->un.echo.sequence) != ping_common.seq - 1) {
+		fprintf(stderr, "ping: Response out of sequence!\n");
 		return -1;
+	}
 
 	if (ping_chksum((uint8_t *)icmphdr, bytes) != chksum) {
 		fprintf(stderr, "ping: Response invalid checksum!\n");
 		return -1;
 	}
 
-	return snprintf(infostr, infostrlen, "%d bytes received from %s: ttl=%u icmp_seq=%u",
-		bytes, addrstr, iphdr->ttl, ntohs(icmphdr->un.echo.sequence));
+	return bytes;
+}
+
+
+static int ping_echoreply(int fd, char *req, char *resp)
+{
+	struct icmphdr *icmphdr;
+	struct iphdr *iphdr;
+	time_t sent, elapsed;
+	struct timespec ts;
+	char addrstr[INET_ADDRSTRLEN];
+	char timestr[32];
+	int bytes;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	sent = ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+	if (ping_echo(fd, req, ping_common.reqsz) < 0) {
+		fprintf(stderr, "ping: Fail to send a packet!\n");
+		return -1;
+	}
+
+	bzero(resp, ping_common.respsz);
+	if ((bytes = ping_reply(fd, resp, ping_common.respsz, addrstr, INET_ADDRSTRLEN)) < 0)
+		return -1;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	elapsed = ts.tv_sec * 1000000 + ts.tv_nsec / 1000 - sent;
+	if ((elapsed % 1000) / 10 == 0)
+		snprintf(timestr, sizeof(timestr), "%llu ms", elapsed / 1000);
+	else
+		snprintf(timestr, sizeof(timestr), "%llu.%02llu ms", elapsed / 1000, (elapsed % 1000) / 10);
+
+	iphdr = (struct iphdr *)resp;
+	icmphdr = (struct icmphdr *)(resp + sizeof(struct iphdr));
+
+	printf("%d bytes received from %s: ttl=%u icmp_seq=%u time=%s\n",
+		bytes, addrstr, iphdr->ttl, ntohs(icmphdr->un.echo.sequence), timestr);
+
+	return 0;
 }
 
 
 int psh_ping(int argc, char **argv)
 {
-	uint8_t resp[128] = { 0 };
-	uint8_t req[64] = { 0 };
-	char infostr[80];
-	time_t sent, elapsed;
+	char *resp, *req;
 	int fd, c;
 	char *end;
-	struct timespec ts;
 
 	ping_common.cnt = 5;
 	ping_common.interval = 1000;
 	ping_common.timeout = 2000;
 	ping_common.seq = 1;
 	ping_common.ttl = 64;
+	ping_common.reqsz = 56 + sizeof(struct icmphdr);
+	ping_common.respsz = ping_common.reqsz + sizeof(struct iphdr);
 	ping_common.af = AF_INET;
 	ping_common.raddr.sin_family = AF_INET; /* TODO: handle ip6 */
 
-	while ((c = getopt(argc, argv, "i:t:c:W:h")) != -1) {
+	while ((c = getopt(argc, argv, "i:t:c:W:s:h")) != -1) {
 		switch (c) {
 			case 'c':
 				ping_common.cnt = strtoul(optarg, &end, 10);
@@ -232,6 +269,14 @@ int psh_ping(int argc, char **argv)
 					return 1;
 				}
 				break;
+			case 's':
+				ping_common.reqsz = strtoul(optarg, &end, 10) + sizeof(struct icmphdr);
+				ping_common.respsz = sizeof(struct iphdr) + ping_common.reqsz;
+				if (*end != '\0' || ping_common.reqsz > 2040) {
+					fprintf(stderr, "ping: Wrong payload len\n");
+					return 1;
+				}
+				break;
 			default:
 			case 'h':
 				ping_help();
@@ -249,35 +294,36 @@ int psh_ping(int argc, char **argv)
 		return 1;
 	}
 
-	if ((fd = ping_sockconf()) <= 0)
-		return 2;
+	if ((req = malloc(ping_common.reqsz)) == NULL) {
+		fprintf(stderr, "ping: Out of memory!\n");
+		return 1;
+	}
 
-	ping_reqinit(req, sizeof(req));
+	if ((resp = malloc(ping_common.respsz)) == NULL) {
+		fprintf(stderr, "ping: Out of memory!\n");
+		free(req);
+		return 1;
+	}
+
+	if ((fd = ping_sockconf()) <= 0) {
+		free(req);
+		free(resp);
+		return 2;
+	}
+
+	ping_reqinit(req, ping_common.reqsz);
 
 	while (ping_common.cnt-- && !psh_common.sigint) {
-		clock_gettime(CLOCK_MONOTONIC, &ts);
-		sent = ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
-		if (ping_send(fd, req, sizeof(req)) < 0) {
-			close(fd);
-			fprintf(stderr, "ping: Fail to send a packet!\n");
-			return 2;
-		}
-
-		bzero(infostr, sizeof(infostr));
-		bzero(resp, sizeof(resp));
-		if (ping_recv(fd, resp, sizeof(resp), infostr, sizeof(infostr)) < 0) {
-			close(fd);
-			return 2;
-		}
-
-		clock_gettime(CLOCK_MONOTONIC, &ts);
-		elapsed = ts.tv_sec * 1000000 + ts.tv_nsec / 1000 - sent;
-		printf("%s time=%llu.%02llu ms\n", infostr, elapsed / 1000, (elapsed % 1000) / 10);
+		if (ping_echoreply(fd, req, resp) != 0)
+			break;
 
 		if (ping_common.cnt > 0)
 			usleep(1000 * ping_common.interval);
 	}
+
 	close(fd);
+	free(req);
+	free(resp);
 
 	return 0;
 }
