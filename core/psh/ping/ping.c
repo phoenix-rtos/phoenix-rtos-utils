@@ -208,28 +208,28 @@ int psh_ping(int argc, char **argv)
 				ping_common.cnt = strtoul(optarg, &end, 10);
 				if (*end != '\0' || ping_common.cnt <= 0) {
 					fprintf(stderr, "ping: Wrong count value!\n");
-					return -EINVAL;
+					return 1;
 				}
 				break;
 			case 't':
 				ping_common.ttl = strtoul(optarg, &end, 10);
 				if (*end != '\0' || ping_common.ttl <= 0) {
 					fprintf(stderr, "ping: Wrong ttl value!\n");
-					return -EINVAL;
+					return 1;
 				}
 				break;
 			case 'i':
 				ping_common.interval = strtoul(optarg, &end, 10);
 				if (*end != '\0' || ping_common.interval < 0) {
 					fprintf(stderr, "ping: Wrong interval value!\n");
-					return -EINVAL;
+					return 1;
 				}
 				break;
 			case 'W':
 				ping_common.timeout = strtoul(optarg, &end, 10);
 				if (*end != '\0' || ping_common.timeout <= 100) {
 					fprintf(stderr, "ping: Wrong timeout value!\n");
-					return -EINVAL;
+					return 1;
 				}
 				break;
 			default:
@@ -241,16 +241,16 @@ int psh_ping(int argc, char **argv)
 
 	if (argc - optind != 1) {
 		fprintf(stderr, "ping: Expected address!\n");
-		return -EINVAL;
+		return 1;
 	}
 
 	if (inet_pton(ping_common.af, argv[optind], &ping_common.raddr.sin_addr) != 1) {
 		fprintf(stderr, "ping: Invalid IP address!\n");
-		return -EINVAL;
+		return 1;
 	}
 
 	if ((fd = ping_sockconf()) <= 0)
-		return -EIO;
+		return 2;
 
 	ping_reqinit(req, sizeof(req));
 
@@ -260,14 +260,14 @@ int psh_ping(int argc, char **argv)
 		if (ping_send(fd, req, sizeof(req)) < 0) {
 			close(fd);
 			fprintf(stderr, "ping: Fail to send a packet!\n");
-			return -EINVAL;
+			return 2;
 		}
 
 		bzero(infostr, sizeof(infostr));
 		bzero(resp, sizeof(resp));
 		if (ping_recv(fd, resp, sizeof(resp), infostr, sizeof(infostr)) < 0) {
 			close(fd);
-			return -1;
+			return 2;
 		}
 
 		clock_gettime(CLOCK_MONOTONIC, &ts);
