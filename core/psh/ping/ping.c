@@ -226,7 +226,7 @@ static int ping_echoreply(int fd, char *req, char *resp)
 int psh_ping(int argc, char **argv)
 {
 	char *resp, *req;
-	int fd, c;
+	int fd, c, ret = 0;
 	char *end;
 
 	ping_common.cnt = 5;
@@ -245,28 +245,28 @@ int psh_ping(int argc, char **argv)
 				ping_common.cnt = strtoul(optarg, &end, 10);
 				if (*end != '\0' || ping_common.cnt <= 0) {
 					fprintf(stderr, "ping: Wrong count value!\n");
-					return 1;
+					return 2;
 				}
 				break;
 			case 't':
 				ping_common.ttl = strtoul(optarg, &end, 10);
 				if (*end != '\0' || ping_common.ttl <= 0) {
 					fprintf(stderr, "ping: Wrong ttl value!\n");
-					return 1;
+					return 2;
 				}
 				break;
 			case 'i':
 				ping_common.interval = strtoul(optarg, &end, 10);
 				if (*end != '\0' || ping_common.interval < 0) {
 					fprintf(stderr, "ping: Wrong interval value!\n");
-					return 1;
+					return 2;
 				}
 				break;
 			case 'W':
 				ping_common.timeout = strtoul(optarg, &end, 10);
 				if (*end != '\0' || ping_common.timeout <= 100) {
 					fprintf(stderr, "ping: Wrong timeout value!\n");
-					return 1;
+					return 2;
 				}
 				break;
 			case 's':
@@ -274,7 +274,7 @@ int psh_ping(int argc, char **argv)
 				ping_common.respsz = sizeof(struct iphdr) + ping_common.reqsz;
 				if (*end != '\0' || ping_common.reqsz > 2040) {
 					fprintf(stderr, "ping: Wrong payload len\n");
-					return 1;
+					return 2;
 				}
 				break;
 			default:
@@ -286,23 +286,23 @@ int psh_ping(int argc, char **argv)
 
 	if (argc - optind != 1) {
 		fprintf(stderr, "ping: Expected address!\n");
-		return 1;
+		return 2;
 	}
 
 	if (inet_pton(ping_common.af, argv[optind], &ping_common.raddr.sin_addr) != 1) {
 		fprintf(stderr, "ping: Invalid IP address!\n");
-		return 1;
+		return 2;
 	}
 
 	if ((req = malloc(ping_common.reqsz)) == NULL) {
 		fprintf(stderr, "ping: Out of memory!\n");
-		return 1;
+		return 2;
 	}
 
 	if ((resp = malloc(ping_common.respsz)) == NULL) {
 		fprintf(stderr, "ping: Out of memory!\n");
 		free(req);
-		return 1;
+		return 2;
 	}
 
 	if ((fd = ping_sockconf()) <= 0) {
@@ -314,8 +314,10 @@ int psh_ping(int argc, char **argv)
 	ping_reqinit(req, ping_common.reqsz);
 
 	while (ping_common.cnt-- && !psh_common.sigint) {
-		if (ping_echoreply(fd, req, resp) != 0)
+		if (ping_echoreply(fd, req, resp) != 0) {
+			ret = 1;
 			break;
+		}
 
 		if (ping_common.cnt > 0)
 			usleep(1000 * ping_common.interval);
@@ -325,7 +327,7 @@ int psh_ping(int argc, char **argv)
 	free(req);
 	free(resp);
 
-	return 0;
+	return ret;
 }
 
 
