@@ -16,6 +16,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <termios.h>
 
 #include <sys/threads.h>
 #include <sys/types.h>
@@ -118,6 +120,8 @@ int psh_sysexec(int argc, char **argv)
 
 	if (pid > 0) {
 		waitpid(pid, NULL, 0);
+		/* Take back terminal control */
+		tcsetpgrp(STDIN_FILENO, getpgrp());
 		return EOK;
 	}
 

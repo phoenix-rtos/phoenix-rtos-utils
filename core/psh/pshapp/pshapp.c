@@ -983,8 +983,9 @@ static int psh_run(int exitable)
 
 	/* Wait till we run in foreground */
 	if (tcgetpgrp(STDIN_FILENO) != -1) {
-		while ((pgrp = getpgrp()) != tcgetpgrp(STDIN_FILENO))
-			kill(-pgrp, SIGTTIN);
+		while ((pgrp = tcgetpgrp(STDIN_FILENO)) != getpgrp())
+			if (kill(-pgrp, SIGTTIN) == 0)
+				break;
 	}
 
 	/* Set signal handlers */
