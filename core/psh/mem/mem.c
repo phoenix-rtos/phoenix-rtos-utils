@@ -82,7 +82,7 @@ static void psh_mem_procprint(entryinfo_t *e, int mapsz)
 		else if (e->object == OBJECT_MEMORY)
 			printf("  %s", "mem");
 		else
-			printf("  %d.%llu", e->oid.port, e->oid.id);
+			printf("  %d.%llu", e->oid.port, (unsigned long long)e->oid.id);
 
 		if (e->object != OBJECT_ANONYMOUS && e->anonsz != ~0)
 			printf("/(%zuKB)", e->anonsz / 1024);
