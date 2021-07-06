@@ -172,13 +172,21 @@ int flashmng_checkRange(oid_t oid, int start, int end, dbbt_t **dbbt)
 	int i, ret = 0;
 	int bad = 0;
 	int err = 0;
-	uint32_t bbt[256] = { 0 };
+	uint32_t *bbt;
 	uint32_t bbtn = 0;
 	int dbbtsz;
-	void *raw_data = malloc(2 * FLASH_PAGE_SIZE);
+	void *raw_data;
 
+	bbt = calloc(BB_MAX, sizeof(uint32_t));
+	if (bbt == NULL) {
+		printf("Failed to map pages from OC RAM\n");
+		return -1;
+	}
+
+	raw_data = malloc(2 * FLASH_PAGE_SIZE);
 	if (raw_data == NULL) {
 		printf("Failed to map pages from OC RAM\n");
+		free(bbt);
 		return -1;
 	}
 
@@ -219,6 +227,7 @@ int flashmng_checkRange(oid_t oid, int start, int end, dbbt_t **dbbt)
 		(*dbbt)->entries_num = bbtn;
 	}
 
+	free(bbt);
 	free(raw_data);
 	return (bbtn >= BB_MAX);
 }
