@@ -229,7 +229,7 @@ int flashmng_checkRange(oid_t oid, int start, int end, dbbt_t **dbbt)
 
 	free(bbt);
 	free(raw_data);
-	return (bbtn >= BB_MAX);
+	return (bbtn >= BB_MAX ? -1 : 0);
 }
 
 
