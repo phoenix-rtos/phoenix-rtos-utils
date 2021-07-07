@@ -223,7 +223,7 @@ int flashmng_checkRange(oid_t oid, int start, int end, dbbt_t **dbbt)
 		dbbtsz = (sizeof(dbbt_t) + (sizeof(uint32_t) * bbtn) + FLASH_PAGE_SIZE - 1) & ~(FLASH_PAGE_SIZE - 1);
 		*dbbt = malloc(dbbtsz);
 		memset(*dbbt, 0, dbbtsz);
-		memcpy(&((*dbbt)->bad_block), &bbt, sizeof(uint32_t) * bbtn);
+		memcpy(&((*dbbt)->bad_block), bbt, sizeof(uint32_t) * bbtn);
 		(*dbbt)->entries_num = bbtn;
 	}
 
