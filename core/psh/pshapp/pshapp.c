@@ -1009,7 +1009,7 @@ static int psh_run(int exitable)
 		return err;
 	}
 
-	/* Take terminal control */
+	/* Take terminal control - only interactive psh should take control */
 	if ((err = tcsetpgrp(STDIN_FILENO, pgrp)) < 0) {
 		fprintf(stderr, "psh: failed to take terminal control\n");
 		return err;
@@ -1150,27 +1150,12 @@ int psh_pshapp(int argc, char **argv)
 }
 
 
-int psh_pshapplogin(int argc, char **argv)
-{
-	const psh_appentry_t *loginapp = psh_findapp("login");
-	while (1) {
-		if (pshapp_common.isrunpsh != 0)
-			return -EACCES;
-		if ((loginapp == NULL || loginapp->run(argc, argv) == 1) && pshapp_common.isrunpsh == 0) {
-			pshapp_common.isrunpsh = 1;
-			psh_run(0);
-			pshapp_common.isrunpsh = 0;
-		}
-	}
-}
-
-
 void __attribute__((constructor)) pshapp_registerapp(void)
 {
-	static psh_appentry_t app_pshapp = {.name = "psh", .run = psh_pshapp, .info = NULL};
-	static psh_appentry_t app_pshappexit = {.name = "exit", .run = psh_pshappexit, .info = psh_pshappexitinfo};
-	static psh_appentry_t app_pshlogin = {.name = "pshlogin", .run = psh_pshapplogin, .info = NULL};
-	static psh_appentry_t app_pshhistory = {.name = "history", .run = psh_history, .info = psh_historyinfo};
+	static psh_appentry_t app_pshapp = { .name = "psh", .run = psh_pshapp, .info = NULL };
+	static psh_appentry_t app_pshappexit = { .name = "exit", .run = psh_pshappexit, .info = psh_pshappexitinfo };
+	static psh_appentry_t app_pshlogin = { .name = "pshlogin", .run = psh_pshapp, .info = NULL };
+	static psh_appentry_t app_pshhistory = { .name = "history", .run = psh_history, .info = psh_historyinfo };
 	
 	psh_registerapp(&app_pshapp);
 	psh_registerapp(&app_pshappexit);

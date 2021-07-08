@@ -23,7 +23,7 @@
 #include "../psh.h"
 
 
-static int psh_logincredentget(char *buff, int ispasswd, int maxinlen)
+static int psh_authcredentget(char *buff, int ispasswd, int maxinlen)
 {
 	int inputlen = -1;
 	char c;
@@ -101,7 +101,7 @@ static int psh_logincredentget(char *buff, int ispasswd, int maxinlen)
 }
 
 
-static int psh_login(int argc, char **argv)
+static int psh_auth(int argc, char **argv)
 {
 	const int maxlen = 32;
 	char username[maxlen+1], passwd[maxlen+1], *shadow;
@@ -111,24 +111,24 @@ static int psh_login(int argc, char **argv)
 	if (isatty(STDOUT_FILENO) == 0) {
 		sleep(1);
 		fprintf(stderr, "psh: unable to login, not a tty\n");
-		return -ENOTTY;
+		return ENOTTY;
 	}
 
 	/* Get login from user */
-	if (psh_logincredentget(username, 0, maxlen) == -EINTR)
-		return -1;
+	if (psh_authcredentget(username, 0, maxlen) == -EINTR)
+		return EINTR;
 	userdata = getpwnam(username);
 
 	/* Get password from user */
-	if (psh_logincredentget(passwd, 1, maxlen) == -EINTR)
-		return -1;
+	if (psh_authcredentget(passwd, 1, maxlen) == -EINTR)
+		return EINTR;
 
 	/* validate against /etc/passwd */
 	if (userdata != NULL) {
 		shadow = crypt(passwd, userdata->pw_passwd);
 		if (shadow != NULL && strcmp(userdata->pw_passwd, shadow) == 0) {
 			memset(passwd, '\0', maxlen);
-			return 1;
+			return 0;
 		}
 	}
 
@@ -136,15 +136,15 @@ static int psh_login(int argc, char **argv)
 	shadow = crypt(passwd, PSH_DEFUSRPWDHASH);
 	memset(passwd, '\0', maxlen);
 	if (shadow != NULL && strcmp(username, "defuser") == 0 && strcmp(shadow, PSH_DEFUSRPWDHASH) == 0)
-		return 1;
+		return 0;
 
 	sleep(2);
-	return -1;
+	return 1;
 }
 
 
-void __attribute__((constructor)) login_registerapp(void)
+void __attribute__((constructor)) pshauth_registerapp(void)
 {
-	static psh_appentry_t app = {.name = "login", .run = psh_login, .info = NULL};
+	static psh_appentry_t app = { .name = "auth", .run = psh_auth, .info = NULL };
 	psh_registerapp(&app);
 }

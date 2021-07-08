@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <termios.h>
 #include <unistd.h>
 
 #include <sys/msg.h>
@@ -78,6 +79,7 @@ int main(int argc, char **argv)
 	char *base;
 	oid_t oid;
 	const psh_appentry_t *app;
+	pid_t tcpid;
 
 	keepidle(1);
 
@@ -89,13 +91,25 @@ int main(int argc, char **argv)
 	while (write(1, "", 0) < 0)
 		usleep(50000);
 
+	/* Check if its first shell */
+	tcpid = tcgetpgrp(STDIN_FILENO);
 	base = basename(argv[0]);
+	do {
+		/* login prompt */
+		if (strcmp(base, "pshlogin") == 0 && (app = psh_findapp("auth")) != NULL)
+			while (app->run(0, NULL) != 0)
+				;
 
-	/* Run app */
-	if ((app = psh_findapp(base)) != NULL)
-		app->run(argc, argv);
-	else
-		fprintf(stderr, "psh: %s: unknown command\n", argv[0]);
+		/* Run app */
+		if ((app = psh_findapp(base)) != NULL) {
+			app->run(argc, argv);
+		}
+		else {
+			fprintf(stderr, "psh: %s: unknown command\n", argv[0]);
+			break;
+		}
+
+	} while (tcpid == -1 && strcmp(base, "pshlogin") == 0);
 
 	keepidle(0);
 
