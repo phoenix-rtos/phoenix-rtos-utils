@@ -21,14 +21,15 @@ LOCAL_LDFLAGS := -z stack-size=4096 -z noexecstack
 # TODO: search for dirs?
 PSH_ALLCOMMANDS := bind cat edit exec kill ls mem mkdir mount nc nslookup perf ping ps reboot runfile sync sysexec top touch
 PSH_COMMANDS ?= $(PSH_ALLCOMMANDS)
-PSH_APPLETS := pshapp help login $(filter $(PSH_ALLCOMMANDS), $(PSH_COMMANDS))
+PSH_APPLETS := pshapp help $(filter $(PSH_ALLCOMMANDS), $(PSH_COMMANDS))
 
 SRCS := $(foreach app, $(PSH_APPLETS), $(wildcard $(LOCAL_PATH)$(app)/*.c))
 
-# TODO: all applets?
+# Applets to create links:
+PSH_LINK_APPLETS := $(PSH_APPLETS) pshlogin
 # custom installation - automatically create rootfs hardlinks for all applets
 $(NAME)-install:
-	$(SIL)for applet in $(PSH_APPLETS); do \
+	$(SIL)for applet in $(PSH_LINK_APPLETS); do \
 		echo "LINK /bin/{psh -> $$applet}"; \
 		ln -f "$$PREFIX_ROOTFS/bin/psh" "$$PREFIX_ROOTFS/bin/$$applet"; \
 	done
