@@ -16,6 +16,7 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
+#include <limits.h>
 #include <pwd.h>
 #include <signal.h>
 #include <stdint.h>
@@ -567,7 +568,6 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 					psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
 				}
 			}
-#if 0 /* FIXME: tab-completion currently breaks psh, disable it until it will be fixed */
 			/* TAB => autocomplete paths */
 			else if (c == '\t') {
 				nfiles = err = 0;
@@ -578,69 +578,77 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 					i = n - i;
 					c = path[i];
 					path[i] = '\0';
-					if ((fpath = canonicalize_file_name(path)) == NULL) {
-						fprintf(stderr, "\r\npsh: out of memory\r\n");
+					/* allow_missing_leaf == 1 -> partial file names */
+					if ((fpath = resolve_path(path, NULL, 1, 1)) == NULL) {
+						if (errno == ENOMEM)
+							fprintf(stderr, "\r\npsh: out of memory\r\n");
+						else
 						path[i] = c;
-						err = -ENOMEM;
-						break;
 					}
-					path[i] = c;
+					else {
+						path[i] = c;
+						if (i && (path[i - 1] == '/') && (fpath[strlen(fpath) - 1] == '.'))
+							fpath[strlen(fpath) - 1] = '\0';
 
-					if (i && (path[i - 1] == '/') && (fpath[strlen(fpath) - 1] == '.'))
-						fpath[strlen(fpath) - 1] = '\0';
-					splitname(fpath, &base, &dir);
-
-					do {
-						if ((nfiles = psh_completepath(dir, base, &files)) <= 0) {
-							err = nfiles;
-							break;
+						/* not using splitname for full dir search */
+						if (path[strlen(path) - 1] == '/') {
+							dir = fpath;
+							base = &fpath[strlen(fpath)];
 						}
+						else
+							splitname(fpath, &base, &dir);
 
-						/* Print hints */
-						if (nfiles > 1) {
-							psh_movecursor(n + sizeof(PROMPT) - 1, m);
-							qsort(files, nfiles, sizeof(char *), psh_cmpname);
-							if ((err = psh_printfiles(files, nfiles)) < 0)
+						do {
+							if ((nfiles = psh_completepath(dir, base, &files)) <= 0) {
+								err = nfiles;
 								break;
-							write(STDOUT_FILENO, "\r\033[0J", 5);
-							write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
-							if (hp == cmdhist->he)
-								write(STDOUT_FILENO, *cmd, n + m);
-							else
-								psh_printhistent(cmdhist->entries + hp);
-							psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
-						}
-						/* Complete path */
-						else {
-							if (hp != cmdhist->he) {
-								if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
+							}
+							/* Print hints */
+							if (nfiles > 1) {
+								psh_movecursor(n + sizeof(PROMPT) - 1, m);
+								qsort(files, nfiles, sizeof(char *), psh_cmpname);
+								if ((err = psh_printfiles(files, nfiles)) < 0)
 									break;
-								hp = cmdhist->he;
+								write(STDOUT_FILENO, "\r\033[0J", 5);
+								write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
+								if (hp == cmdhist->he)
+									write(STDOUT_FILENO, *cmd, n + m);
+								else
+									psh_printhistent(cmdhist->entries + hp);
+								psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
 							}
-							i = strlen(files[0]) - strlen(base);
-							if ((n + m + i + 1 > cmdsz) && ((err = psh_extendcmd(cmd, &cmdsz, 2 * (n + m + i) + 1)) < 0)) {
-								free(dir);
-								free(base);
-								break;
+							/* Complete path */
+							else {
+								if (hp != cmdhist->he) {
+									if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
+										break;
+									hp = cmdhist->he;
+								}
+								i = strlen(files[0]) - strlen(base);
+								if ((n + m + i + 1 > cmdsz) && ((err = psh_extendcmd(cmd, &cmdsz, 2 * (n + m + i) + 1)) < 0)) {
+									free(dir);
+									free(base);
+									break;
+								}
+								if (cmd[n - 1] == '/')
+									break;
+								memmove(*cmd + n + i, *cmd + n, m);
+								memcpy(*cmd + n, files[0] + strlen(base), i);
+								write(STDOUT_FILENO, *cmd + n, i + m);
+								n += i;
+								psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
 							}
-							memmove(*cmd + n + i, *cmd + n, m);
-							memcpy(*cmd + n, files[0] + strlen(base), i);
-							write(STDOUT_FILENO, *cmd + n, i + m);
-							n += i;
-							psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
-						}
-					} while (0);
-
-					for (i = 0; i < nfiles; i++)
-						free(files[i]);
-					free(files);
-					free(fpath);
+						} while (0);
+						for (i = 0; i < nfiles; i++)
+							free(files[i]);
+						free(files);
+						free(fpath);
+					}
 
 					if (err < 0)
 						break;
 				}
 			}
-#endif
 			/* FF => clear screen */
 			else if (c == '\014') {
 				write(STDOUT_FILENO, "\033[f", 3);
