@@ -63,126 +63,143 @@ int dbbt_block_is_bad(dbbt_t *dbbt, uint32_t block_num)
 }
 
 
-int dbbt_flash(oid_t oid, FILE *f, dbbt_t *dbbt)
+int dbbt_flash(oid_t oid, int fd, dbbt_t *dbbt, const flashsrv_info_t *info)
 {
 	int i, err;
 	void *data;
-	offs_t partoff = 0, partsz;
 
-	if ((err = flashmng_getAttr(atSize, &partsz, oid)) < 0)
-		return err;
+	/* DBBT is just after BCB_CNT FCB blocks on the same partition */
+	offs_t partoff = BCB_CNT * info->erasesz;
 
-	if (partsz < (BCB_CNT * PAGES_PER_BLOCK * FLASH_PAGE_SIZE))
+	data = malloc(info->writesz);
+	if (!data)
 		return -1;
-
-	data = mmap(NULL, FLASH_PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_UNCACHED, OID_NULL, 0);
 
 	dbbt_fingerprint(dbbt);
 	dbbt->size = 1;
 
 	for (i = 0; i < BCB_CNT; i++) {
-		if ((err = fseek(f, partoff, SEEK_SET)) < 0)
+		if ((err = lseek(fd, partoff, SEEK_SET)) < 0) {
+			printf("failed to lseek(1) to 0x%llx\n", partoff);
+			free(data);
 			return err;
+		}
 
-		memcpy(data, dbbt, FLASH_PAGE_SIZE);
-		if ((err = fwrite(data, sizeof(char), FLASH_PAGE_SIZE, f)) != FLASH_PAGE_SIZE)
+		memcpy(data, dbbt, info->writesz);
+		if ((err = write(fd, data, info->writesz)) != info->writesz)
 			printf("Error writing %d dbbt page\n", i);
 
 		if (dbbt->entries_num) {
-			memcpy(data, ((void *)dbbt) + (4 * FLASH_PAGE_SIZE), FLASH_PAGE_SIZE);
+			memcpy(data, ((char *)dbbt) + (4 * info->writesz), info->writesz);
 
-			if (!err && (fseek(f, partoff + (4* FLASH_PAGE_SIZE), SEEK_SET) < 0))
+			if (!err && (lseek(fd, partoff + (4 * info->writesz), SEEK_SET) < 0)) {
+				printf("failed to lseek(2)");
+				free(data);
 				return -1;
+			}
 
-			if ((err = fwrite(data, sizeof(char), FLASH_PAGE_SIZE, f)) != FLASH_PAGE_SIZE)
+			if (!err && (err = write(fd, data, info->writesz)) != info->writesz)
 				printf("Error writing with offset %d dbbt page\n", i);
 		}
-		partoff += (PAGES_PER_BLOCK * FLASH_PAGE_SIZE);
+		partoff += info->erasesz;
 	}
-	munmap(data, FLASH_PAGE_SIZE);
+	free(data);
 
 	return 0;
 }
 
 
-void fcb_init(fcb_t *fcb)
+void fcb_init(fcb_t *fcb, const flashsrv_info_t *info)
 {
-	fcb->fingerprint			= 0x20424346;
-	fcb->version				= 0x01000000;
-	fcb->data_setup				= 0x78;
-	fcb->data_hold				= 0x3c;
-	fcb->address_setup			= 0x19;
-	fcb->dsample_time			= 0x6;
-	fcb->nand_timing_state		= 0x0;
-	fcb->REA					= 0x0;
-	fcb->RLOH					= 0x0;
-	fcb->RHOH					= 0x0;
-	fcb->page_size				= 0x1000;
-	fcb->total_page_size		= 0x10e0;
-	fcb->block_size				= 64;
-	fcb->b0_ecc_type			= 0x8;
-	fcb->b0_ecc_size			= 0x0;
-	fcb->bn_ecc_size			= 512;
-	fcb->bn_ecc_type			= 0x7;
-	fcb->meta_size				= 0x10;
-	fcb->ecc_per_page			= 8;
-	fcb->fw1_start				= 512;
-	fcb->fw2_start				= 1536;
-	fcb->fw1_size				= 0x1;
-	fcb->fw2_size				= 0x1;
-	fcb->dbbt_start				= 0x100;
-	fcb->bbm_offset				= 0x1000;
-	fcb->bbm_start				= 0x0;
-	fcb->bbm_phys_offset		= 0x1000;
-	fcb->bch_type				= 0x0;
-	fcb->read_latency			= 0x0;
-	fcb->preamble_delay			= 0x0;
-	fcb->ce_delay				= 0x0;
-	fcb->postamble_delay		= 0x0;
-	fcb->cmd_add_pause			= 0x0;
-	fcb->data_pause				= 0x0;
-	fcb->speed					= 0x0;
-	fcb->busy_timeout			= 0xffff;
-	fcb->bbm_disabled			= 1;
-	fcb->bbm_spare_offset		= 0;
-	fcb->disable_bbm_search		= 1;
+	fcb->fingerprint = 0x20424346;
+	fcb->version = 0x01000000;
+	fcb->data_setup = 0x78;
+	fcb->data_hold = 0x3c;
+	fcb->address_setup = 0x19; /* FIXME: the same configuration as in GPMI? */
+	fcb->dsample_time = 0x6;
+	fcb->nand_timing_state = 0x0;
+	fcb->REA = 0x0;
+	fcb->RLOH = 0x0;
+	fcb->RHOH = 0x0;
+	fcb->page_size = info->writesz;
+	fcb->total_page_size = info->writesz + info->metasz;
+	fcb->block_size = info->erasesz / info->writesz;
+	fcb->b0_ecc_type = 0x8; /* FIXME */
+	fcb->b0_ecc_size = 0x0; /* FIXME */
+	fcb->bn_ecc_size = 512;
+	fcb->bn_ecc_type = 0x7;
+	fcb->meta_size = 0x10;
+	fcb->ecc_per_page = 8;
+	fcb->fw1_start = 8 * 64;
+	fcb->fw2_start = 24 * 64;
+	fcb->fw1_size = 0x1;
+	fcb->fw2_size = 0x1;
+	fcb->dbbt_start = 0x100;
+	fcb->bbm_offset = 0x1000; /* FIXME */
+	fcb->bbm_start = 0x0;
+	fcb->bbm_phys_offset = 0x1000;
+	fcb->bch_type = 0x0;
+	fcb->read_latency = 0x0;
+	fcb->preamble_delay = 0x0;
+	fcb->ce_delay = 0x0;
+	fcb->postamble_delay = 0x0;
+	fcb->cmd_add_pause = 0x0;
+	fcb->data_pause = 0x0;
+	fcb->speed = 0x0;
+	fcb->busy_timeout = 0xffff;
+	fcb->bbm_disabled = 1; /* disable badblock marker swapping */
+	fcb->bbm_spare_offset = 0;
+	fcb->disable_bbm_search = 1; /* use only DBBT when loading firmware, TODO: maybe bad block markers instead? */
 
 	fcb->checksum = bcb_checksum(((uint8_t *)fcb) + 4, sizeof(fcb_t) - 4);
 }
 
-int fcb_flash(oid_t oid, fcb_t *fcb_ret)
+int fcb_flash(oid_t oid, const flashsrv_info_t *info)
 {
 	char *sbuf, *tbuf;
 	fcb_t *fcb;
-	int i;
+	unsigned int i, fcb_failed = 0;
 	int err = 0;
+	const unsigned int raw_page_size = info->writesz + info->metasz;
 
-	if ((sbuf = mmap(NULL, FLASH_PAGE_SIZE * 2, PROT_READ | PROT_WRITE, MAP_UNCACHED, OID_NULL, 0)) == MAP_FAILED)
-		return 1;
+	sbuf = calloc(4, info->writesz);
+	if (!sbuf)
+		return -1;
 
-	if ((tbuf = mmap(NULL, FLASH_PAGE_SIZE * 2, PROT_READ | PROT_WRITE, MAP_UNCACHED, OID_NULL, 0)) == MAP_FAILED)
-		return 1;
+	tbuf = sbuf + 2 * info->writesz;
 
-	memset(sbuf, 0x0, FLASH_PAGE_SIZE * 2);
 
 	fcb = (fcb_t *)(sbuf);
+	fcb_init(fcb, info);
 
-	fcb_init(fcb);
-	memset(tbuf, 0x0, FLASH_PAGE_SIZE * 2);
+	encode_bch_ecc(sbuf, sizeof(fcb_t), tbuf, raw_page_size, 3);
 
-	encode_bch_ecc(sbuf, sizeof(fcb_t), tbuf,  RAW_FLASH_PAGE_SIZE, 3);
+	/* put 0xff as first metadata byte (6ULL BCB has 32 bytes of metadata) to avoid badblock false positive */
+	tbuf[0] = 0xff;
 
 	for (i = 0; i < BCB_CNT; i++) {
-		err = flashmng_writedev(oid, FCB_START + (i * PAGES_PER_BLOCK * RAW_FLASH_PAGE_SIZE), tbuf, RAW_FLASH_PAGE_SIZE, flashsrv_devctl_writeraw);
+		/* TODO: check for badblock? */
+		err = flashmng_writedev(oid, FCB_START + (i * raw_page_size), tbuf, raw_page_size, flashsrv_devctl_writeraw);
+		/* FIXME: do not error-out, write as many FCB as we can */
 		if (err < 0)
 			break;
+
+		/* verify by reading again */
+		memset(sbuf, 0, 2 * info->writesz);
+		err = flashmng_readraw(oid, FCB_START + (i * raw_page_size), sbuf, raw_page_size);
+
+		for (unsigned int j = 0; j < raw_page_size; ++j) {
+			if (sbuf[j] != tbuf[j]) {
+				printf("FCB FAIL[%4u]: W:0x%02x != R:0x%02x\n", j, tbuf[j], sbuf[j]);
+				fcb_failed += 1;
+				break;
+			}
+		}
 	}
 
-	if (fcb_ret != NULL)
-		memcpy(fcb_ret, sbuf, sizeof(fcb_t));
+	if (fcb_failed > 0)
+		printf("WARN: %u out of %u FCB are broken\n", fcb_failed, BCB_CNT);
 
-	munmap(sbuf, FLASH_PAGE_SIZE * 2);
-	munmap(tbuf, FLASH_PAGE_SIZE * 2);
-
+	free(sbuf);
 	return err;
 }

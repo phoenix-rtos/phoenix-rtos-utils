@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <sys/types.h>
 #include <sys/msg.h>
 #include <sys/stat.h>
@@ -62,23 +63,29 @@ enum { ocotp_ctrl, ocotp_ctrl_set, ocotp_ctrl_clr, ocotp_ctrl_tog, ocotp_timing,
 	};
 
 
+struct filedes {
+	int fd;
+	oid_t oid;
+	const char *name;
+};
+
+
 struct {
 	int run;
 
 	dbbt_t* dbbt;
 	fcb_t *fcb;
+	flashsrv_info_t flash;
 
 	char rcvBuff[HID_REPORT_2_SIZE];
-	char buff[FLASH_PAGE_SIZE];
+	char buff[_PAGE_SIZE * 2]; /* assuming always big enough to fit psd_common.flash.writesz */
 
-	unsigned int nfiles;
-	FILE *f;
-	oid_t oid;
 	offs_t partsz;
 	offs_t partOffs;
 
-	FILE *files[FILES_SIZE];
-	oid_t oids[FILES_SIZE];
+	unsigned int nfiles;
+	struct filedes *f;
+	struct filedes files[FILES_SIZE];
 } psd_common;
 
 
@@ -157,17 +164,16 @@ static int psd_changePartition(uint8_t number)
 	}
 	else {
 		/* Change file */
-		psd_common.f = psd_common.files[number];
-		psd_common.oid = psd_common.oids[number];
+		psd_common.f = &psd_common.files[number];
 
-		if (flashmng_getAttr(atSize, &psd_common.partsz, psd_common.oid) < 0)
+		if (flashmng_getAttr(atSize, &psd_common.partsz, psd_common.f->oid) < 0)
 			return -eReport1;
 
-		if (flashmng_getAttr(atDev, &psd_common.partOffs, psd_common.oid) < 0)
+		if (flashmng_getAttr(atDev, &psd_common.partOffs, psd_common.f->oid) < 0)
 			return -eReport1;
 	}
 
-	printf("PSD: Changed current partition to flash%d (offs=%llu size=%llu).\n", number, psd_common.partOffs, psd_common.partsz);
+	printf("PSD: Changing current partition to %s (offs=%llu size=%llu).\n", psd_common.f->name, psd_common.partOffs, psd_common.partsz);
 
 	return hidOK;
 }
@@ -178,14 +184,21 @@ static int psd_controlBlock(uint32_t block)
 	int err = hidOK;
 	if (block == FCB) {
 		printf("PSD: Flash fcb.\n");
-		err = fcb_flash(psd_common.oid, psd_common.fcb);
+		err = fcb_flash(psd_common.f->oid, &psd_common.flash);
 	}
 	else if (block == DBBT) {
+		/* this should be done on whole chip or just kernel partitions */
+		printf("PSD: Check bad blocks - start: %u end: %llu.\n", 0, psd_common.flash.size / psd_common.flash.erasesz);
+		if ((err = flashmng_checkRange(psd_common.f->oid, 0, psd_common.flash.size, &psd_common.dbbt)) < 0)
+			return err;
+
+		/* FIXME: lseek on whole chip fails (2GB does not fit in int), for now HACK: change to first partition for flashing */
+		psd_changePartition(1);
 		printf("PSD: Flash dbbt.\n");
 		if (psd_common.dbbt == NULL)
 			return -eControlBlock;
 
-		err = dbbt_flash(psd_common.oid, psd_common.f, psd_common.dbbt);
+		err = dbbt_flash(psd_common.f->oid, psd_common.f->fd, psd_common.dbbt, &psd_common.flash);
 	}
 	else {
 		return -eReport1;
@@ -195,54 +208,21 @@ static int psd_controlBlock(uint32_t block)
 }
 
 
-static int psd_erasePartition(uint32_t size)
+static int psd_erasePartition(uint32_t size, uint8_t format)
 {
 	int err = hidOK;
 
-	printf("PSD: Erase partition - start: %d end: %d.\n", 0, size);
-	if ((err = flashmng_eraseBlock(psd_common.oid, 0, size, 0)) < 0)
-		return err;
+	if (format != 16) {
+		printf("PSD: Erase partition - start: %d size: %d (actual size: %llu).\n", 0, size, psd_common.partsz);
+		if ((err = flashmng_eraseBlocks(psd_common.f->oid, 0, size)) < 0)
+			return err;
+	}
 
-	/* FIXME: partial dbbt check is not supported, actually causes DBBT overwrite and memory leak */
-#if 0
-	printf("PSD: Check dbbt - start: %d end: %d.\n", 0, BLOCKS_CNT);
-	if ((err = flashmng_checkRange(psd_common.oid, 0, BLOCKS_CNT, &psd_common.dbbt)) < 0)
-		return err;
-#endif
-
-	return err;
-}
-
-
-static int psd_eraseChip(uint32_t size)
-{
-	int err = hidOK;
-
-	/* FIXME: don't hardcode flash size */
-	printf("PSD: Erase chip - start: %d end: %d.\n", 0, BLOCKS_CNT);
-	if ((err = flashmng_eraseBlock(psd_common.oid, 0, BLOCKS_CNT, 1)) < 0)
-		return err;
-
-	printf("PSD: Check dbbt - start: %d end: %d.\n", 0, BLOCKS_CNT);
-	if ((err = flashmng_checkRange(psd_common.oid, 0, BLOCKS_CNT, &psd_common.dbbt)) < 0)
-		return err;
-
-	/* FIXME: hardcoded JFFS2 cleanmarkers beginning (???) */
-	printf("PSD: CleanMarkers.\n");
-	if ((err = flashmng_cleanMarkers(psd_common.oid, 64 + 2 * size, BLOCKS_CNT)) < 0)
-		return err;
-
-	return err;
-}
-
-
-static int psd_checkProduction(void)
-{
-	int err = hidOK;
-
-	printf("PSD: Check dbbt - start: %d end: %d.\n", 0, BLOCKS_CNT);
-	if ((err = flashmng_checkRange(psd_common.oid, 0, BLOCKS_CNT, &psd_common.dbbt)) < 0)
-		return err;
+	if (format == 8 || format == 16) {
+		printf("PSD: Writing JFFS2 CleanMarkers.\n");
+		if ((err = flashmng_cleanMarkers(psd_common.f->oid, 0, psd_common.partsz)) < 0)
+			return err;
+	}
 
 	return err;
 }
@@ -252,7 +232,9 @@ static int psd_blowFuses(void)
 {
 	int err = hidOK;
 
-	uint32_t *base = mmap(NULL, 0x1000, PROT_WRITE | PROT_READ, MAP_DEVICE, OID_PHYSMEM, OTP_BASE_ADDR);
+	uint32_t *base = mmap(NULL, _PAGE_SIZE, PROT_WRITE | PROT_READ, MAP_DEVICE, OID_PHYSMEM, OTP_BASE_ADDR);
+
+	printf("PSD: Blowing fuses.\n");
 
 	if (base == NULL) {
 		printf("OTP mmap failed\n");
@@ -262,32 +244,38 @@ static int psd_blowFuses(void)
 
 	if (*(base + ocotp_ctrl) & OTP_ERROR) {
 		printf("OTP error\n");
-		munmap(base, 0x1000);
+		munmap(base, _PAGE_SIZE);
 		return -1;
 	}
 	while (*(base + ocotp_ctrl) & OTP_BUSY) usleep(10000);
 
+	/* [5] BT_FUSE_SEL = 1 -> boot from fuses
+	 * [21] WDOG_ENABLE -> TODO */
 	*(base + ocotp_ctrl_set) = 0x6 | OTP_WR_UNLOCK;
 	*(base + ocotp_data) = 0x10;
 
 	if (*(base + ocotp_ctrl) & OTP_ERROR) {
 		printf("BT_FUSE_SEL error\n");
-		munmap(base, 0x1000);
+		munmap(base, _PAGE_SIZE);
 		return -1;
 	}
 	while (*(base + ocotp_ctrl) & OTP_BUSY) usleep(10000);
+	/* Due to internal electrical characteristics of the OTP during writes,
+	 * all OTP operations following a write must be separated by 2 us
+	 * after the clearing of HW_OCOTP_CTRL_BUSY following the write. */
 	usleep(100000);
 
 	*(base + ocotp_ctrl_clr) = 0x6 | OTP_WR_UNLOCK;
 	while (*(base + ocotp_ctrl) & OTP_BUSY) usleep(10000);
 	usleep(100000);
 
+	/* [BOOT_CFG4][BOOT_CFG3][BOOT_CFG2][BOOT_CFG1] -> use raw NAND for internal boot, 64 pages per block, boot search count = 4 (4 FCB blocks) */
 	*(base + ocotp_ctrl_set) = 0x5 | OTP_WR_UNLOCK;
 	*(base + ocotp_data) = 0x1090;
 
 	if (*(base + ocotp_ctrl) & OTP_ERROR) {
 		printf("BOOT_CFG error\n");
-		munmap(base, 0x1000);
+		munmap(base, _PAGE_SIZE);
 		return -1;
 	}
 	while (*(base + ocotp_ctrl) & OTP_BUSY) usleep(10000);
@@ -297,14 +285,14 @@ static int psd_blowFuses(void)
 
 	if (*(base + ocotp_ctrl) & OTP_ERROR) {
 		printf("RELOAD error\n");
-		munmap(base, 0x1000);
+		munmap(base, _PAGE_SIZE);
 		return -1;
 	}
 	while (*(base + ocotp_ctrl) & OTP_BUSY) usleep(10000);
 	usleep(100000);
 
 	printf("PSD: Fuses blown.\n");
-	munmap(base, 0x1000);
+	munmap(base, _PAGE_SIZE);
 
 	return err;
 }
@@ -315,6 +303,7 @@ static int psd_writeRegister(sdp_cmd_t *cmd)
 	int err = hidOK;
 	int address = (int)cmd->address;
 	uint32_t data = cmd->data;
+	uint8_t format = cmd->format;
 
 	if (address == CHANGE_PARTITION) {
 		err = psd_changePartition(data);
@@ -323,14 +312,16 @@ static int psd_writeRegister(sdp_cmd_t *cmd)
 		err = psd_controlBlock(data);
 	}
 	else if (address == ERASE_PARTITION_ADDRESS) {
-		err = psd_erasePartition(data);
+		err = psd_erasePartition(data, format);
 	}
+#if 0 /* obsolete - do not reuse the addresses */
 	else if (address == ERASE_CHIP_ADDRESS) {
 		err = psd_eraseChip(data);
 	}
 	else if (address == CHECK_PRODUCTION) {
 		err = psd_checkProduction();
 	}
+#endif
 	else if (address == BLOW_FUSES) {
 		err = psd_blowFuses();
 	}
@@ -352,36 +343,28 @@ static int psd_writeFile(sdp_cmd_t *cmd)
 {
 	int res, err = hidOK, buffOffset = 0;
 	offs_t writesz, fileOffs;
-	uint32_t pagenum, blocknum;
 
 	char *outdata = NULL;
 
-	/* Check command parameters */
-	fileOffs = cmd->address * FLASH_PAGE_SIZE;
-	printf("fileOffs: %lld, partsz: %lld partOff: %lld\n", fileOffs, psd_common.partsz, psd_common.partOffs);
+	fileOffs = cmd->address * psd_common.flash.writesz;
 
+	/* Check command parameters */
 	if (cmd->datasz + fileOffs > psd_common.partsz)
 		return -eReport1;
 
-	if (fseek(psd_common.f, fileOffs, SEEK_SET) < 0)
+	if (lseek(psd_common.f->fd, fileOffs, SEEK_SET) < 0)
 		return -eReport1;
-
-#if 0
-	/* FIXME: read dbbt from FLASH at startup */
-	if (psd_common.dbbt == NULL)
-		return -eReport1;
-#endif
 
 	printf("PSD: Writing file.\n");
 
 	/* Receive and write file */
 	for (writesz = 0; !err && (writesz < cmd->datasz); writesz += buffOffset) {
 
-		memset(psd_common.buff, 0xff, FLASH_PAGE_SIZE);
+		memset(psd_common.buff, 0xff, psd_common.flash.writesz);
 		res = HID_REPORT_2_SIZE - 1;
 		buffOffset = 0;
 
-		while ((buffOffset < FLASH_PAGE_SIZE) && (res == (HID_REPORT_2_SIZE - 1))) {
+		while ((buffOffset < psd_common.flash.writesz) && (res == (HID_REPORT_2_SIZE - 1))) {
 			if ((res = sdp_recv(1, psd_common.rcvBuff, HID_REPORT_2_SIZE, &outdata)) < 0 ) {
 				err = -eReport2;
 				break;
@@ -392,16 +375,21 @@ static int psd_writeFile(sdp_cmd_t *cmd)
 
 		if (buffOffset && !err) {
 
-			pagenum = psd_common.partOffs + fileOffs;
-			blocknum = pagenum / PAGES_PER_BLOCK;
+			/* check for badblocks - TODO: test it */
+			if (fileOffs % psd_common.flash.erasesz == 0) {
+				while (flashmng_isBadBlock(psd_common.f->oid, fileOffs)) {
+					/* badblock - skip it */
+					printf("writeFile: skipping badblock at offs: 0x%x\n", (uint32_t)fileOffs);
+					if (lseek(psd_common.f->fd, psd_common.flash.erasesz, SEEK_CUR) < 0) {
+						err = -eReport2;
+						break;
+					}
 
-			/* If the current block is bad, the block should be omitted. */
-			if (!(pagenum % PAGES_PER_BLOCK) && dbbt_block_is_bad(psd_common.dbbt, blocknum)) {
-				if (fseek(psd_common.f, FLASH_PAGE_SIZE * PAGES_PER_BLOCK, SEEK_SET) < 0)
-					err = -eReport2;
+					fileOffs += psd_common.flash.erasesz;
+				}
 			}
 
-			if (!err && ((res = fwrite(psd_common.buff, sizeof(char), FLASH_PAGE_SIZE, psd_common.f)) != FLASH_PAGE_SIZE)) {
+			if (!err && ((res = write(psd_common.f->fd, psd_common.buff, psd_common.flash.writesz)) != psd_common.flash.writesz)) {
 				err = -eReport2;
 				break;
 			}
@@ -439,7 +427,7 @@ int main(int argc, char **argv)
 
 	printf("PSD: Waiting on flash srv.\n");
 	for (i = 1; i < argc; ++i) {
-		while (lookup(argv[i], NULL, &psd_common.oids[i - 1]) < 0)
+		while (lookup(argv[i], NULL, &psd_common.files[i - 1].oid) < 0)
 			usleep(200);
 	}
 
@@ -447,19 +435,21 @@ int main(int argc, char **argv)
 
 	/* Open files */
 	for (psd_common.nfiles = 1; psd_common.nfiles < argc; psd_common.nfiles++) {
-		printf("PSD: Opened partition: %s\n", argv[psd_common.nfiles]);
-		if ((psd_common.files[psd_common.nfiles - 1] = fopen(argv[psd_common.nfiles], "r+")) == NULL) {
-			fprintf(stderr, "PSD: Can't open file '%s'! errno: (%d)", argv[psd_common.nfiles], errno);
+		struct filedes *currf = &psd_common.files[psd_common.nfiles - 1];
+
+		currf->name = argv[psd_common.nfiles];
+		printf("PSD: Opening partition: %s\n", currf->name);
+
+		if ((currf->fd = open(argv[psd_common.nfiles], O_RDWR)) < 0) {
+			fprintf(stderr, "PSD: Can't open file '%s'! errno: (%d)", currf->name, errno);
 			return -1;
 		}
 	}
 
 	psd_common.run = 1;
-	psd_common.fcb = malloc(sizeof(fcb_t));
-	psd_common.f = psd_common.files[0];
-	psd_common.oid = psd_common.oids[0];
+	psd_changePartition(0);
 
-	/* FIXME: read DBBT from flash */
+	flashmng_getInfo(psd_common.f->oid, &psd_common.flash);
 
 	printf("PSD: Initializing USB transport\n");
 	if (sdp_init(&hid_setup)) {
@@ -493,12 +483,12 @@ int main(int argc, char **argv)
 	printf("Close PSD. Device is rebooting.\n");
 
 	for (i = 0; i < psd_common.nfiles; ++i) {
-		fclose(psd_common.files[i]);
+		close(psd_common.files[i].fd);
 	}
 
-	free(psd_common.fcb);
 	free(psd_common.dbbt);
 
+	/* TODO: clean persistent bit to boot from NAND ? */
 	reboot(PHOENIX_REBOOT_MAGIC);
 
 	return EOK;

@@ -19,6 +19,8 @@
 #include <stdio.h>
 #include <stdint.h>
 
+#include <imx6ull-flashsrv.h>
+
 #define BB_MAX	256
 
 #define BCB_CNT 4
@@ -97,9 +99,9 @@ typedef struct _dbbt_t {
 } dbbt_t;
 
 
-int fcb_flash(oid_t oid, fcb_t *fcb_ret);
+int fcb_flash(oid_t oid, const flashsrv_info_t *info);
 
-int dbbt_flash(oid_t oid, FILE *f, dbbt_t *dbbt);
+int dbbt_flash(oid_t oid, int fd, dbbt_t *dbbt, const flashsrv_info_t *info);
 
 int dbbt_block_is_bad(dbbt_t *dbbt, uint32_t block_num);
 
