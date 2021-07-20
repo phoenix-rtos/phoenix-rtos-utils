@@ -24,6 +24,10 @@
 #include <string.h>
 #include <errno.h>
 
+static struct {
+	flashsrv_info_t info;
+
+} flashmng_common;
 
 /* jffs2 cleanmarker - write it on clean blocks to mount faster */
 struct cleanmarker
@@ -42,37 +46,28 @@ static const struct cleanmarker oob_cleanmarker =
 };
 
 
-int flashmng_readraw(oid_t oid, uint32_t paddr, void *data, int size)
+int flashmng_isBadBlock(oid_t oid, uint32_t addr)
 {
-	msg_t msg;
-	flash_i_devctl_t *idevctl = NULL;
-	flash_o_devctl_t *odevctl = NULL;
+	msg_t msg = { 0 };
+	flash_i_devctl_t *idevctl = (flash_i_devctl_t *)msg.i.raw;
+	flash_o_devctl_t *odevctl = (flash_o_devctl_t *)msg.o.raw;
 
 	msg.type = mtDevCtl;
-	msg.i.data = NULL;
-	msg.i.size = 0;
-	msg.o.data = data;
-	msg.o.size = size;
-
-	idevctl = (flash_i_devctl_t *)msg.i.raw;
-	idevctl->type = flashsrv_devctl_readraw;
-	idevctl->readraw.oid = oid;
-	idevctl->readraw.size = size;
-	idevctl->readraw.address = paddr;
-
-	odevctl = (flash_o_devctl_t *)msg.o.raw;
+	idevctl->type = flashsrv_devctl_isbad;
+	idevctl->badblock.oid = oid;
+	idevctl->badblock.address = addr;
 
 	if (msgSend(oid.port, &msg) < 0)
 		return -1;
 
-	if (odevctl->err < 0)
-		return -1;
+	if (odevctl->err != 0)
+		return 1;
 
 	return 0;
 }
 
 
-int flashmng_writedev(oid_t oid, uint32_t paddr, void *data, int size, int type)
+int flashmng_writedev(oid_t oid, uint32_t addr, void *data, int size, int type)
 {
 	msg_t msg;
 	flash_i_devctl_t *idevctl = NULL;
@@ -88,29 +83,25 @@ int flashmng_writedev(oid_t oid, uint32_t paddr, void *data, int size, int type)
 	idevctl->type = type;
 	idevctl->write.oid = oid;
 	idevctl->write.size = size;
-	idevctl->write.address = paddr;
+	idevctl->write.address = addr;
 
 	if (msgSend(oid.port, &msg) < 0)
 		return -1;
 
 	odevctl = (flash_o_devctl_t *)msg.o.raw;
 
-	if (odevctl->err < 0)
+	if (odevctl->err != size)
 		return -1;
 
 	return 0;
 }
 
 
-/* start and end are in "erase blocks" */
-int flashmng_eraseBlock(oid_t oid, int start, int end, int chip_erase)
+int flashmng_eraseBlocks(oid_t oid, unsigned int start, unsigned int size)
 {
 	msg_t msg;
 	flash_i_devctl_t *idevctl = NULL;
 	flash_o_devctl_t *odevctl = NULL;
-
-	if (end - start < 0)
-		return -1;
 
 	msg.type = mtDevCtl;
 	msg.i.data = NULL;
@@ -119,10 +110,10 @@ int flashmng_eraseBlock(oid_t oid, int start, int end, int chip_erase)
 	msg.o.size = 0;
 
 	idevctl = (flash_i_devctl_t *)msg.i.raw;
-	idevctl->type = chip_erase ? flashsrv_devctl_chiperase : flashsrv_devctl_erase;
+	idevctl->type = flashsrv_devctl_erase;
 	idevctl->erase.oid = oid;
-	idevctl->erase.size = (end - start) * ERASE_BLOCK_SIZE;
-	idevctl->erase.offset = start * ERASE_BLOCK_SIZE;
+	idevctl->erase.size = size;
+	idevctl->erase.address = start;
 
 	if (msgSend(oid.port, &msg) < 0)
 		return -1;
@@ -152,75 +143,48 @@ int flashmng_getAttr(int type, offs_t* val, oid_t oid)
 	if (msgSend(oid.port, &msg) < 0)
 		return -1;
 
-	*val = msg.o.attr.val;
+	*val = (unsigned int)msg.o.attr.val;
 
 	return 0;
 }
 
 
-static int flashmng_checkBlock(char* raw_block)
+int flashmng_checkRange(oid_t oid, unsigned int start, unsigned int size, dbbt_t **dbbt)
 {
-	if (raw_block[FLASH_PAGE_SIZE] != 0xff)
-		return 1;
-
-	return 0;
-}
-
-
-int flashmng_checkRange(oid_t oid, int start, int end, dbbt_t **dbbt)
-{
-	int i, ret = 0;
-	int bad = 0;
-	int err = 0;
 	uint32_t *bbt;
 	uint32_t bbtn = 0;
 	int dbbtsz;
-	void *raw_data;
+	uint32_t addr;
 
 	bbt = calloc(BB_MAX, sizeof(uint32_t));
 	if (bbt == NULL) {
-		printf("Failed to map pages from OC RAM\n");
+		printf("Failed to alloc memory for BBT");
 		return -1;
 	}
 
-	raw_data = malloc(2 * FLASH_PAGE_SIZE);
-	if (raw_data == NULL) {
-		printf("Failed to map pages from OC RAM\n");
-		free(bbt);
-		return -1;
-	}
+	for (addr = start; addr < start + size; addr += flashmng_common.info.erasesz) {
+		unsigned int blockno = addr / flashmng_common.info.erasesz;
 
-	for (i = start; i < end; i++) {
-
-		memset(raw_data, 0, RAW_FLASH_PAGE_SIZE);
-		ret = flashmng_readraw(oid, (i * PAGES_PER_BLOCK * RAW_FLASH_PAGE_SIZE), raw_data, RAW_FLASH_PAGE_SIZE);
-
-		if (ret != EOK) {
-			printf("Reading block %d returned an error\n", i);
-			err++;
-			bbt[bbtn++] = i;
+		if (flashmng_isBadBlock(oid, addr)) {
+			printf("Block %u is marked as bad\n", blockno);
+			bbt[bbtn++] = blockno;
 		}
 
-		if (flashmng_checkBlock(raw_data)) {
-			printf("Block %d is marked as bad\n", i);
-			bad++;
-			bbt[bbtn++] = i;
-		}
-
-		if (bbtn >= BB_MAX){
-			printf("Too many bad blocks. Flash is not usable\n");
+		if (bbtn >= BB_MAX) {
+			printf("Too many bad blocks. Flash is not useable\n");
+			/* TODO: no -  we need only kernel partitions badblocks in DBBT */
+			/* TODO2: we could have more than one page with bad block numbers */
 			break;
 		}
 	}
 
-	printf("Total blocks read: %d\n", i);
-	printf("Number of read errors: %d\n", err);
-	printf("Number of bad blocks:  %d\n", bad);
+	printf("Total blocks checked: %u\n", size / flashmng_common.info.erasesz);
+	printf("Number of bad blocks:  %u\n", bbtn);
 	printf("------------------\n");
 
 	/* FIXME: memory leak if dbbt already allocated */
 	if (dbbt != NULL && bbtn < BB_MAX) {
-		dbbtsz = (sizeof(dbbt_t) + (sizeof(uint32_t) * bbtn) + FLASH_PAGE_SIZE - 1) & ~(FLASH_PAGE_SIZE - 1);
+		dbbtsz = (sizeof(dbbt_t) + (sizeof(uint32_t) * bbtn) + flashmng_common.info.writesz - 1) & ~(flashmng_common.info.writesz - 1);
 		*dbbt = malloc(dbbtsz);
 		memset(*dbbt, 0, dbbtsz);
 		memcpy(&((*dbbt)->bad_block), bbt, sizeof(uint32_t) * bbtn);
@@ -228,28 +192,79 @@ int flashmng_checkRange(oid_t oid, int start, int end, dbbt_t **dbbt)
 	}
 
 	free(bbt);
-	free(raw_data);
 	return (bbtn >= BB_MAX ? -1 : 0);
 }
 
 
-int flashmng_cleanMarkers(oid_t oid, int start, int end)
+/* write JFFS2 clean block markers */
+int flashmng_cleanMarkers(oid_t oid, unsigned int start, unsigned int size)
 {
 	void *metabuf;
-	int i, ret = 0;
+	int ret = 0;
+	uint32_t addr;
 
-	metabuf = mmap(NULL, FLASH_PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_UNCACHED, OID_NULL, 0);
+	metabuf = malloc(flashmng_common.info.writesz);
 
-	if (metabuf == MAP_FAILED)
+	if (!metabuf)
 		return -1;
 
-	memset(metabuf, 0xff, FLASH_PAGE_SIZE);
-	memcpy(metabuf, &oob_cleanmarker, 8);
+	memset(metabuf, 0xff, flashmng_common.info.writesz);
+	memcpy(metabuf, &oob_cleanmarker, sizeof(oob_cleanmarker));
 
-	for (i = start; i < end; i++) {
-		ret += flashmng_writedev(oid, (i * PAGES_PER_BLOCK * FLASH_PAGE_SIZE), metabuf, FLASH_PAGE_SIZE, flashsrv_devctl_writemeta);
+	for (addr = start; addr < start + size; addr += flashmng_common.info.erasesz) {
+		unsigned int blockno = addr / flashmng_common.info.erasesz; /* note: this is relative to the beginning of the partition */
+
+		if (flashmng_isBadBlock(oid, addr)) {
+			printf("CleanMarkers: block %u is marked as bad - skipping\n", blockno);
+			continue;
+		}
+		ret += flashmng_writedev(oid, addr, metabuf, flashmng_common.info.writesz, flashsrv_devctl_writemeta);
 	}
-	munmap(metabuf, FLASH_PAGE_SIZE);
 
+	free(metabuf);
 	return ret;
+}
+
+
+int flashmng_getInfo(oid_t oid, flashsrv_info_t *info)
+{
+	msg_t msg = { 0 };
+	flash_i_devctl_t *idevctl = (flash_i_devctl_t *)msg.i.raw;
+	flash_o_devctl_t *odevctl = (flash_o_devctl_t *)msg.o.raw;
+
+	msg.type = mtDevCtl;
+
+	idevctl->type = flashsrv_devctl_info;
+
+	if (msgSend(oid.port, &msg) < 0)
+		return -1;
+
+	memcpy(&flashmng_common.info, &odevctl->info, sizeof(flashsrv_info_t));
+	memcpy(info, &odevctl->info, sizeof(flashsrv_info_t));
+	return 0;
+}
+
+
+int flashmng_readraw(oid_t oid, uint32_t addr, void *data, int size)
+{
+	msg_t msg = { 0 };
+	flash_i_devctl_t *idevctl = (flash_i_devctl_t *)msg.i.raw;
+	flash_o_devctl_t *odevctl = (flash_o_devctl_t *)msg.o.raw;
+
+	msg.type = mtDevCtl;
+	msg.o.data = data;
+	msg.o.size = size;
+
+	idevctl->type = flashsrv_devctl_readraw;
+	idevctl->readraw.oid = oid;
+	idevctl->readraw.size = size;
+	idevctl->readraw.address = addr;
+
+	if (msgSend(oid.port, &msg) < 0)
+		return -1;
+
+	if (odevctl->err != size)
+		return -1;
+
+	return 0;
 }
