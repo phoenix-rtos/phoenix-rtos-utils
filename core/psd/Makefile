@@ -7,7 +7,7 @@
 NAME := psd
 LOCAL_PATH = $(call my-dir)
 LOCAL_SRCS := common/sdp.c
-LIBS := libusbclass libusbclient
+LIBS := libusb libusbclient
 LOCAL_INSTALL_PATH := /sbin
 
 ifneq (, $(findstring imxrt, $(TARGET)))
