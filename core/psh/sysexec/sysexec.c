@@ -106,8 +106,10 @@ static int psh_sysexec_checkcommand(int argc, const char **argv)
 int psh_sysexec(int argc, char **argv)
 {
 	int pid;
-	if (argc < 3) {
-		fprintf(stderr, "usage: %s map progname [args]...\n", argv[0]);
+	const char *progname, *mapname;
+
+	if (argc < 2) {
+		fprintf(stderr, "usage: %s [-m mapname] progname [args]...\n", argv[0]);
 		return -EINVAL;
 	}
 
@@ -116,7 +118,16 @@ int psh_sysexec(int argc, char **argv)
 		return -EINVAL;
 	}
 
-	pid = spawnSyspage(argv[1], argv[2], argv + 2);
+	if (argv[1][0] == '-') {
+		if (argc < 4 || argv[1][1] != 'm') {
+			fprintf(stderr, "Invalid arguments!\n");
+			return -EINVAL;
+		}
+		pid = spawnSyspage((mapname = argv[2]), (progname = argv[3]), argv + 3);
+	}
+	else {
+		pid = spawnSyspage((mapname = NULL), (progname = argv[1]), argv + 1);
+	}
 
 	if (pid > 0) {
 		waitpid(pid, NULL, 0);
@@ -130,9 +141,15 @@ int psh_sysexec(int argc, char **argv)
 			fprintf(stderr, "psh: out of memory\n");
 			break;
 
+		case -ENOENT:
+			fprintf(stderr, "psh: syspage program '%s' not found\n", progname);
+			break;
+
 		case -EINVAL:
-			fprintf(stderr, "psh: no exec %s or no map %s defined\n",
-				argv[2], argv[1]);
+			if (mapname)
+				fprintf(stderr, "psh: invalid map '%s'\n", mapname);
+			else
+				fprintf(stderr, "psh: invalid program '%s'\n", progname);
 			break;
 
 		default:
