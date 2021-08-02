@@ -567,9 +567,8 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 					psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
 				}
 			}
-#if 0 /* FIXME: tab-completion currently breaks psh, disable it until it will be fixed */
 			/* TAB => autocomplete paths */
-			else if (c == '\t') {
+			else if (c == '\t' && 0) { /* FIXME: tab-completion currently breaks psh, disable it until it will be fixed */
 				nfiles = err = 0;
 				path = (hp != cmdhist->he) ? cmdhist->entries[hp].cmd : *cmd;
 				for (i = n; i && (path[i - 1] != ' ') && (path[i - 1] != '\0'); i--);
@@ -640,7 +639,6 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 						break;
 				}
 			}
-#endif
 			/* FF => clear screen */
 			else if (c == '\014') {
 				write(STDOUT_FILENO, "\033[f", 3);
