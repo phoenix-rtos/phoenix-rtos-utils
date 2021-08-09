@@ -65,47 +65,47 @@ int dbbt_block_is_bad(dbbt_t *dbbt, uint32_t block_num)
 
 int dbbt_flash(oid_t oid, int fd, dbbt_t *dbbt, const flashsrv_info_t *info)
 {
-	int i, err;
-	void *data;
+	unsigned int i, dbbt_failed = 0;
+	int err;
 
 	/* DBBT is just after BCB_CNT FCB blocks on the same partition */
 	offs_t partoff = BCB_CNT * info->erasesz;
 
-	data = malloc(info->writesz);
-	if (!data)
-		return -1;
-
 	dbbt_fingerprint(dbbt);
 	dbbt->size = 1;
 
-	for (i = 0; i < BCB_CNT; i++) {
+	for (i = 0; i < BCB_CNT; partoff += info->erasesz, i++) {
 		if ((err = lseek(fd, partoff, SEEK_SET)) < 0) {
-			printf("failed to lseek(1) to 0x%llx\n", partoff);
-			free(data);
-			return err;
+			printf("DBBT%u FAIL: lseek(1) to 0x%llx error, %d\n ", i, partoff, err);
+			dbbt_failed++;
+			continue;
 		}
 
-		memcpy(data, dbbt, info->writesz);
-		if ((err = write(fd, data, info->writesz)) != info->writesz)
-			printf("Error writing %d dbbt page\n", i);
+		if (write(fd, dbbt, info->writesz) != info->writesz) {
+			printf("DBBT%u FAIL: error writing dbbt page\n", i);
+			dbbt_failed++;
+			continue;
+		}
 
 		if (dbbt->entries_num) {
-			memcpy(data, ((char *)dbbt) + (4 * info->writesz), info->writesz);
-
-			if (!err && (lseek(fd, partoff + (4 * info->writesz), SEEK_SET) < 0)) {
-				printf("failed to lseek(2)");
-				free(data);
-				return -1;
+			if ((err = lseek(fd, partoff + (4 * info->writesz), SEEK_SET)) < 0) {
+				printf("DBBT%u FAIL: lseek(2) to 0x%llx error, %d\n", i, partoff + (4 * info->writesz), err);
+				dbbt_failed++;
+				continue;
 			}
 
-			if (!err && (err = write(fd, data, info->writesz)) != info->writesz)
-				printf("Error writing with offset %d dbbt page\n", i);
+			if (write(fd, (char *)dbbt + 4 * info->writesz, info->writesz) != info->writesz) {
+				printf("DBBT%u FAIL: error writing with offset dbbt page\n", i);
+				dbbt_failed++;
+				continue;
+			}
 		}
-		partoff += info->erasesz;
 	}
-	free(data);
 
-	return 0;
+	if (dbbt_failed > 0)
+		printf("WARN: %u out of %u DBBT are broken\n", dbbt_failed, BCB_CNT);
+
+	return (dbbt_failed == BCB_CNT);
 }
 
 
@@ -154,12 +154,14 @@ void fcb_init(fcb_t *fcb, const flashsrv_info_t *info)
 	fcb->checksum = bcb_checksum(((uint8_t *)fcb) + 4, sizeof(fcb_t) - 4);
 }
 
+
 int fcb_flash(oid_t oid, const flashsrv_info_t *info)
 {
 	char *sbuf, *tbuf;
 	fcb_t *fcb;
-	unsigned int i, fcb_failed = 0;
+	unsigned int i, j, fcb_failed = 0;
 	int err = 0;
+	const unsigned int pages_per_block = info->erasesz / info->writesz;
 	const unsigned int raw_page_size = info->writesz + info->metasz;
 
 	sbuf = calloc(4, info->writesz);
@@ -167,7 +169,6 @@ int fcb_flash(oid_t oid, const flashsrv_info_t *info)
 		return -1;
 
 	tbuf = sbuf + 2 * info->writesz;
-
 
 	fcb = (fcb_t *)(sbuf);
 	fcb_init(fcb, info);
@@ -179,27 +180,33 @@ int fcb_flash(oid_t oid, const flashsrv_info_t *info)
 
 	for (i = 0; i < BCB_CNT; i++) {
 		/* TODO: check for badblock? */
-		err = flashmng_writedev(oid, FCB_START + (i * raw_page_size), tbuf, raw_page_size, flashsrv_devctl_writeraw);
-		/* FIXME: do not error-out, write as many FCB as we can */
-		if (err < 0)
-			break;
+		if ((err = flashmng_writedev(oid, FCB_START + (i * pages_per_block * raw_page_size), tbuf, raw_page_size, flashsrv_devctl_writeraw)) < 0) {
+			printf("FCB%u FAIL: writeraw() error, %d\n", i, err);
+			fcb_failed++;
+			continue;
+		}
 
 		/* verify by reading again */
 		memset(sbuf, 0, 2 * info->writesz);
-		err = flashmng_readraw(oid, FCB_START + (i * raw_page_size), sbuf, raw_page_size);
+		if ((err = flashmng_readraw(oid, FCB_START + (i * pages_per_block * raw_page_size), sbuf, raw_page_size)) < 0) {
+			printf("FCB%u FAIL: readraw() error, %d\n", i, err);
+			fcb_failed++;
+			continue;
+		}
 
-		for (unsigned int j = 0; j < raw_page_size; ++j) {
+		for (j = 0; j < raw_page_size; ++j) {
 			if (sbuf[j] != tbuf[j]) {
-				printf("FCB FAIL[%4u]: W:0x%02x != R:0x%02x\n", j, tbuf[j], sbuf[j]);
-				fcb_failed += 1;
+				printf("FCB%u FAIL[%4u]: W:0x%02x != R:0x%02x\n", i, j, tbuf[j], sbuf[j]);
+				fcb_failed++;
 				break;
 			}
 		}
 	}
 
+	free(sbuf);
+
 	if (fcb_failed > 0)
 		printf("WARN: %u out of %u FCB are broken\n", fcb_failed, BCB_CNT);
 
-	free(sbuf);
-	return err;
+	return (fcb_failed == BCB_CNT);
 }
