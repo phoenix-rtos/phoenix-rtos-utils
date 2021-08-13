@@ -361,10 +361,9 @@ static int psd_writeFile(sdp_cmd_t *cmd)
 	for (writesz = 0; !err && (writesz < cmd->datasz); writesz += buffOffset) {
 
 		memset(psd_common.buff, 0xff, psd_common.flash.writesz);
-		res = HID_REPORT_2_SIZE - 1;
 		buffOffset = 0;
 
-		while ((buffOffset < psd_common.flash.writesz) && (res == (HID_REPORT_2_SIZE - 1))) {
+		while ((buffOffset < psd_common.flash.writesz) && (writesz + buffOffset < cmd->datasz)) {
 			if ((res = sdp_recv(1, psd_common.rcvBuff, HID_REPORT_2_SIZE, &outdata)) < 0 ) {
 				err = -eReport2;
 				break;
