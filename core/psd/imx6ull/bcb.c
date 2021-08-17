@@ -63,6 +63,12 @@ int dbbt_block_is_bad(dbbt_t *dbbt, uint32_t block_num)
 }
 
 
+/* FIXME: current DBBT implementation isn't recognized as a valid one by the BootROM */
+/* The following DBBT test should pass (it currently fails): */
+/* 1. Enable DBBT usage in FCB by setting dbbt_start = 0x100 and disable_bbm_search = 1 */
+/* 2. Add FW1 block (8th block) to BBT in flashmng_checkRange() */
+/* 3. Flash FW1 onto the next block (9th block) */
+/* 4. BootROM should detect FW1 block as a badblock and load firmware from the next block */
 int dbbt_flash(oid_t oid, int fd, dbbt_t *dbbt, const flashsrv_info_t *info)
 {
 	unsigned int i, dbbt_failed = 0;
@@ -134,8 +140,8 @@ void fcb_init(fcb_t *fcb, const flashsrv_info_t *info)
 	fcb->fw2_start = 24 * 64;
 	fcb->fw1_size = 0x1;
 	fcb->fw2_size = 0x1;
-	fcb->dbbt_start = 0x100;
-	fcb->bbm_offset = 0x1000; /* FIXME */
+	fcb->dbbt_start = 0x0; /* don't load DBBT, use badblock markers only */
+	fcb->bbm_offset = 0x1000;
 	fcb->bbm_start = 0x0;
 	fcb->bbm_phys_offset = 0x1000;
 	fcb->bch_type = 0x0;
@@ -149,7 +155,7 @@ void fcb_init(fcb_t *fcb, const flashsrv_info_t *info)
 	fcb->busy_timeout = 0xffff;
 	fcb->bbm_disabled = 1; /* disable badblock marker swapping */
 	fcb->bbm_spare_offset = 0;
-	fcb->disable_bbm_search = 1; /* use only DBBT when loading firmware, TODO: maybe bad block markers instead? */
+	fcb->disable_bbm_search = 0; /* use badblock markers when loading firmware */
 
 	fcb->checksum = bcb_checksum(((uint8_t *)fcb) + 4, sizeof(fcb_t) - 4);
 }
