@@ -55,6 +55,9 @@
 #define OTP_RELOAD	0x400
 #define OTP_WR_UNLOCK (0x3e77 << 16)
 
+/* FUSE BITS */
+#define FUSE_WATCHDOG 0x1
+
 
 enum { ocotp_ctrl, ocotp_ctrl_set, ocotp_ctrl_clr, ocotp_ctrl_tog, ocotp_timing, ocotp_data = 0x8, ocotp_read_ctrl = 0xc,
 	ocotp_read_fuse_data = 0x10, ocotp_sw_sticky = 0x14, ocotp_scs = 0x18, ocotp_scs_set, ocotp_scs_clr, ocotp_scs_tog,
@@ -230,7 +233,7 @@ static int psd_erasePartition(uint32_t size, uint8_t format)
 }
 
 
-static int psd_blowFuses(void)
+static int psd_blowFuses(uint32_t fuse)
 {
 	int err = hidOK;
 
@@ -251,9 +254,15 @@ static int psd_blowFuses(void)
 	}
 	while (*(base + ocotp_ctrl) & OTP_BUSY) usleep(10000);
 
-	/* [5] BT_FUSE_SEL = 1 -> boot from fuses
-	 * [21] WDOG_ENABLE -> TODO */
-	*(base + ocotp_ctrl_set) = 0x6 | OTP_WR_UNLOCK;
+	/* [4] BT_FUSE_SEL = 1 -> boot from fuses */
+	uint32_t val = 0x6;
+
+	/* [21] WDOG_ENABLE = 1 -> enable watchdog in Serial Downloader boot mode
+	 * watchdog uses the same addr as the BT_FUSE_SEL */
+	if (fuse & FUSE_WATCHDOG)
+		val |= (1 << 21);
+
+	*(base + ocotp_ctrl_set) = val | OTP_WR_UNLOCK;
 	*(base + ocotp_data) = 0x10;
 
 	if (*(base + ocotp_ctrl) & OTP_ERROR) {
@@ -267,7 +276,7 @@ static int psd_blowFuses(void)
 	 * after the clearing of HW_OCOTP_CTRL_BUSY following the write. */
 	usleep(100000);
 
-	*(base + ocotp_ctrl_clr) = 0x6 | OTP_WR_UNLOCK;
+	*(base + ocotp_ctrl_clr) = val | OTP_WR_UNLOCK;
 	while (*(base + ocotp_ctrl) & OTP_BUSY) usleep(10000);
 	usleep(100000);
 
@@ -325,7 +334,7 @@ static int psd_writeRegister(sdp_cmd_t *cmd)
 	}
 #endif
 	else if (address == BLOW_FUSES) {
-		err = psd_blowFuses();
+		err = psd_blowFuses(data);
 	}
 	else if (address == CLOSE_PSD) {
 		psd_common.run = 0;
