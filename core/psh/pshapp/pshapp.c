@@ -305,7 +305,7 @@ static int psh_completepath(char *dir, char *base, char ***files)
 	size_t i, size = 32, dlen = strlen(dir), blen = strlen(base);
 	int nfiles = 0, err = EOK;
 	char *path, **rfiles;
-	struct stat stat;
+	struct stat st;
 	DIR *stream;
 
 	*files = NULL;
@@ -339,8 +339,8 @@ static int psh_completepath(char *dir, char *base, char ***files)
 			memcpy(path, dir, dlen);
 			strcpy(path + dlen, stream->dirent->d_name);
 
-			if ((err = lstat(path, &stat)) < 0) {
-				fprintf(stderr, "\r\npsh: can't stat file %s\r\n", path);
+			if ((err = stat(path, &st)) < 0) {
+				fprintf(stderr, "\r\npsh: can't stat %s\r\n", path);
 				free(path);
 				break;
 			}
@@ -362,7 +362,7 @@ static int psh_completepath(char *dir, char *base, char ***files)
 				break;
 			}
 			memcpy((*files)[nfiles], stream->dirent->d_name, stream->dirent->d_namlen);
-			(*files)[nfiles][stream->dirent->d_namlen] = (S_ISDIR(stat.st_mode)) ? '/' : ' ';
+			(*files)[nfiles][stream->dirent->d_namlen] = (S_ISDIR(st.st_mode)) ? '/' : ' ';
 			(*files)[nfiles][stream->dirent->d_namlen + 1] = '\0';
 			nfiles++;
 		}
