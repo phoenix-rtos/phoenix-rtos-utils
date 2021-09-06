@@ -1000,13 +1000,12 @@ static int psh_run(int exitable)
 	signal(SIGCHLD, SIG_IGN);
 
 	/* Check if this psh session is already in interactive mode */
-	pgrp = getpid();
-	if (pgrp == tcgetpgrp(STDIN_FILENO)) {
-		fprintf(stderr, "psh: this psh process is already in interactive mode\n");
+	if (pshapp_common.cmdhist != NULL) {
 		return -EPERM;
 	}
 
 	/* Put ourselves in our own process group */
+	pgrp = getpid();
 	if ((err = setpgid(pgrp, pgrp)) < 0) {
 		fprintf(stderr, "psh: failed to put shell in its own process group\n");
 		return err;
@@ -1030,7 +1029,7 @@ static int psh_run(int exitable)
 	}
 	pshapp_common.cmdhist = cmdhist;
 
-	for (;;) {
+	while (pgrp == tcgetpgrp(STDIN_FILENO)) {
 		write(STDOUT_FILENO, "\r\033[0J", 5);
 		write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
 
@@ -1083,13 +1082,12 @@ static int psh_run(int exitable)
 			app = psh_findapp("/");
 
 		if (app != NULL)
-			app->run(argc, argv);
+			err = app->run(argc, argv);
 		else
 			printf("Unknown command!\n");
-			
+
 		free(argv);
 		fflush(NULL);
-
 	}
 
 	/* Free command history */
@@ -1104,6 +1102,7 @@ static int psh_run(int exitable)
 
 int psh_pshappexit(int argc, char **argv)
 {
+	tcsetpgrp(STDIN_FILENO, -1);
 	return 0;
 }
 
@@ -1144,10 +1143,10 @@ int psh_pshapp(int argc, char **argv)
 	}
 	/* Run shell interactively */
 	else {
-		psh_run(1);
+		return psh_run(1);
 	}
 
-	return EOK;
+	return -ENOSYS;
 }
 
 

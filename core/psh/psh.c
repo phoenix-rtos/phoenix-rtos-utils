@@ -79,7 +79,8 @@ int main(int argc, char **argv)
 	char *base;
 	oid_t oid;
 	const psh_appentry_t *app;
-	pid_t tcpid;
+	int err = EOK;
+	unsigned int ispshlogin;
 
 	keepidle(1);
 
@@ -92,26 +93,27 @@ int main(int argc, char **argv)
 		usleep(50000);
 
 	/* Check if its first shell */
-	tcpid = tcgetpgrp(STDIN_FILENO);
+	psh_common.tcpid = tcgetpgrp(STDIN_FILENO);
 	base = basename(argv[0]);
+	ispshlogin = (strcmp(base, "pshlogin") == 0);
 	do {
 		/* login prompt */
-		if (strcmp(base, "pshlogin") == 0 && (app = psh_findapp("auth")) != NULL)
+		if (ispshlogin && (app = psh_findapp("auth")) != NULL)
 			while (app->run(0, NULL) != 0)
 				;
 
 		/* Run app */
 		if ((app = psh_findapp(base)) != NULL) {
-			app->run(argc, argv);
+			err = app->run(argc, argv);
 		}
 		else {
 			fprintf(stderr, "psh: %s: unknown command\n", argv[0]);
 			break;
 		}
 
-	} while (tcpid == -1 && strcmp(base, "pshlogin") == 0);
+	} while (psh_common.tcpid == -1 && ispshlogin);
 
 	keepidle(0);
 
-	return EOK;
+	return err == EOK ? 0 : 1;
 }

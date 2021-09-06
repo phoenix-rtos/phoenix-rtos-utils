@@ -47,7 +47,7 @@ int psh_reboot(int argc, char **argv)
 
 	if (reboot(magic) < 0) {
 		fprintf(stderr, "reboot: failed to restart the machine\n");
-		return -1;
+		return -EPERM;
 	}
 
 	return EOK;
