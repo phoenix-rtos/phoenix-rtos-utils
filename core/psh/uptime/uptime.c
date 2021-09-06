@@ -30,7 +30,7 @@ int psh_uptime(int argc, char **argv)
 	int rv = clock_gettime(CLOCK_MONOTONIC_RAW, &tp);
 	if (rv < 0) {
 		fprintf(stderr, "uptime: failed to get time\n");
-		return -1;
+		return -EINVAL;
 	}
 	printf("%jd\n", (intmax_t)tp.tv_sec);
 	return EOK;
