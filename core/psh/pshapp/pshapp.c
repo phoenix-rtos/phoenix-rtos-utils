@@ -72,7 +72,6 @@ typedef struct {
 
 
 typedef struct {
-	int isrunpsh;
 	psh_hist_t *cmdhist;
 } pshapp_common_t;
 
@@ -1000,8 +999,14 @@ static int psh_run(int exitable)
 	signal(SIGTTOU, SIG_IGN);
 	signal(SIGCHLD, SIG_IGN);
 
-	/* Put ourselves in our own process group */
+	/* Check if this psh session is already in interactive mode */
 	pgrp = getpid();
+	if (pgrp == tcgetpgrp(STDIN_FILENO)) {
+		fprintf(stderr, "psh: this psh process is already in interactive mode\n");
+		return -EPERM;
+	}
+
+	/* Put ourselves in our own process group */
 	if ((err = setpgid(pgrp, pgrp)) < 0) {
 		fprintf(stderr, "psh: failed to put shell in its own process group\n");
 		return err;
@@ -1085,8 +1090,6 @@ static int psh_run(int exitable)
 		free(argv);
 		fflush(NULL);
 
-		if (pshapp_common.isrunpsh == 0)
-			break;
 	}
 
 	/* Free command history */
@@ -1101,8 +1104,6 @@ static int psh_run(int exitable)
 
 int psh_pshappexit(int argc, char **argv)
 {
-	if (pshapp_common.isrunpsh == 1)
-		pshapp_common.isrunpsh = 0;
 	return 0;
 }
 
@@ -1143,11 +1144,7 @@ int psh_pshapp(int argc, char **argv)
 	}
 	/* Run shell interactively */
 	else {
-		if (pshapp_common.isrunpsh == 0) {
-			pshapp_common.isrunpsh = 1;
-			psh_run(1);
-			pshapp_common.isrunpsh = 0;
-		}
+		psh_run(1);
 	}
 
 	return EOK;
