@@ -13,6 +13,7 @@
 
 #include <imx6ull-flashsrv.h>
 
+#include <pthread.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <errno.h>
@@ -26,6 +27,7 @@
 #include <sys/file.h>
 #include <sys/mman.h>
 #include <sys/reboot.h>
+#include <sys/platform.h>
 
 #include "../common/sdp.h"
 
@@ -405,6 +407,18 @@ static int psd_writeFile(sdp_cmd_t *cmd)
 	return err;
 }
 
+static void *wdg_kicker_thr(void *args)
+{
+	unsigned timeout = (unsigned)args;
+
+	while (1) {
+		wdgreload();
+		usleep(timeout * 1000L);
+	}
+
+	return args;
+}
+
 
 static void usage(char *progname)
 {
@@ -429,6 +443,14 @@ int main(int argc, char **argv)
 		while (lookup(argv[i], NULL, &psd_common.files[i - 1].oid) < 0)
 			usleep(200);
 	}
+
+	/* Start watchdog kicker */
+	pthread_attr_t wdg_attr;
+	pthread_t wdg_thr;
+	pthread_attr_init(&wdg_attr);
+	unsigned wdg_timeout = 32000;
+	if ((err = pthread_create(&wdg_thr, &wdg_attr, wdg_kicker_thr, (void *)wdg_timeout)) < 0)
+		return -1;
 
 	printf("PSD: Started psd.\n");
 
