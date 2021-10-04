@@ -178,7 +178,7 @@ static int psd_changePartition(uint8_t number)
 			return -eReport1;
 	}
 
-	printf("PSD: Changing current partition to %s (offs=%llu size=%llu).\n", psd_common.f->name, psd_common.partOffs, psd_common.partsz);
+	printf("PSD: Changing current partition to %s (offs=%lld size=%lld).\n", psd_common.f->name, psd_common.partOffs, psd_common.partsz);
 
 	return hidOK;
 }
@@ -197,7 +197,7 @@ static int psd_controlBlock(uint32_t block)
 		if ((err = flashmng_checkRange(psd_common.f->oid, 0, psd_common.flash.size, &psd_common.dbbt)) < 0)
 			return err;
 
-		/* FIXME: lseek on whole chip fails (2GB does not fit in int), for now HACK: change to first partition for flashing */
+		/* Change to first partition for flashing */
 		psd_changePartition(1);
 		printf("PSD: Flash dbbt.\n");
 		if (psd_common.dbbt == NULL)

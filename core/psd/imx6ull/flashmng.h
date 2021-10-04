@@ -30,7 +30,7 @@ int flashmng_writedev(oid_t oid, uint32_t addr, void *data, int size, int type);
 int flashmng_eraseBlocks(oid_t oid, unsigned int start, unsigned int size);
 
 
-int flashmng_getAttr(int type, offs_t* val, oid_t oid);
+int flashmng_getAttr(int type, long long *val, oid_t oid);
 
 
 int flashmng_checkRange(oid_t oid, unsigned int start, unsigned int size, dbbt_t **dbbt);
