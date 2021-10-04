@@ -35,7 +35,7 @@ static int psh_sysexec_argmatch(const char *cmd, size_t cmdlen, int argc, const 
 {
 	int ii;
 	size_t len;
-	const char *currc = cmd, *nextc, *cmdend = cmd + cmdlen - 1;
+	const char *currc = cmd, *cmdend = cmd + cmdlen - 1, *nextc = NULL;
 
 	for (ii = 0; ii < argc; ii++) {
 

@@ -127,7 +127,7 @@ int flashmng_eraseBlocks(oid_t oid, unsigned int start, unsigned int size)
 }
 
 
-int flashmng_getAttr(int type, offs_t* val, oid_t oid)
+int flashmng_getAttr(int type, long long *val, oid_t oid)
 {
 	msg_t msg;
 
@@ -140,10 +140,10 @@ int flashmng_getAttr(int type, offs_t* val, oid_t oid)
 	msg.i.attr.type = type;
 	msg.i.attr.oid = oid;
 
-	if (msgSend(oid.port, &msg) < 0)
+	if ((msgSend(oid.port, &msg) < 0) || (msg.o.attr.err < 0))
 		return -1;
 
-	*val = (unsigned int)msg.o.attr.val;
+	*val = msg.o.attr.val;
 
 	return 0;
 }
