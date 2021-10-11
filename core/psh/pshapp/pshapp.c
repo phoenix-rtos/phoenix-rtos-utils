@@ -2,7 +2,7 @@
  * Phoenix-RTOS
  *
  * Phoenix-RTOS SHell
- * 
+ *
  * pshapp - interactive Phoenix SHell
  *
  * Copyright 2017, 2018, 2020, 2021 Phoenix Systems
@@ -43,19 +43,15 @@
 #define HISTSZ       512           /* Command history size */
 
 
-/* Special key codes */
-#define UP           "^[[A"        /* Up */
-#define DOWN         "^[[B"        /* Down */
-#define RIGHT        "^[[C"        /* Right */
-#define LEFT         "^[[D"        /* Left */
-#define DELETE       "^[[3~"       /* Delete */
-
-
 /* Misc definitions */
 #define BP_OFFS      0             /* Offset of 0 exponent entry in binary prefix table */
 #define BP_EXP_OFFS  10            /* Offset between consecutive entries exponents in binary prefix table */
 #define SI_OFFS      8             /* Offset of 0 exponent entry in SI prefix table */
 #define SI_EXP_OFFS  3             /* Offset between consecutive entries exponents in SI prefix table */
+
+
+/* Special key codes */
+enum { kUp = 1, kDown, kRight, kLeft, kDelete, kHome, kEnd };
 
 
 typedef struct {
@@ -476,12 +472,55 @@ static int psh_cmpname(const void *n1, const void *n2)
 }
 
 
+static int psh_keyCode(const char *buff, int *pEsc)
+{
+	int n, esc = *pEsc;
+	static const struct {
+		const char *escSeq;
+		int keyCode;
+	} keys[] = {
+		{ "A", kUp },
+		{ "B", kDown },
+		{ "C", kRight },
+		{ "D", kLeft },
+		{ "F", kEnd },
+		{ "H", kHome },
+		{ "1~", kHome },
+		{ "3~", kDelete },
+		{ "4~", kEnd },
+		{ "7~", kHome },
+		{ "8~", kEnd }
+	};
+
+	if (esc < 4)
+		return -EAGAIN;
+
+	if (buff[0] == '^' && buff[1] == '[' && (buff[2] == '[' || buff[2] == 'O')) {
+		buff += 3;
+		esc -= 3;
+
+		for (n = 0; n < sizeof(keys) / sizeof(keys[0]); ++n) {
+			if (strncmp(buff, keys[n].escSeq, esc) != 0)
+				continue;
+
+			if (esc != strlen(keys[n].escSeq))
+				return -EAGAIN;
+
+			*pEsc = 0;
+			return keys[n].keyCode;
+		}
+	}
+
+	return -EINVAL;
+}
+
+
 extern void cfmakeraw(struct termios *termios);
 
 
 static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 {
-	int i, nfiles, err = EOK, esc = 0, n = 0, m = 0, ln = 0, hp = cmdhist->he, cmdsz = 128;
+	int i, k, nfiles, err = EOK, esc = 0, n = 0, m = 0, ln = 0, hp = cmdhist->he, cmdsz = 128;
 	char c, *path, *fpath, *dir, *base, **files, buff[8];
 	struct termios raw = *orig;
 
@@ -689,90 +728,94 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 
 			buff[esc++] = c;
 
-			if (!strncmp(buff, UP, esc)) {
-				if (esc == sizeof(UP) - 1) {
-					if (hp != cmdhist->hb) {
-						if (hp == cmdhist->he)
-							ln = n + m;
-						psh_movecursor(n + sizeof(PROMPT) - 1, -(n + sizeof(PROMPT) - 1));
-						write(STDOUT_FILENO, "\r\033[0J", 5);
-						write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
-						psh_printhistent(cmdhist->entries + (hp = (hp) ? hp - 1 : HISTSZ - 1));
-						n = cmdhist->entries[hp].n;
-						m = 0;
-					}
-					esc = 0;
-				}
-			}
-			else if (!strncmp(buff, DOWN, esc)) {
-				if (esc == sizeof(DOWN) - 1) {
+			if ((k = psh_keyCode(buff, &esc)) < 0) {
+				if (k == -EINVAL) {
 					if (hp != cmdhist->he) {
-						psh_movecursor(n + sizeof(PROMPT) - 1, -(n + sizeof(PROMPT) - 1));
-						write(STDOUT_FILENO, "\r\033[0J", 5);
-						write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
-						if ((hp = (hp + 1) % HISTSZ) == cmdhist->he) {
-							n = ln;
-							write(STDOUT_FILENO, *cmd, n);
-						}
-						else {
-							n = cmdhist->entries[hp].n;
-							psh_printhistent(cmdhist->entries + hp);
-						}
-						m = 0;
+						if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
+							break;
+						hp = cmdhist->he;
 					}
-					esc = 0;
-				}
-			}
-			else if (!strncmp(buff, RIGHT, esc)) {
-				if (esc == sizeof(RIGHT) - 1) {
-					if (m) {
-						psh_movecursor(n + sizeof(PROMPT) - 1, 1);
-						n++;
-						m--;
-					}
-					esc = 0;
-				}
-			}
-			else if (!strncmp(buff, LEFT, esc)) {
-				if (esc == sizeof(LEFT) - 1) {
-					if (n) {
-						psh_movecursor(n + sizeof(PROMPT) - 1, -1);
-						n--;
-						m++;
-					}
-					esc = 0;
-				}
-			}
-			else if (!strncmp(buff, DELETE, esc)) {
-				if (esc == sizeof(DELETE) - 1) {
-					if (m) {
-						if (hp != cmdhist->he) {
-							if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
-								break;
-							hp = cmdhist->he;
-						}
-						memmove(*cmd + n, *cmd + n + 1, --m);
-						write(STDOUT_FILENO, "\033[0J", 4);
-						write(STDOUT_FILENO, *cmd + n, m);
-						psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
-					}
-					esc = 0;
-				}
-			}
-			else {
-				if (hp != cmdhist->he) {
-					if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
+					if ((n + m + esc + 1 > cmdsz) && ((err = psh_extendcmd(cmd, &cmdsz, 2 * (n + m + esc) + 1)) < 0))
 						break;
-					hp = cmdhist->he;
+					memmove(*cmd + n + esc, *cmd + n, m);
+					memcpy(*cmd + n, buff, esc);
+					write(STDOUT_FILENO, *cmd + n, esc + m);
+					n += esc;
+					psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
+					esc = 0;
 				}
-				if ((n + m + esc + 1 > cmdsz) && ((err = psh_extendcmd(cmd, &cmdsz, 2 * (n + m + esc) + 1)) < 0))
-					break;
-				memmove(*cmd + n + esc, *cmd + n, m);
-				memcpy(*cmd + n, buff, esc);
-				write(STDOUT_FILENO, *cmd + n, esc + m);
-				n += esc;
-				psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
-				esc = 0;
+
+				/* EINVAL, EAGAIN */
+				continue;
+			}
+			else if (k == kUp) {
+				if (hp != cmdhist->hb) {
+					if (hp == cmdhist->he)
+						ln = n + m;
+					psh_movecursor(n + sizeof(PROMPT) - 1, -(n + sizeof(PROMPT) - 1));
+					write(STDOUT_FILENO, "\r\033[0J", 5);
+					write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
+					psh_printhistent(cmdhist->entries + (hp = (hp) ? hp - 1 : HISTSZ - 1));
+					n = cmdhist->entries[hp].n;
+					m = 0;
+				}
+			}
+			else if (k == kDown) {
+				if (hp != cmdhist->he) {
+					psh_movecursor(n + sizeof(PROMPT) - 1, -(n + sizeof(PROMPT) - 1));
+					write(STDOUT_FILENO, "\r\033[0J", 5);
+					write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
+					if ((hp = (hp + 1) % HISTSZ) == cmdhist->he) {
+						n = ln;
+						write(STDOUT_FILENO, *cmd, n);
+					}
+					else {
+						n = cmdhist->entries[hp].n;
+						psh_printhistent(cmdhist->entries + hp);
+					}
+					m = 0;
+				}
+			}
+			else if (k == kRight) {
+				if (m) {
+					psh_movecursor(n + sizeof(PROMPT) - 1, 1);
+					n++;
+					m--;
+				}
+			}
+			else if (k == kLeft) {
+				if (n) {
+					psh_movecursor(n + sizeof(PROMPT) - 1, -1);
+					n--;
+					m++;
+				}
+			}
+			else if (k == kEnd) {
+				if (m) {
+					psh_movecursor(n + sizeof(PROMPT) - 1, m);
+					n += m;
+					m = 0;
+				}
+			}
+			else if (k == kHome) {
+				if (n) {
+					psh_movecursor(n + sizeof(PROMPT) - 1, -n);
+					m += n;
+					n = 0;
+				}
+			}
+			else if (k == kDelete) {
+				if (m) {
+					if (hp != cmdhist->he) {
+						if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
+							break;
+						hp = cmdhist->he;
+					}
+					memmove(*cmd + n, *cmd + n + 1, --m);
+					write(STDOUT_FILENO, "\033[0J", 4);
+					write(STDOUT_FILENO, *cmd + n, m);
+					psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
+				}
 			}
 		}
 	}
@@ -1156,7 +1199,7 @@ void __attribute__((constructor)) pshapp_registerapp(void)
 	static psh_appentry_t app_pshappexit = { .name = "exit", .run = psh_pshappexit, .info = psh_pshappexitinfo };
 	static psh_appentry_t app_pshlogin = { .name = "pshlogin", .run = psh_pshapp, .info = NULL };
 	static psh_appentry_t app_pshhistory = { .name = "history", .run = psh_history, .info = psh_historyinfo };
-	
+
 	psh_registerapp(&app_pshapp);
 	psh_registerapp(&app_pshappexit);
 	psh_registerapp(&app_pshlogin);
