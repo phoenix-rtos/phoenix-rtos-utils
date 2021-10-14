@@ -17,6 +17,7 @@
 #include <sys/rb.h>
 #include <sys/threads.h>
 
+#define ARG_SEPARATOR '@'
 
 typedef struct {
 	rbnode_t node;
@@ -49,7 +50,8 @@ static int ptree_compare(rbnode_t *n1, rbnode_t *n2)
 static void usage(const char *progname)
 {
 	printf("Phoenix-RTOS Health Monitor - process respawner\n");
-	printf("Usage: %s progname1[;arg1;arg2;...] [progname2...]\n", progname);
+	printf("Usage: %s progname1[" "%c" "arg1" "%c" "arg2" "%c" "...] [progname2...]\n", progname,
+		ARG_SEPARATOR, ARG_SEPARATOR, ARG_SEPARATOR);
 }
 
 
@@ -70,12 +72,11 @@ static int spawn(proc_t *p)
 static int argPrepare(const char *path, proc_t *p)
 {
 	int i, argc = 0;
-	const char *t;
-	char **argv = NULL;
-	char *argstr;
+	const char *t, separator[2] = { ARG_SEPARATOR, '\0' };
+	char **argv = NULL, *argstr;
 
 	for (t = path; *t != '\0'; ++t) {
-		if (*t == ';')
+		if (*t == ARG_SEPARATOR)
 			++argc;
 	}
 
@@ -92,7 +93,7 @@ static int argPrepare(const char *path, proc_t *p)
 	}
 
 	for (i = 0; i < argc; ++i) {
-		argv[i] = strtok(argstr, ";");
+		argv[i] = strtok(argstr, separator);
 		if (argv[i] == NULL) {
 			free(argstr);
 			free(argv);
