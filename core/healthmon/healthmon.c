@@ -71,7 +71,8 @@ static int spawn(proc_t *p)
 static int argPrepare(const char *path, proc_t *p)
 {
 	int i, argc = 0;
-	const char *t, separator[2] = { ARG_SEPARATOR, '\0' };
+	const char *t;
+	static const char separator[2] = { ARG_SEPARATOR, '\0' };
 	char **argv = NULL, *argstr, *next;
 
 	for (t = path; *t != '\0'; ++t) {
@@ -92,10 +93,10 @@ static int argPrepare(const char *path, proc_t *p)
 	argv[0] = argstr;
 	next = strtok(argstr, separator);
 	if (next != NULL) {
-		for (i = 0; i < argc; ++i) {
+		for (i = 1; i <= argc; ++i) {
 			next = strtok(next, separator);
-			argv[i + 1] = next;
-			if (argv[i + 1] == NULL) {
+			argv[i] = next;
+			if (argv[i] == NULL) {
 				free(argstr);
 				free(argv);
 				return -EINVAL;
