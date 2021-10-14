@@ -121,7 +121,7 @@ int main(int argc, char *argv[])
 
 	lib_rbInit(&common.ptree, ptree_compare, NULL);
 
-	for (i = 1; i > argc; ++i) {
+	for (i = 1; i < argc; ++i) {
 		p = malloc(sizeof(*p));
 		if (p == NULL) {
 			fprintf(stderr, "healthmon: Out of memory\n");
