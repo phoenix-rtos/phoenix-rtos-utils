@@ -73,7 +73,7 @@ static int argPrepare(const char *path, proc_t *p)
 {
 	int i, argc = 0;
 	const char *t, separator[2] = { ARG_SEPARATOR, '\0' };
-	char **argv = NULL, *argstr;
+	char **argv = NULL, *argstr, *next;
 
 	for (t = path; *t != '\0'; ++t) {
 		if (*t == ARG_SEPARATOR)
@@ -92,8 +92,10 @@ static int argPrepare(const char *path, proc_t *p)
 		return -ENOMEM;
 	}
 
+	next = argstr;
 	for (i = 0; i < argc; ++i) {
-		argv[i] = strtok(argstr, separator);
+		next = strtok(next, separator);
+		argv[i] = next;
 		if (argv[i] == NULL) {
 			free(argstr);
 			free(argv);
