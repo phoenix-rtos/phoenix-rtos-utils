@@ -21,7 +21,6 @@
 
 typedef struct {
 	rbnode_t node;
-	char *name;
 	char **argv;
 	pid_t pid;
 } proc_t;
@@ -59,7 +58,7 @@ static int spawn(proc_t *p)
 {
 	pid_t pid;
 
-	pid = spawnSyspage(NULL, p->name, p->argv);
+	pid = spawnSyspage(NULL, p->argv[0], p->argv);
 	if (pid < 0)
 		return -ENOEXEC;
 
@@ -84,23 +83,23 @@ static int argPrepare(const char *path, proc_t *p)
 	if (argstr == NULL)
 		return -ENOMEM;
 
-	p->name = argstr;
-
-	argv = calloc(argc + 1, sizeof(char *));
+	argv = calloc(argc + 2, sizeof(char *));
 	if (argv == NULL) {
 		free(argstr);
 		return -ENOMEM;
 	}
 
-	next = argstr;
-	for (i = 0; i < argc; ++i) {
-		next = strtok(next, separator);
-		argv[i] = next;
-		if (argv[i] == NULL) {
-			free(argstr);
-			free(argv);
-			p->name = NULL;
-			return -EINVAL;
+	argv[0] = argstr;
+	next = strtok(argstr, separator);
+	if (next != NULL) {
+		for (i = 0; i < argc; ++i) {
+			next = strtok(next, separator);
+			argv[i + 1] = next;
+			if (argv[i + 1] == NULL) {
+				free(argstr);
+				free(argv);
+				return -EINVAL;
+			}
 		}
 	}
 
@@ -144,15 +143,15 @@ int main(int argc, char *argv[])
 		}
 
 		if (spawn(p) < 0) {
-			fprintf(stderr, "healthmon: Failed to spawn %s\n", p->name);
-			free(p->name);
+			fprintf(stderr, "healthmon: Failed to spawn %s\n", p->argv[0]);
+			free(p->argv[0]);
 			free(p->argv);
 			free(p);
 			continue;
 		}
 
 		lib_rbInsert(&common.ptree, &p->node);
-		printf("healthmon: Spawned %s successfully\n", p->name);
+		printf("healthmon: Spawned %s successfully\n", p->argv[0]);
 		++progs;
 	}
 
