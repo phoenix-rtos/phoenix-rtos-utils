@@ -110,7 +110,7 @@ static int argPrepare(const char *path, proc_t *p)
 
 int main(int argc, char *argv[])
 {
-	int i, err, status;
+	int i, err, status, progs = 0;
 	proc_t *p, t;
 	pid_t pid;
 
@@ -151,9 +151,10 @@ int main(int argc, char *argv[])
 
 		lib_rbInsert(&common.ptree, &p->node);
 		printf("healthmon: Spawned %s successfully\n", p->name);
+		++progs;
 	}
 
-	while (1) {
+	while (progs != 0) {
 		pid = wait(&status);
 		t.pid = pid;
 		p = lib_treeof(proc_t, node, lib_rbFind(&common.ptree, &t.node));
@@ -163,6 +164,8 @@ int main(int argc, char *argv[])
 		}
 		spawn(p);
 	}
+
+	fprintf(stderr, "healthmon: No process to guard, exiting\n");
 
 	return 0;
 }
