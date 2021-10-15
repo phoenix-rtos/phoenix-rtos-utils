@@ -13,6 +13,7 @@
 
 #include <imx6ull-flashsrv.h>
 
+#include <pthread.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <errno.h>
@@ -26,6 +27,7 @@
 #include <sys/file.h>
 #include <sys/mman.h>
 #include <sys/reboot.h>
+#include <sys/platform.h>
 
 #include "../common/sdp.h"
 
@@ -52,6 +54,9 @@
 #define OTP_ERROR	0x200
 #define OTP_RELOAD	0x400
 #define OTP_WR_UNLOCK (0x3e77 << 16)
+
+/* FUSE BITS */
+#define FUSE_WATCHDOG 0x1
 
 
 enum { ocotp_ctrl, ocotp_ctrl_set, ocotp_ctrl_clr, ocotp_ctrl_tog, ocotp_timing, ocotp_data = 0x8, ocotp_read_ctrl = 0xc,
@@ -173,7 +178,7 @@ static int psd_changePartition(uint8_t number)
 			return -eReport1;
 	}
 
-	printf("PSD: Changing current partition to %s (offs=%llu size=%llu).\n", psd_common.f->name, psd_common.partOffs, psd_common.partsz);
+	printf("PSD: Changing current partition to %s (offs=%lld size=%lld).\n", psd_common.f->name, psd_common.partOffs, psd_common.partsz);
 
 	return hidOK;
 }
@@ -192,7 +197,7 @@ static int psd_controlBlock(uint32_t block)
 		if ((err = flashmng_checkRange(psd_common.f->oid, 0, psd_common.flash.size, &psd_common.dbbt)) < 0)
 			return err;
 
-		/* FIXME: lseek on whole chip fails (2GB does not fit in int), for now HACK: change to first partition for flashing */
+		/* Change to first partition for flashing */
 		psd_changePartition(1);
 		printf("PSD: Flash dbbt.\n");
 		if (psd_common.dbbt == NULL)
@@ -228,7 +233,7 @@ static int psd_erasePartition(uint32_t size, uint8_t format)
 }
 
 
-static int psd_blowFuses(void)
+static int psd_blowFuses(uint32_t fuse)
 {
 	int err = hidOK;
 
@@ -249,9 +254,15 @@ static int psd_blowFuses(void)
 	}
 	while (*(base + ocotp_ctrl) & OTP_BUSY) usleep(10000);
 
-	/* [5] BT_FUSE_SEL = 1 -> boot from fuses
-	 * [21] WDOG_ENABLE -> TODO */
-	*(base + ocotp_ctrl_set) = 0x6 | OTP_WR_UNLOCK;
+	/* [4] BT_FUSE_SEL = 1 -> boot from fuses */
+	uint32_t val = 0x6;
+
+	/* [21] WDOG_ENABLE = 1 -> enable watchdog in Serial Downloader boot mode
+	 * watchdog uses the same addr as the BT_FUSE_SEL */
+	if (fuse & FUSE_WATCHDOG)
+		val |= (1 << 21);
+
+	*(base + ocotp_ctrl_set) = val | OTP_WR_UNLOCK;
 	*(base + ocotp_data) = 0x10;
 
 	if (*(base + ocotp_ctrl) & OTP_ERROR) {
@@ -265,7 +276,7 @@ static int psd_blowFuses(void)
 	 * after the clearing of HW_OCOTP_CTRL_BUSY following the write. */
 	usleep(100000);
 
-	*(base + ocotp_ctrl_clr) = 0x6 | OTP_WR_UNLOCK;
+	*(base + ocotp_ctrl_clr) = val | OTP_WR_UNLOCK;
 	while (*(base + ocotp_ctrl) & OTP_BUSY) usleep(10000);
 	usleep(100000);
 
@@ -323,7 +334,7 @@ static int psd_writeRegister(sdp_cmd_t *cmd)
 	}
 #endif
 	else if (address == BLOW_FUSES) {
-		err = psd_blowFuses();
+		err = psd_blowFuses(data);
 	}
 	else if (address == CLOSE_PSD) {
 		psd_common.run = 0;
@@ -405,6 +416,18 @@ static int psd_writeFile(sdp_cmd_t *cmd)
 	return err;
 }
 
+static void *wdg_kicker_thr(void *args)
+{
+	unsigned timeout = (unsigned)args;
+
+	while (1) {
+		wdgreload();
+		usleep(timeout * 1000L);
+	}
+
+	return args;
+}
+
 
 static void usage(char *progname)
 {
@@ -429,6 +452,14 @@ int main(int argc, char **argv)
 		while (lookup(argv[i], NULL, &psd_common.files[i - 1].oid) < 0)
 			usleep(200);
 	}
+
+	/* Start watchdog kicker */
+	pthread_attr_t wdg_attr;
+	pthread_t wdg_thr;
+	pthread_attr_init(&wdg_attr);
+	unsigned wdg_timeout = 32000;
+	if ((err = pthread_create(&wdg_thr, &wdg_attr, wdg_kicker_thr, (void *)wdg_timeout)) < 0)
+		return -1;
 
 	printf("PSD: Started psd.\n");
 

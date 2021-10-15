@@ -28,6 +28,7 @@ typedef struct {
 	volatile unsigned char sigint;  /* Received SIGINT */
 	volatile unsigned char sigquit; /* Received SIGQUIT */
 	volatile unsigned char sigstop; /* Received SIGTSTP */
+	pid_t tcpid;
 } psh_common_t;
 
 

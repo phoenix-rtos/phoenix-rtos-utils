@@ -57,11 +57,12 @@ int psh_bind(int argc, char **argv)
 	msg.i.data = &soid;
 	msg.i.size = sizeof(oid_t);
 
-	if ((err = msgSend(doid.port, &msg)) < 0)
+	if (((err = msgSend(doid.port, &msg)) < 0) || ((err = msg.o.attr.err) < 0))
 		return err;
 
-	return msg.o.attr.val;
+	return EOK;
 }
+
 
 void __attribute__((constructor)) bind_registerapp(void)
 {

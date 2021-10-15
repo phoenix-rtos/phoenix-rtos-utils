@@ -111,24 +111,24 @@ static int psh_auth(int argc, char **argv)
 	if (isatty(STDOUT_FILENO) == 0) {
 		sleep(1);
 		fprintf(stderr, "psh: unable to login, not a tty\n");
-		return ENOTTY;
+		return -ENOTTY;
 	}
 
 	/* Get login from user */
 	if (psh_authcredentget(username, 0, maxlen) == -EINTR)
-		return EINTR;
+		return -EINTR;
 	userdata = getpwnam(username);
 
 	/* Get password from user */
 	if (psh_authcredentget(passwd, 1, maxlen) == -EINTR)
-		return EINTR;
+		return -EINTR;
 
 	/* validate against /etc/passwd */
 	if (userdata != NULL) {
 		shadow = crypt(passwd, userdata->pw_passwd);
 		if (shadow != NULL && strcmp(userdata->pw_passwd, shadow) == 0) {
 			memset(passwd, '\0', maxlen);
-			return 0;
+			return EOK;
 		}
 	}
 
@@ -136,10 +136,10 @@ static int psh_auth(int argc, char **argv)
 	shadow = crypt(passwd, PSH_DEFUSRPWDHASH);
 	memset(passwd, '\0', maxlen);
 	if (shadow != NULL && strcmp(username, "defuser") == 0 && strcmp(shadow, PSH_DEFUSRPWDHASH) == 0)
-		return 0;
+		return EOK;
 
 	sleep(2);
-	return 1;
+	return -EACCES;
 }
 
 
