@@ -38,7 +38,6 @@ static int ptree_compare(rbnode_t *n1, rbnode_t *n2)
 
 	if (p1->pid < p2->pid)
 		return -1;
-
 	else if (p1->pid > p2->pid)
 		return 1;
 
@@ -60,7 +59,7 @@ static int spawn(proc_t *p)
 
 	pid = spawnSyspage(NULL, p->argv[0], p->argv);
 	if (pid < 0)
-		return -ENOEXEC;
+		return pid;
 
 	p->pid = pid;
 
@@ -114,7 +113,7 @@ int main(int argc, char *argv[])
 
 	if (argc <= 1) {
 		usage(argv[0]);
-		return 1;
+		return EXIT_FAILURE;
 	}
 
 	lib_rbInit(&common.ptree, ptree_compare, NULL);
@@ -123,24 +122,25 @@ int main(int argc, char *argv[])
 		p = malloc(sizeof(*p));
 		if (p == NULL) {
 			fprintf(stderr, "healthmon: Out of memory\n");
-			return 1;
+			return EXIT_FAILURE;
 		}
 
 		err = argPrepare(argv[i], p);
 		if (err < 0) {
+			free(p);
 			if (err == -ENOMEM) {
 				fprintf(stderr, "healthmon: Out of memory\n");
-				return 1;
+				return EXIT_FAILURE;
 			}
 			else {
 				fprintf(stderr, "healthmon: Failed to parse %s\n", argv[i]);
-				free(p);
 				continue;
 			}
 		}
 
-		if (spawn(p) < 0) {
-			fprintf(stderr, "healthmon: Failed to spawn %s\n", p->argv[0]);
+		pid = spawn(p);
+		if (pid < 0) {
+			fprintf(stderr, "healthmon: Failed to spawn %s (%s)\n", p->argv[0], strerror(-pid));
 			free(p->argv[0]);
 			free(p->argv);
 			free(p);
@@ -160,10 +160,12 @@ int main(int argc, char *argv[])
 			fprintf(stderr, "healthmon: Child died, but it's not mine. Ignoring.\n");
 			continue;
 		}
-		spawn(p);
+		pid = spawn(p);
+		if (pid < 0)
+			fprintf(stderr, "healthmon: Failed to respawn %s (%s)\n", p->argv[0], strerror(-pid));
 	}
 
 	fprintf(stderr, "healthmon: No process to guard, exiting\n");
 
-	return 0;
+	return EXIT_SUCCESS;
 }
