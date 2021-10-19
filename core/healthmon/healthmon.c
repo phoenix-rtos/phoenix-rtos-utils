@@ -21,6 +21,7 @@
 
 typedef struct {
 	rbnode_t node;
+	char *path;
 	char **argv;
 	pid_t pid;
 } proc_t;
@@ -48,7 +49,7 @@ static int ptree_compare(rbnode_t *n1, rbnode_t *n2)
 static void usage(const char *progname)
 {
 	printf("Phoenix-RTOS Health Monitor - process respawner\n");
-	printf("Usage: %s progname1[" "%c" "arg1" "%c" "arg2" "%c" "...] [progname2...]\n", progname,
+	printf("Usage: %s progname1[" "%c" "argv[0]" "%c" "argv[1]" "%c" "...argv[n]] [progname2...]\n", progname,
 		ARG_SEPARATOR, ARG_SEPARATOR, ARG_SEPARATOR);
 }
 
@@ -57,7 +58,7 @@ static int spawn(proc_t *p)
 {
 	pid_t pid;
 
-	pid = spawnSyspage(NULL, p->argv[0], p->argv);
+	pid = spawnSyspage(NULL, p->path, p->argv);
 	if (pid < 0)
 		return pid;
 
@@ -89,13 +90,18 @@ static int argPrepare(const char *path, proc_t *p)
 		return -ENOMEM;
 	}
 
-	argv[0] = strtok(argstr, separator);
-	for (i = 1; i <= argc; ++i) {
-		argv[i] = strtok(NULL, separator);
-		if (argv[i] == NULL) {
-			free(argstr);
-			free(argv);
-			return -EINVAL;
+	p->path = strtok(argstr, separator);
+	if (argc == 0) {
+		argv[0] = p->path;
+	}
+	else {
+		for (i = 0; i < argc; ++i) {
+			argv[i] = strtok(NULL, separator);
+			if (argv[i] == NULL) {
+				free(argstr);
+				free(argv);
+				return -EINVAL;
+			}
 		}
 	}
 
@@ -140,15 +146,15 @@ int main(int argc, char *argv[])
 
 		pid = spawn(p);
 		if (pid < 0) {
-			fprintf(stderr, "healthmon: Failed to spawn %s (%s)\n", p->argv[0], strerror(-pid));
-			free(p->argv[0]);
+			fprintf(stderr, "healthmon: Failed to spawn %s (%s)\n", p->path, strerror(-pid));
+			free(p->path);
 			free(p->argv);
 			free(p);
 			continue;
 		}
 
 		lib_rbInsert(&common.ptree, &p->node);
-		printf("healthmon: Spawned %s successfully\n", p->argv[0]);
+		printf("healthmon: Spawned %s successfully\n", p->path);
 		++progs;
 	}
 
@@ -162,7 +168,7 @@ int main(int argc, char *argv[])
 		}
 		pid = spawn(p);
 		if (pid < 0)
-			fprintf(stderr, "healthmon: Failed to respawn %s (%s)\n", p->argv[0], strerror(-pid));
+			fprintf(stderr, "healthmon: Failed to respawn %s (%s)\n", p->path, strerror(-pid));
 	}
 
 	fprintf(stderr, "healthmon: No process to guard, exiting\n");
