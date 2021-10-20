@@ -1138,6 +1138,7 @@ static int psh_run(int exitable)
 		free(cmdhist->entries[cmdhist->hb].cmd);
 
 	free(cmdhist);
+	pshapp_common.cmdhist = NULL;
 
 	return err;
 }
