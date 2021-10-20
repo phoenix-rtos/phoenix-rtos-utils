@@ -38,16 +38,17 @@
 
 
 /* Shell definitions */
-#define PROMPT       "(psh)% "     /* Shell prompt */
-#define SCRIPT_MAGIC ":{}:"        /* Every psh script should start with this line */
-#define HISTSZ       512           /* Command history size */
+#define PROMPT       "(psh)% " /* Shell prompt */
+#define SCRIPT_MAGIC ":{}:"    /* Every psh script should start with this line */
+#define CMDSZ        128       /* Command buffer size */
+#define HISTSZ       512       /* Command history size */
 
 
 /* Misc definitions */
-#define BP_OFFS      0             /* Offset of 0 exponent entry in binary prefix table */
-#define BP_EXP_OFFS  10            /* Offset between consecutive entries exponents in binary prefix table */
-#define SI_OFFS      8             /* Offset of 0 exponent entry in SI prefix table */
-#define SI_EXP_OFFS  3             /* Offset between consecutive entries exponents in SI prefix table */
+#define BP_OFFS     0  /* Offset of 0 exponent entry in binary prefix table */
+#define BP_EXP_OFFS 10 /* Offset between consecutive entries exponents in binary prefix table */
+#define SI_OFFS     8  /* Offset of 0 exponent entry in SI prefix table */
+#define SI_EXP_OFFS 3  /* Offset between consecutive entries exponents in SI prefix table */
 
 
 /* Special key codes */
@@ -55,8 +56,8 @@ enum { kUp = 1, kDown, kRight, kLeft, kDelete, kHome, kEnd };
 
 
 typedef struct {
-	int n;                         /* Command length (each word is followed by '\0') */
-	char *cmd;                     /* Command pointer */
+	int n;     /* Command length (each word is followed by '\0') */
+	char *cmd; /* Command pointer */
 } psh_histent_t;
 
 
@@ -256,33 +257,12 @@ int psh_prefix(unsigned int base, int x, int y, unsigned int prec, char *buff)
 }
 
 
-static int psh_extendcmd(char **cmd, int *cmdsz, int n)
+static void psh_histentcmd(char **cmd, psh_histent_t *entry)
 {
-	char *rcmd;
-
-	if ((rcmd = realloc(*cmd, n)) == NULL) {
-		fprintf(stderr, "\r\npsh: out of memory\r\n");
-		free(*cmd);
-		return -ENOMEM;
-	}
-	*cmd = rcmd;
-	*cmdsz = n;
-
-	return EOK;
-}
-
-
-static int psh_histentcmd(char **cmd, int *cmdsz, psh_histent_t *entry)
-{
-	int err, i;
-
-	if ((entry->n > *cmdsz) && ((err = psh_extendcmd(cmd, cmdsz, entry->n + 1)) < 0))
-		return err;
+	int i;
 
 	for (i = 0; i < entry->n; i++)
 		(*cmd)[i] = (entry->cmd[i] == '\0') ? ' ' : entry->cmd[i];
-
-	return entry->n;
 }
 
 
@@ -520,11 +500,12 @@ extern void cfmakeraw(struct termios *termios);
 
 static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 {
-	int i, k, nfiles, err = EOK, esc = 0, n = 0, m = 0, ln = 0, hp = cmdhist->he, cmdsz = 128;
+	int i, k, nfiles, err = EOK, esc = 0, n = 0, m = 0, ln = 0, hp = cmdhist->he;
 	char c, *path, *fpath, *dir, *base, **files, buff[8];
 	struct termios raw = *orig;
 
-	if ((*cmd = malloc(cmdsz)) == NULL) {
+	/* Allocate command buffer (one extra character for '\0') */
+	if ((*cmd = malloc(CMDSZ + 1)) == NULL) {
 		fprintf(stderr, "\npsh: out of memory\n");
 		return -ENOMEM;
 	}
@@ -543,22 +524,8 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 
 		/* Process control characters */
 		if ((c < 0x20) || (c == 0x7f)) {
-			/* Print not recognized escape codes */
-			if (esc) {
-				if (hp != cmdhist->he) {
-					if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
-						break;
-					hp = cmdhist->he;
-				}
-				if ((n + m + esc + 1 > cmdsz) && ((err = psh_extendcmd(cmd, &cmdsz, 2 * (n + m + esc) + 1)) < 0))
-					break;
-				memmove(*cmd + n + esc, *cmd + n, m);
-				memcpy(*cmd + n, buff, esc);
-				write(STDOUT_FILENO, *cmd + n, esc + m);
-				n += esc;
-				psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
-				esc = 0;
-			}
+			/* Cancel escape code processing */
+			esc = 0;
 
 			/* ETX => cancel command */
 			if (c == '\003') {
@@ -573,8 +540,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 			else if (c == '\004') {
 				if (m) {
 					if (hp != cmdhist->he) {
-						if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
-							break;
+						psh_histentcmd(cmd, cmdhist->entries + hp);
 						hp = cmdhist->he;
 					}
 					memmove(*cmd + n, *cmd + n + 1, --m);
@@ -593,8 +559,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 			else if ((c == '\b') || (c == '\177')) {
 				if (n) {
 					if (hp != cmdhist->he) {
-						if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
-							break;
+						psh_histentcmd(cmd, cmdhist->entries + hp);
 						hp = cmdhist->he;
 					}
 					write(STDOUT_FILENO, "\b", 1);
@@ -658,13 +623,12 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 					/* Complete path */
 					else {
 						if (hp != cmdhist->he) {
-							if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
-								break;
+							psh_histentcmd(cmd, cmdhist->entries + hp);
 							hp = cmdhist->he;
 						}
 						i = strlen(files[0]) - strlen(base);
-						if ((n + m + i + 1 > cmdsz) && ((err = psh_extendcmd(cmd, &cmdsz, 2 * (n + m + i) + 1)) < 0))
-							break;
+						if (n + m + i > CMDSZ)
+							i = CMDSZ - n - m;
 						memmove(*cmd + n + i, *cmd + n, m);
 						memcpy(*cmd + n, files[0] + strlen(base), i);
 						write(STDOUT_FILENO, *cmd + n, i + m);
@@ -695,8 +659,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 			/* LF or CR => go to new line and break (finished reading command) */
 			else if ((c == '\r') || (c == '\n')) {
 				if (hp != cmdhist->he) {
-					if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
-						break;
+					psh_histentcmd(cmd, cmdhist->entries + hp);
 					hp = cmdhist->he;
 				}
 				psh_movecursor(n + sizeof(PROMPT) - 1, m);
@@ -712,17 +675,16 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 		/* Process regular characters */
 		else {
 			if (!esc) {
-				if (hp != cmdhist->he) {
-					if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
-						break;
-					hp = cmdhist->he;
+				if (n + m < CMDSZ) {
+					if (hp != cmdhist->he) {
+						psh_histentcmd(cmd, cmdhist->entries + hp);
+						hp = cmdhist->he;
+					}
+					memmove(*cmd + n + 1, *cmd + n, m);
+					(*cmd)[n++] = c;
+					write(STDOUT_FILENO, *cmd + n - 1, m + 1);
+					psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
 				}
-				if ((n + m + 2 > cmdsz) && ((err = psh_extendcmd(cmd, &cmdsz, 2 * (n + m + 1) + 1)) < 0))
-					break;
-				memmove(*cmd + n + 1, *cmd + n, m);
-				(*cmd)[n++] = c;
-				write(STDOUT_FILENO, *cmd + n - 1, m + 1);
-				psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
 				continue;
 			}
 
@@ -731,21 +693,12 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 			if ((k = psh_keyCode(buff, &esc)) < 0) {
 				if (k == -EINVAL) {
 					if (hp != cmdhist->he) {
-						if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
-							break;
+						psh_histentcmd(cmd, cmdhist->entries + hp);
 						hp = cmdhist->he;
 					}
-					if ((n + m + esc + 1 > cmdsz) && ((err = psh_extendcmd(cmd, &cmdsz, 2 * (n + m + esc) + 1)) < 0))
-						break;
-					memmove(*cmd + n + esc, *cmd + n, m);
-					memcpy(*cmd + n, buff, esc);
-					write(STDOUT_FILENO, *cmd + n, esc + m);
-					n += esc;
-					psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
 					esc = 0;
 				}
-
-				/* EINVAL, EAGAIN */
+				/* EAGAIN */
 				continue;
 			}
 			else if (k == kUp) {
@@ -807,8 +760,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 			else if (k == kDelete) {
 				if (m) {
 					if (hp != cmdhist->he) {
-						if ((err = psh_histentcmd(cmd, &cmdsz, cmdhist->entries + hp)) < 0)
-							break;
+						psh_histentcmd(cmd, cmdhist->entries + hp);
 						hp = cmdhist->he;
 					}
 					memmove(*cmd + n, *cmd + n + 1, --m);
