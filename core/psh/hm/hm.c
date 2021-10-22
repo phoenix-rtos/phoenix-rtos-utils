@@ -1,10 +1,12 @@
 /*
  * Phoenix-RTOS
  *
- * Health Monitor
+ * hm - Health Monitor
  *
  * Copyright 2021 Phoenix Systems
  * Author: Aleksander Kaminski
+ *
+ * This file is part of Phoenix-RTOS.
  *
  * %LICENSE%
  */
@@ -16,6 +18,8 @@
 #include <errno.h>
 #include <sys/rb.h>
 #include <sys/threads.h>
+
+#include "../psh.h"
 
 #define ARG_SEPARATOR '@'
 
@@ -29,10 +33,10 @@ typedef struct {
 
 static struct {
 	rbtree_t ptree;
-} common;
+} hm_common;
 
 
-static int ptree_compare(rbnode_t *n1, rbnode_t *n2)
+static int psh_hm_ptreeCompare(rbnode_t *n1, rbnode_t *n2)
 {
 	proc_t *p1 = lib_treeof(proc_t, node, n1);
 	proc_t *p2 = lib_treeof(proc_t, node, n2);
@@ -46,15 +50,14 @@ static int ptree_compare(rbnode_t *n1, rbnode_t *n2)
 }
 
 
-static void usage(const char *progname)
+static void psh_hm_help(void)
 {
-	printf("Phoenix-RTOS Health Monitor - process respawner\n");
-	printf("Usage: %s progname1[" "%c" "argv[0]" "%c" "argv[1]" "%c" "...argv[n]] [progname2...]\n", progname,
+	printf("usage: hm progname1[" "%c" "argv[0]" "%c" "argv[1]" "%c" "...argv[n]] [progname2...]\n",
 		ARG_SEPARATOR, ARG_SEPARATOR, ARG_SEPARATOR);
 }
 
 
-static int spawn(proc_t *p)
+static int psh_hm_spawn(proc_t *p)
 {
 	pid_t pid;
 
@@ -68,7 +71,7 @@ static int spawn(proc_t *p)
 }
 
 
-static int argPrepare(const char *path, proc_t *p)
+static int psh_hm_argPrepare(const char *path, proc_t *p)
 {
 	int i, argc = 0;
 	const char *t;
@@ -111,67 +114,80 @@ static int argPrepare(const char *path, proc_t *p)
 }
 
 
-int main(int argc, char *argv[])
+void psh_hminfo(void)
+{
+	printf("health monitor, spawns apps and keeps them alive");
+}
+
+
+int psh_hm(int argc, char *argv[])
 {
 	int i, err, status, progs = 0;
 	proc_t *p, t;
 	pid_t pid;
 
 	if (argc <= 1) {
-		usage(argv[0]);
+		psh_hm_help();
 		return EXIT_FAILURE;
 	}
 
-	lib_rbInit(&common.ptree, ptree_compare, NULL);
+	lib_rbInit(&hm_common.ptree, psh_hm_ptreeCompare, NULL);
 
 	for (i = 1; i < argc; ++i) {
 		p = malloc(sizeof(*p));
 		if (p == NULL) {
-			fprintf(stderr, "healthmon: Out of memory\n");
+			fprintf(stderr, "hm: Out of memory\n");
 			return EXIT_FAILURE;
 		}
 
-		err = argPrepare(argv[i], p);
+		err = psh_hm_argPrepare(argv[i], p);
 		if (err < 0) {
 			free(p);
 			if (err == -ENOMEM) {
-				fprintf(stderr, "healthmon: Out of memory\n");
+				fprintf(stderr, "hm: Out of memory\n");
 				return EXIT_FAILURE;
 			}
 			else {
-				fprintf(stderr, "healthmon: Failed to parse %s\n", argv[i]);
+				fprintf(stderr, "hm: Failed to parse %s\n", argv[i]);
 				continue;
 			}
 		}
 
-		pid = spawn(p);
+		pid = psh_hm_spawn(p);
 		if (pid < 0) {
-			fprintf(stderr, "healthmon: Failed to spawn %s (%s)\n", p->path, strerror(-pid));
+			fprintf(stderr, "hm: Failed to spawn %s (%s)\n", p->argv[0], strerror(-pid));
 			free(p->path);
 			free(p->argv);
 			free(p);
 			continue;
 		}
 
-		lib_rbInsert(&common.ptree, &p->node);
-		printf("healthmon: Spawned %s successfully\n", p->path);
+		lib_rbInsert(&hm_common.ptree, &p->node);
+		printf("hm: Spawned %s successfully\n", p->argv[0]);
 		++progs;
 	}
 
 	while (progs != 0) {
 		pid = wait(&status);
 		t.pid = pid;
-		p = lib_treeof(proc_t, node, lib_rbFind(&common.ptree, &t.node));
+		p = lib_treeof(proc_t, node, lib_rbFind(&hm_common.ptree, &t.node));
 		if (p == NULL) {
-			fprintf(stderr, "healthmon: Child died, but it's not mine. Ignoring.\n");
+			fprintf(stderr, "hm: Child died, but it's not mine. Ignoring.\n");
 			continue;
 		}
-		pid = spawn(p);
+		pid = psh_hm_spawn(p);
 		if (pid < 0)
-			fprintf(stderr, "healthmon: Failed to respawn %s (%s)\n", p->path, strerror(-pid));
+			fprintf(stderr, "hm: Failed to respawn %s (%s)\n", p->argv[0], strerror(-pid));
 	}
 
-	fprintf(stderr, "healthmon: No process to guard, exiting\n");
+	fprintf(stderr, "hm: No process to guard, exiting\n");
 
 	return EXIT_SUCCESS;
+}
+
+
+void __attribute__((constructor)) hm_registerapp(void)
+{
+	static psh_appentry_t app = { .name = "hm", .run = psh_hm, .info = psh_hminfo };
+	psh_registerapp(&app);
 }

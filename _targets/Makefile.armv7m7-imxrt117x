@@ -6,4 +6,4 @@
 # Copyright 2019 Phoenix Systems
 #
 
-DEFAULT_COMPONENTS := psh psd cm4-tool healthmon
+DEFAULT_COMPONENTS := psh psd cm4-tool
