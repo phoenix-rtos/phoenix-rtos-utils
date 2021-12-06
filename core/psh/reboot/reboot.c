@@ -20,17 +20,16 @@
 #include "../psh.h"
 
 
-void psh_rebootinfo(void)
+static void psh_rebootinfo(void)
 {
 	printf("restarts the machine");
 }
 
 
-int psh_reboot(int argc, char **argv)
+static int psh_reboot(int argc, char **argv)
 {
 	int c, magic = PHOENIX_REBOOT_MAGIC;
 
-#ifdef TARGET_IMX6ULL
 	while ((c = getopt(argc, argv, "s")) != -1) {
 		switch (c) {
 		case 's':
@@ -41,9 +40,6 @@ int psh_reboot(int argc, char **argv)
 			return EOK;
 		}
 	}
-#else
-	(void)c;
-#endif
 
 	if (reboot(magic) < 0) {
 		fprintf(stderr, "reboot: failed to restart the machine\n");
