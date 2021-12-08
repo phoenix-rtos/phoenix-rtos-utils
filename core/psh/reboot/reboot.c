@@ -41,7 +41,7 @@ static int psh_reboot(int argc, char **argv)
 {
 	int c, magic = PHOENIX_REBOOT_MAGIC;
 	int op_get = 0;
-	int op_secondary = 1;
+	int op_secondary = 0;
 
 	while ((c = getopt(argc, argv, "ghs")) != -1) {
 		switch (c) {
