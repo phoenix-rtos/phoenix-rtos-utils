@@ -31,6 +31,7 @@ static struct {
 	oid_t oid;
 	int fd;
 	flashsrv_info_t *info;
+	int interactive;
 } nandtool_common;
 
 
@@ -40,6 +41,7 @@ static int nandtool_flash(const char *path, unsigned int start, int raw)
 	const unsigned int npages = info->erasesz / info->writesz;
 	const unsigned int pagesz = raw ? info->writesz + info->metasz : info->writesz;
 	unsigned int page, block, boffs, offs = 0;
+	unsigned int perc, oldperc = 0;
 	struct stat stat;
 	char *buff;
 	int fd, err;
@@ -112,7 +114,16 @@ static int nandtool_flash(const char *path, unsigned int start, int raw)
 			}
 
 			offs += boffs;
-			printf("\rFlashing %s %u%%...", path, (unsigned int)(100 * offs / stat.st_size));
+
+			perc = (100 * offs) / stat.st_size;
+			if (nandtool_common.interactive) {
+				printf("\rFlashing %s %2u%%...", path, perc);
+			}
+			else if (perc - oldperc >= 10) {
+				printf("Flashing %s %2u%%\n", path, perc);
+				fflush(stdout);
+				oldperc = perc;
+			}
 		}
 
 		if (err < 0)
@@ -173,6 +184,9 @@ int main(int argc, char **argv)
 	int check = 0, raw = 0, flash_start = -1, erase_start = -1, erase_size = -1;
 	char *dev, *tok, *path = NULL;
 	int c, err;
+
+	if (isatty(STDOUT_FILENO))
+		nandtool_common.interactive = 1;
 
 	while ((c = getopt(argc, argv, "e:i:r:s:ch")) != -1) {
 		switch (c) {
