@@ -211,15 +211,22 @@ int main(int argc, char **argv)
 		nandtool_help(argv[0]);
 		return -EINVAL;
 	}
-	dev = argv[optind];
+
+	if ((dev = realpath(argv[optind], NULL)) == NULL) {
+		fprintf(stderr, "nandtool: failed to resolve path (%s): %s\n", argv[optind], strerror(errno));
+		return 1;
+	}
+
 
 	if ((err = lookup(dev, NULL, &nandtool_common.oid)) < 0) {
 		fprintf(stderr, "nandtool: failed to lookup device (%s), err: %d\n", dev, err);
+		free(dev);
 		return 1;
 	}
 
 	if ((err = open(dev, O_RDWR)) < 0) {
 		fprintf(stderr, "nandtool: failed to open device (%s), err: %d\n", dev, err);
+		free(dev);
 		return 1;
 	}
 	nandtool_common.fd = err;
@@ -228,6 +235,7 @@ int main(int argc, char **argv)
 		err = -EFAULT;
 		fprintf(stderr, "nandtool: failed to get device info (%s), err: %d\n", dev, err);
 		close(nandtool_common.fd);
+		free(dev);
 		return 1;
 	}
 
@@ -244,5 +252,6 @@ int main(int argc, char **argv)
 
 	close(nandtool_common.fd);
 
+	free(dev);
 	return (err < 0) ? 1 : 0;
 }
