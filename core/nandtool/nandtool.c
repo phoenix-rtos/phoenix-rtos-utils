@@ -119,6 +119,7 @@ static int nandtool_flash(const char *path, unsigned int start, int raw)
 			break;
 
 		printf("\rFlashing %s completed!\n", path);
+		err = 0;
 	} while (0);
 
 	free(buff);
@@ -214,19 +215,20 @@ int main(int argc, char **argv)
 
 	if ((err = lookup(dev, NULL, &nandtool_common.oid)) < 0) {
 		fprintf(stderr, "nandtool: failed to lookup device (%s), err: %d\n", dev, err);
-		return err;
+		return 1;
 	}
 
 	if ((err = open(dev, O_RDWR)) < 0) {
 		fprintf(stderr, "nandtool: failed to open device (%s), err: %d\n", dev, err);
-		return err;
+		return 1;
 	}
 	nandtool_common.fd = err;
 
 	if ((nandtool_common.info = flashmng_info(nandtool_common.oid)) == NULL) {
 		err = -EFAULT;
 		fprintf(stderr, "nandtool: failed to get device info (%s), err: %d\n", dev, err);
-		return err;
+		close(nandtool_common.fd);
+		return 1;
 	}
 
 	do {
@@ -242,5 +244,5 @@ int main(int argc, char **argv)
 
 	close(nandtool_common.fd);
 
-	return err;
+	return (err < 0) ? 1 : 0;
 }
