@@ -15,6 +15,8 @@
 
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include <sys/file.h>
 #include <sys/msg.h>
@@ -28,23 +30,31 @@ static struct {
 } flashmng_common;
 
 
-int flashmng_writeraw(oid_t oid, unsigned int page, const void *data, size_t size)
+/* jffs2 cleanmarker - write it on clean erase blocks OOB data to mount faster */
+static struct cleanmarker {
+	uint16_t magic;
+	uint16_t type;
+	uint32_t len;
+} oob_cleanmarker = {
+	.magic = 0x1985,
+	.type = 0x2003,
+	.len = 8
+};
+
+
+static int write_ex(oid_t oid, uint32_t addr, const void *data, size_t size, int type)
 {
 	msg_t msg = { 0 };
 	flash_i_devctl_t *idevctl = (flash_i_devctl_t *)msg.i.raw;
 	flash_o_devctl_t *odevctl = (flash_o_devctl_t *)msg.o.raw;
-	flashsrv_info_t *info;
 	int err;
-
-	if ((info = flashmng_info(oid)) == NULL)
-		return -EFAULT;
 
 	msg.type = mtDevCtl;
 	msg.i.data = (void *)data; /* TODO: fix after msg.i.data becomes const void * */
 	msg.i.size = size;
-	idevctl->type = flashsrv_devctl_writeraw;
+	idevctl->type = type;
 	idevctl->write.oid = oid;
-	idevctl->write.address = page * (info->metasz + info->writesz);
+	idevctl->write.address = addr;
 	idevctl->write.size = size;
 
 	if (((err = msgSend(oid.port, &msg)) < 0) || ((err = odevctl->err) < 0))
@@ -54,6 +64,23 @@ int flashmng_writeraw(oid_t oid, unsigned int page, const void *data, size_t siz
 		return -EIO;
 
 	return EOK;
+}
+
+
+static int writemeta(oid_t oid, uint32_t addr, const void *data, size_t size)
+{
+	return write_ex(oid, addr, data, size, flashsrv_devctl_writemeta);
+}
+
+
+int flashmng_writeraw(oid_t oid, unsigned int page, const void *data, size_t size)
+{
+	flashsrv_info_t *info = flashmng_info(oid);
+
+	if (info == NULL)
+		return -EFAULT;
+
+	return write_ex(oid, page * (info->metasz + info->writesz), data, size, flashsrv_devctl_writeraw);
 }
 
 
@@ -78,6 +105,38 @@ int flashmng_erase(oid_t oid, unsigned int start, unsigned int size)
 		return err;
 
 	return EOK;
+}
+
+
+/* write JFFS2 clean block markers */
+int flashmng_cleanMarkers(oid_t oid, unsigned int start, unsigned int size)
+{
+	void *metabuf;
+	int ret = 0;
+	unsigned int blockno;
+	flashsrv_info_t *info = flashmng_info(oid);
+
+	if (info == NULL)
+		return -EFAULT;
+
+	metabuf = malloc(info->writesz);
+
+	if (metabuf == NULL)
+		return -ENOMEM;
+
+	memset(metabuf, 0xff, info->writesz);
+	memcpy(metabuf, &oob_cleanmarker, sizeof(oob_cleanmarker));
+
+	for (blockno = start; blockno < start + size; ++blockno) {
+		if (flashmng_isbad(oid, blockno)) {
+			printf("cleanMarkers: block %u is marked as bad - skipping\n", blockno);
+			continue;
+		}
+		ret += writemeta(oid, blockno * info->erasesz, metabuf, info->writesz);
+	}
+
+	free(metabuf);
+	return ret;
 }
 
 

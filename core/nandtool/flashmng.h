@@ -30,4 +30,8 @@ int flashmng_checkbad(oid_t oid);
 int flashmng_isbad(oid_t oid, unsigned int block);
 
 
+/* write JFFS2 clean block markers */
+int flashmng_cleanMarkers(oid_t oid, unsigned int start, unsigned int size);
+
+
 flashsrv_info_t *flashmng_info(oid_t oid);

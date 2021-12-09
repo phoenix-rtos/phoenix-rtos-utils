@@ -140,13 +140,24 @@ static int nandtool_flash(const char *path, unsigned int start, int raw)
 }
 
 
-static int nandtool_erase(unsigned int start, unsigned int size)
+static int nandtool_erase(unsigned int start, unsigned int size, int write_cleanmarkers)
 {
 	int err;
 
 	if ((err = flashmng_erase(nandtool_common.oid, start, size)) < 0) {
 		fprintf(stderr, "nandtool: failed to erase blocks, err: %d\n", err);
 		return err;
+	}
+
+	if (write_cleanmarkers) {
+		/* we're iterating over erase blocks on our side, so we need to know the real partition size */
+		if (size == 0)
+			size = nandtool_common.info->size / nandtool_common.info->erasesz;
+
+		if ((err = flashmng_cleanMarkers(nandtool_common.oid, start, size)) < 0) {
+			fprintf(stderr, "nandtool: failed to write cleanmarkers, err: %d\n", err);
+			return err;
+		}
 	}
 
 	return EOK;
@@ -171,29 +182,35 @@ static void nandtool_help(const char *prog)
 	printf("Usage: %s [options] <device>\n", prog);
 	printf("\t-e <start[:size]> - erase size block(s) starting from start\n");
 	printf("\t                    (skip size to erase one block or pass size=0 to erase whole device)\n");
+	printf("\t-j                - write jffs2 cleanmarkers (valid only with erase operation)\n");
+	printf("\t-c                - check device for bad blocks and print summary\n");
+	printf("\n");
 	printf("\t-i <path>         - path of the file to flash (requires -s option)\n");
 	printf("\t-r                - flash raw data\n");
 	printf("\t-s <block>        - start flashing from given block (requires -i)\n");
-	printf("\t-c                - check device for bad blocks and print summary\n");
 	printf("\t-h                - print this help message\n");
 }
 
 
 int main(int argc, char **argv)
 {
-	int check = 0, raw = 0, flash_start = -1, erase_start = -1, erase_size = -1;
+	int check = 0, raw = 0, flash_start = -1, erase_start = -1, erase_size = -1, write_cleanmarkers = 0;
 	char *dev, *tok, *path = NULL;
 	int c, err;
 
 	if (isatty(STDOUT_FILENO))
 		nandtool_common.interactive = 1;
 
-	while ((c = getopt(argc, argv, "e:i:r:s:ch")) != -1) {
+	while ((c = getopt(argc, argv, "e:i:r:s:chj")) != -1) {
 		switch (c) {
 			case 'e':
 				tok = strtok(optarg, ":");
 				erase_start = strtoul(tok, NULL, 0);
 				erase_size = ((tok = strtok(NULL, ":")) == NULL) ? 1 : strtoul(tok, NULL, 0);
+				break;
+
+			case 'j':
+				write_cleanmarkers = 1;
 				break;
 
 			case 'i':
@@ -257,7 +274,7 @@ int main(int argc, char **argv)
 		if (check && ((err = nandtool_check()) < 0))
 			break;
 
-		if ((erase_start >= 0) && (erase_size >= 0) && ((err = nandtool_erase(erase_start, erase_size)) < 0))
+		if ((erase_start >= 0) && (erase_size >= 0) && ((err = nandtool_erase(erase_start, erase_size, write_cleanmarkers)) < 0))
 			break;
 
 		if ((flash_start >= 0) && (path != NULL) && ((err = nandtool_flash(path, flash_start, raw)) < 0))
