@@ -849,7 +849,7 @@ static int psh_runscript(char *path)
 	n = 0;
 
 	for (i = 2; (ret = getline(&line, &n, stream)) > 0; i++) {
-		if (line[0] == 'X' || line[0] == 'W') {
+		if (line[0] == 'X' || line[0] == 'W' || line[0] == 'T') {
 			if (line[ret - 1] == '\n')
 				line[ret - 1] = '\0';
 
@@ -859,6 +859,11 @@ static int psh_runscript(char *path)
 					break;
 				}
 
+				/* TTY set */
+				if (line[0] == 'T') {
+					err = psh_ttyopen(argv[0]);
+					break;
+				}
 				if ((pid = vfork()) < 0) {
 					fprintf(stderr, "psh: vfork failed in line %d\n", i);
 					err = pid;
