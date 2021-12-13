@@ -57,4 +57,7 @@ extern const psh_appentry_t *psh_applist_first(void);
 extern const psh_appentry_t *psh_applist_next(const psh_appentry_t *current);
 
 
+extern int psh_ttyopen(const char *dev);
+
+
 #endif

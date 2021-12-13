@@ -13,6 +13,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <paths.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -104,8 +105,33 @@ static int psh_authcredentget(char *buff, int ispasswd, int maxinlen)
 static int psh_auth(int argc, char **argv)
 {
 	const int maxlen = 32;
+	const char *consolePath = _PATH_CONSOLE;
 	char username[maxlen+1], passwd[maxlen+1], *shadow;
 	struct passwd *userdata;
+	int retries;
+	int c;
+
+	while ((c = getopt(argc, argv, "t:h")) != -1) {
+		switch (c) {
+			case 't':
+				consolePath = optarg;
+				break;
+			case 'h':
+			default:
+				printf("usage: %s [options]\n", argv[0]);
+				printf("  -t <terminal dev>:  path to terminal device, default %s\n", _PATH_CONSOLE);
+				printf("  -h:                 shows this help message\n");
+				return EOK;
+		}
+	}
+
+	/* This is temporary, until all architectures support /dev/console */
+	for (retries = 5; retries > 0; retries--) {
+		if (psh_ttyopen(consolePath) == 0)
+			break;
+		else
+			usleep(100000);
+	}
 
 	/* check tty */
 	if (isatty(STDOUT_FILENO) == 0) {
