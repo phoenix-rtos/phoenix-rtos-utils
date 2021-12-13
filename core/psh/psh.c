@@ -13,6 +13,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
 #include <termios.h>
@@ -71,6 +72,23 @@ const psh_appentry_t *psh_findapp(char *appname) {
 			break;
 	}
 	return app;
+}
+
+
+int psh_ttyopen(const char *dev)
+{
+	int fd;
+
+	while ((fd = open(dev, O_RDWR)) < 0)
+		return -1;
+
+	dup2(fd, STDIN_FILENO);
+	dup2(fd, STDOUT_FILENO);
+	dup2(fd, STDERR_FILENO);
+
+	close(fd);
+
+	return 0;
 }
 
 

@@ -16,6 +16,7 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
+#include <paths.h>
 #include <pwd.h>
 #include <signal.h>
 #include <stdint.h>
@@ -965,7 +966,7 @@ static void psh_signalstop(int sig)
 }
 
 
-static int psh_run(int exitable)
+static int psh_run(int exitable, const char *console)
 {
 	psh_hist_t *cmdhist = NULL;
 	psh_histent_t *entry;
@@ -974,6 +975,15 @@ static int psh_run(int exitable)
 	char *cmd, **argv;
 	int err, n, argc;
 	pid_t pgrp;
+	int retries;
+
+	/* This is temporary, until all architectures support /dev/console */
+	for (retries = 5; retries > 0; retries--) {
+		if (psh_ttyopen(console) == 0)
+			break;
+		else
+			usleep(100000);
+	}
 
 	/* Check if we run interactively */
 	if (!isatty(STDIN_FILENO))
@@ -1112,22 +1122,27 @@ void psh_pshappexitinfo(void)
 int psh_pshapp(int argc, char **argv)
 {
 	char *path = NULL;
+	const char *consolePath = _PATH_CONSOLE;
 	int c;
 
 	/* Run shell script */
 	if (argc > 1) {
-		while ((c = getopt(argc, argv, "i:h")) != -1) {
+		while ((c = getopt(argc, argv, "t:i:h")) != -1) {
 			switch (c) {
-			case 'i':
-				path = optarg;
-				break;
+				case 't':
+					consolePath = optarg;
+					break;
+				case 'i':
+					path = optarg;
+					break;
 
-			case 'h':
-			default:
-				printf("usage: %s [options] [script path] or no args to run shell interactively\n", argv[0]);
-				printf("  -i <script path>:  selects psh script to execute\n");
-				printf("  -h:                shows this help message\n");
-				return EOK;
+				case 'h':
+				default:
+					printf("usage: %s [options] [script path] or no args to run shell interactively\n", argv[0]);
+					printf("  -i <script path>:   selects psh script to execute\n");
+					printf("  -t <terminal dev>:  path to terminal device, default %s\n", _PATH_CONSOLE);
+					printf("  -h:                 shows this help message\n");
+					return EOK;
 			}
 		}
 
@@ -1139,7 +1154,7 @@ int psh_pshapp(int argc, char **argv)
 	}
 	/* Run shell interactively */
 	else {
-		return psh_run(1);
+		return psh_run(1, consolePath);
 	}
 
 	return -ENOSYS;
