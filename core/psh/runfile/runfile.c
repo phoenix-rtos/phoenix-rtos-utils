@@ -27,9 +27,9 @@ int psh_runfile(int argc, char **argv)
 {
 	pid_t pid;
 
-	if ((pid = vfork()) < 0) {
-		fprintf(stderr, "psh: vfork failed with code %d\n", pid);
-		return pid;
+	pid = vfork();
+	if (pid > 0) {
+		waitpid(pid, NULL, 0);
 	}
 	else if (!pid) {
 		/* Put process in its own process group */
@@ -54,9 +54,14 @@ int psh_runfile(int argc, char **argv)
 			fprintf(stderr, "psh: out of memory\n");
 			break;
 
+		case EACCES:
+		case ENOEXEC:
+			fprintf(stderr, "psh: %s is not an executable\n", argv[0]);
+			break;
+
 		case EINVAL:
 		case ENOENT:
-			fprintf(stderr, "psh: invalid executable\n");
+			fprintf(stderr, "psh: %s not found\n", argv[0]);
 			break;
 
 		default:
@@ -65,13 +70,14 @@ int psh_runfile(int argc, char **argv)
 
 		_psh_exit(EXIT_FAILURE);
 	}
-
-	waitpid(pid, NULL, 0);
+	else {
+		fprintf(stderr, "psh: vfork failed with code %d\n", pid);
+	}
 
 	/* Take back terminal control */
 	tcsetpgrp(STDIN_FILENO, getpgid(getpid()));
 
-	return EOK;
+	return pid > 0 ? EOK : -1;
 }
 
 
