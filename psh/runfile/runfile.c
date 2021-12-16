@@ -26,10 +26,14 @@
 int psh_runfile(int argc, char **argv)
 {
 	pid_t pid;
+	int err;
 
 	pid = vfork();
 	if (pid > 0) {
-		waitpid(pid, NULL, 0);
+		waitpid(pid, &err, 0);
+		if (err < 0) {
+			fprintf(stderr, "psh: %s execution halted with error code %d\n", argv[0], err);
+		}
 	}
 	else if (!pid) {
 		/* Put process in its own process group */
@@ -77,6 +81,7 @@ int psh_runfile(int argc, char **argv)
 	/* Take back terminal control */
 	tcsetpgrp(STDIN_FILENO, getpgid(getpid()));
 
+	/* TODO: add publishing the child process return value to env */
 	return pid > 0 ? EOK : -1;
 }
 
