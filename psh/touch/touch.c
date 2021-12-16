@@ -13,6 +13,10 @@
 
 #include <errno.h>
 #include <stdio.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <time.h>
+#include <sys/time.h>
 
 #include "../psh.h"
 
@@ -27,6 +31,7 @@ int psh_touch(int argc, char **argv)
 {
 	FILE *file;
 	int i;
+	struct timeval times;
 
 	if (argc < 2) {
 		fprintf(stderr, "usage: %s <file path>...\n", argv[0]);
@@ -34,10 +39,26 @@ int psh_touch(int argc, char **argv)
 	}
 
 	for (i = 1; i < argc; i++) {
-		if ((file = fopen(argv[i], "w")) == NULL)
-			fprintf(stderr, "touch: failed to open %s\n", argv[i]);
-		else
+		file = fopen(argv[i], "r");
+		if (file == NULL) {
+			if (errno == ENOENT) {
+				/* file does not exist -> create it */
+				file = fopen(argv[i], "w");
+				if (file != NULL) {
+					fclose(file);
+					continue;
+				}
+			}
+		}
+		else {
+			/* file exists -> update timestamps */
 			fclose(file);
+			times.tv_sec = time(NULL);
+			times.tv_usec = 0;
+			if (utimes(argv[i], &times) == 0)
+				continue;
+		}
+		fprintf(stderr, "psh: failed to touch %s\n", argv[i]);
 	}
 
 	return EOK;
