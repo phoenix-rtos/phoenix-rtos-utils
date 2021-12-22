@@ -17,6 +17,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/rb.h>
+#include <errno.h>
 #include <sys/threads.h>
 
 #include "../psh.h"
@@ -169,10 +170,13 @@ int psh_hm(int argc, char *argv[])
 
 	while (progs != 0) {
 		pid = wait(&status);
+		if (pid < 0)
+			continue;
+
 		t.pid = pid;
 		p = lib_treeof(proc_t, node, lib_rbFind(&hm_common.ptree, &t.node));
 		if (p == NULL) {
-			fprintf(stderr, "hm: Child died, but it's not mine. Ignoring.\n");
+			fprintf(stderr, "hm: Child died, but it's not mine (pid %d). Ignoring.\n", pid);
 			continue;
 		}
 		pid = psh_hm_spawn(p);
