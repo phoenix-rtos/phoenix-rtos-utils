@@ -171,9 +171,9 @@ static int psh_mem_process(char *memarg)
 
 static int psh_mem_page(void)
 {
-	int mapsz = 0;
+	int i, mapsz = 0;
 	pageinfo_t *p = NULL;
-	unsigned int i, n;
+	unsigned int n;
 	meminfo_t info;
 	void *rmap;
 
@@ -215,7 +215,12 @@ static int psh_mem_page(void)
 		while (n-- > 0)
 			printf("%c", p->marker);
 	}
-	printf("\n");
+	if (info.page.mapsz < 0) {
+		fprintf(stderr, "mem: Page view unavailable\n");
+	}
+	else {
+		printf("\n");
+	}
 
 	free(info.page.map);
 	return EOK;
