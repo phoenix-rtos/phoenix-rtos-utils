@@ -419,6 +419,7 @@ int psh_ls(int argc, char **argv)
 	unsigned int i, npaths = 0;
 	int c, nfiles = 0, ret = EOK;
 	char **paths = NULL;
+	char *currdir = NULL;
 	struct dirent *dir;
 	const char *path;
 	DIR *stream;
@@ -485,6 +486,12 @@ int psh_ls(int argc, char **argv)
 	if (optind < argc) {
 		paths = &argv[optind];
 		npaths = argc - optind;
+	}
+
+	if (psh_ls_common.dir && (npaths == 0)) {
+		currdir = ".";
+		paths = &currdir;
+		npaths++;
 	}
 
 	if ((npaths > 0) && ((psh_ls_common.odir = calloc(npaths, sizeof(int *))) == NULL)) {
