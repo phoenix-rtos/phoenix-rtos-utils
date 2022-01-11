@@ -76,37 +76,37 @@ typedef struct {
 
 /* Binary (base 2) prefixes */
 static const char *bp[] = {
-	"",   /* 2^0         */
-	"K",  /* 2^10   kibi */
-	"M",  /* 2^20   mebi */
-	"G",  /* 2^30   gibi */
-	"T",  /* 2^40   tebi */
-	"P",  /* 2^50   pebi */
-	"E",  /* 2^60   exbi */
-	"Z",  /* 2^70   zebi */
-	"Y"   /* 2^80   yobi */
+	"",  /* 2^0         */
+	"K", /* 2^10   kibi */
+	"M", /* 2^20   mebi */
+	"G", /* 2^30   gibi */
+	"T", /* 2^40   tebi */
+	"P", /* 2^50   pebi */
+	"E", /* 2^60   exbi */
+	"Z", /* 2^70   zebi */
+	"Y"  /* 2^80   yobi */
 };
 
 
 /* SI (base 10) prefixes */
-static const char* si[] = {
-	"y",  /* 10^-24 yocto */
-	"z",  /* 10^-21 zepto */
-	"a",  /* 10^-18 atto  */
-	"f",  /* 10^-15 femto */
-	"p",  /* 10^-12 pico  */
-	"n",  /* 10^-9  nano  */
-	"u",  /* 10^-6  micro */
-	"m",  /* 10^-3  milli */
-	"",   /* 10^0         */
-	"k",  /* 10^3   kilo  */
-	"M",  /* 10^6   mega  */
-	"G",  /* 10^9   giga  */
-	"T",  /* 10^12  tera  */
-	"P",  /* 10^15  peta  */
-	"E",  /* 10^18  exa   */
-	"Z",  /* 10^21  zetta */
-	"Y",  /* 10^24  yotta */
+static const char *si[] = {
+	"y", /* 10^-24 yocto */
+	"z", /* 10^-21 zepto */
+	"a", /* 10^-18 atto  */
+	"f", /* 10^-15 femto */
+	"p", /* 10^-12 pico  */
+	"n", /* 10^-9  nano  */
+	"u", /* 10^-6  micro */
+	"m", /* 10^-3  milli */
+	"",  /* 10^0         */
+	"k", /* 10^3   kilo  */
+	"M", /* 10^6   mega  */
+	"G", /* 10^9   giga  */
+	"T", /* 10^12  tera  */
+	"P", /* 10^15  peta  */
+	"E", /* 10^18  exa   */
+	"Z", /* 10^21  zetta */
+	"Y", /* 10^24  yotta */
 };
 
 
@@ -199,20 +199,20 @@ int psh_prefix(unsigned int base, int x, int y, unsigned int prec, char *buff)
 		return -EINVAL;
 
 	switch (base) {
-	/* Binary prefix */
-	case 2:
-		fp = psh_bp;
-		offs = BP_EXP_OFFS;
-		break;
+		/* Binary prefix */
+		case 2:
+			fp = psh_bp;
+			offs = BP_EXP_OFFS;
+			break;
 
-	/* SI prefix */
-	case 10:
-		fp = psh_si;
-		offs = SI_EXP_OFFS;
-		break;
+		/* SI prefix */
+		case 10:
+			fp = psh_si;
+			offs = SI_EXP_OFFS;
+			break;
 
-	default:
-		return -EINVAL;
+		default:
+			return -EINVAL;
 	}
 
 	/* div < 0 => accumulate extra exponents in x */
@@ -574,7 +574,8 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 			/* TAB => autocomplete paths */
 			else if (c == '\t') {
 				path = (hp != cmdhist->he) ? cmdhist->entries[hp].cmd : *cmd;
-				for (i = n; i && (path[i - 1] != ' ') && (path[i - 1] != '\0'); i--);
+				for (i = n; i && (path[i - 1] != ' ') && (path[i - 1] != '\0'); i--)
+					;
 
 				/* Skip empty path */
 				if (i == n)
@@ -913,22 +914,22 @@ int psh_history(int argc, char **argv)
 	psh_hist_t *cmdhist = pshapp_common.cmdhist;
 
 	if (cmdhist == NULL) {
-		fprintf(stderr,"psh: history not initialized\n");
+		fprintf(stderr, "psh: history not initialized\n");
 		return EFAULT;
 	}
 
 	while ((c = getopt(argc, argv, "ch")) != -1) {
 		switch (c) {
-		case 'c':
-			clear = 1;
-			break;
+			case 'c':
+				clear = 1;
+				break;
 
-		case 'h':
-		default:
-			printf("usage: %s [options] or no args to print command history\n", argv[0]);
-			printf("  -c:  clears command history\n");
-			printf("  -h:  shows this help message\n");
-			return EOK;
+			case 'h':
+			default:
+				printf("usage: %s [options] or no args to print command history\n", argv[0]);
+				printf("  -c:  clears command history\n");
+				printf("  -h:  shows this help message\n");
+				return EOK;
 		}
 	}
 
