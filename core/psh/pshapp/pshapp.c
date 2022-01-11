@@ -901,6 +901,14 @@ static int psh_runscript(char *path)
 }
 
 
+static void psh_historyhelp(void)
+{
+	printf("usage: history [options] or no args to print command history\n");
+	printf("  -c:  clears command history\n");
+	printf("  -h:  shows this help message\n");
+}
+
+
 void psh_historyinfo(void)
 {
 	printf("prints commands history");
@@ -909,7 +917,7 @@ void psh_historyinfo(void)
 
 int psh_history(int argc, char **argv)
 {
-	unsigned char clear = 0;
+	unsigned char clear = 0, help = 0;
 	int c, i, size;
 	psh_hist_t *cmdhist = pshapp_common.cmdhist;
 
@@ -918,26 +926,41 @@ int psh_history(int argc, char **argv)
 		return EFAULT;
 	}
 
-	while ((c = getopt(argc, argv, "ch")) != -1) {
-		switch (c) {
-			case 'c':
-				clear = 1;
-				break;
+	/* Process options */
+	if (argc > 1) {
+		while ((c = getopt(argc, argv, "ch")) != -1) {
+			switch (c) {
+				case 'c':
+					clear = 1;
+					break;
 
-			case 'h':
-			default:
-				printf("usage: %s [options] or no args to print command history\n", argv[0]);
-				printf("  -c:  clears command history\n");
-				printf("  -h:  shows this help message\n");
-				return EOK;
+				case 'h':
+					help = 1;
+					break;
+
+				default:
+					psh_historyhelp();
+					return EOK;
+			}
+		}
+
+		/* History command doesn't take any arguments */
+		if (optind < argc) {
+			psh_historyhelp();
+			return EOK;
+		}
+
+		if (clear) {
+			for (i = cmdhist->hb; i != cmdhist->he; i = (i + 1) % HISTSZ)
+				free(cmdhist->entries[i].cmd);
+			cmdhist->hb = cmdhist->he = 0;
+		}
+
+		if (help) {
+			psh_historyhelp();
 		}
 	}
-
-	if (clear) {
-		for (i = cmdhist->hb; i != cmdhist->he; i = (i + 1) % HISTSZ)
-			free(cmdhist->entries[i].cmd);
-		cmdhist->hb = cmdhist->he = 0;
-	}
+	/* Print history */
 	else {
 		size = (cmdhist->hb < cmdhist->he) ? cmdhist->he - cmdhist->hb : HISTSZ - cmdhist->hb + cmdhist->he;
 		c = psh_log(10, size) + 1;
