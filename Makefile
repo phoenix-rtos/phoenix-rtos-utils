@@ -14,7 +14,7 @@ include ../phoenix-rtos-build/Makefile.common
 include _targets/Makefile.$(TARGET_FAMILY)-$(TARGET_SUBFAMILY)
 
 # read out all components
-ALL_MAKES := $(wildcard */*/Makefile) $(wildcard */*/*/Makefile)
+ALL_MAKES := $(wildcard */Makefile) $(wildcard */*/Makefile)
 include $(ALL_MAKES)
 
 # create generic targets
