@@ -26,14 +26,11 @@
 int psh_runfile(int argc, char **argv)
 {
 	pid_t pid;
-	int err;
 
 	pid = vfork();
 	if (pid > 0) {
-		waitpid(pid, &err, 0);
-		if (err < 0) {
-			fprintf(stderr, "psh: %s execution halted with error code %d\n", argv[0], err);
-		}
+		/* TODO: no child exit code handling */
+		waitpid(pid, NULL, 0);
 	}
 	else if (!pid) {
 		/* Put process in its own process group */
