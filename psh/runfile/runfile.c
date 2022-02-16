@@ -29,6 +29,7 @@ int psh_runfile(int argc, char **argv)
 
 	pid = vfork();
 	if (pid > 0) {
+		/* TODO: no child exit code handling */
 		waitpid(pid, NULL, 0);
 	}
 	else if (!pid) {
@@ -77,6 +78,7 @@ int psh_runfile(int argc, char **argv)
 	/* Take back terminal control */
 	tcsetpgrp(STDIN_FILENO, getpgid(getpid()));
 
+	/* TODO: add publishing the child process return value to env */
 	return pid > 0 ? EOK : -1;
 }
 
