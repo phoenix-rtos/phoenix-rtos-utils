@@ -31,7 +31,6 @@ int psh_touch(int argc, char **argv)
 {
 	FILE *file;
 	int i;
-	struct timeval times;
 
 	if (argc < 2) {
 		fprintf(stderr, "usage: %s <file path>...\n", argv[0]);
@@ -53,9 +52,7 @@ int psh_touch(int argc, char **argv)
 		else {
 			/* file exists -> update timestamps */
 			fclose(file);
-			times.tv_sec = time(NULL);
-			times.tv_usec = 0;
-			if (utimes(argv[i], &times) == 0)
+			if (utimes(argv[i], NULL) == 0)
 				continue;
 		}
 		fprintf(stderr, "psh: failed to touch %s\n", argv[i]);
@@ -67,6 +64,6 @@ int psh_touch(int argc, char **argv)
 
 void __attribute__((constructor)) touch_registerapp(void)
 {
-	static psh_appentry_t app = {.name = "touch", .run = psh_touch, .info = psh_touchinfo};
+	static psh_appentry_t app = { .name = "touch", .run = psh_touch, .info = psh_touchinfo };
 	psh_registerapp(&app);
 }
