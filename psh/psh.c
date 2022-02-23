@@ -123,6 +123,7 @@ int main(int argc, char **argv)
 		/* Run app */
 		if ((app = psh_findapp(base)) != NULL) {
 			err = app->run(argc, argv);
+			psh_common.exitStatus = err;
 		}
 		else {
 			fprintf(stderr, "psh: %s: unknown command\n", argv[0]);

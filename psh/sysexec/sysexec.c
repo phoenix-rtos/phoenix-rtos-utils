@@ -105,7 +105,8 @@ static int psh_sysexec_checkcommand(int argc, const char **argv)
 
 int psh_sysexec(int argc, char **argv)
 {
-	int pid;
+	pid_t pid, err;
+	int status = 0;
 	const char *progname, *mapname;
 
 	if (argc < 2) {
@@ -130,10 +131,12 @@ int psh_sysexec(int argc, char **argv)
 	}
 
 	if (pid > 0) {
-		waitpid(pid, NULL, 0);
+		do {
+			err = waitpid(pid, &status, 0);
+		} while (err < 0 && errno == EINTR);
 		/* Take back terminal control */
 		tcsetpgrp(STDIN_FILENO, getpgrp());
-		return EOK;
+		return err >= 0 ? WEXITSTATUS(status) : errno;
 	}
 
 	switch (pid) {
@@ -156,7 +159,7 @@ int psh_sysexec(int argc, char **argv)
 			fprintf(stderr, "psh: sysexec failed with code %d\n", pid);
 	}
 
-	return EOK;
+	return pid < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
 
