@@ -25,12 +25,14 @@
 
 int psh_runfile(int argc, char **argv)
 {
-	pid_t pid;
+	pid_t pid, ret;
+	int status = 0;
 
 	pid = vfork();
 	if (pid > 0) {
-		/* TODO: no child exit code handling */
-		waitpid(pid, NULL, 0);
+		do {
+			ret = waitpid(pid, &status, 0);
+		} while (ret < 0 && errno == EINTR);
 	}
 	else if (!pid) {
 		/* Put process in its own process group */
@@ -78,8 +80,7 @@ int psh_runfile(int argc, char **argv)
 	/* Take back terminal control */
 	tcsetpgrp(STDIN_FILENO, getpgid(getpid()));
 
-	/* TODO: add publishing the child process return value to env */
-	return pid > 0 ? EOK : -1;
+	return ((pid > 0) && (ret >= 0)) ? WEXITSTATUS(status) : EXIT_FAILURE;
 }
 
 

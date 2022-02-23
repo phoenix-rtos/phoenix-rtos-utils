@@ -1115,10 +1115,13 @@ static int psh_run(int exitable, const char *console)
 		if ((app = psh_findapp(argv[0])) == NULL && argv[0][0] == '/')
 			app = psh_findapp("/");
 
-		if (app != NULL)
+		if (app != NULL) {
 			err = app->run(argc, argv);
-		else
+			psh_common.exitStatus = err;
+		}
+		else {
 			printf("Unknown command!\n");
+		}
 
 		free(argv);
 		fflush(NULL);
