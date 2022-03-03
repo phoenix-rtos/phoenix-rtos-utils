@@ -20,7 +20,7 @@ LOCAL_LDFLAGS := -z stack-size=4096 -z noexecstack
 
 # TODO: search for dirs?
 PSH_ALLCOMMANDS := bind cat dmesg echo edit exec hm kill ls mem mkdir mount \
-nc nslookup perf ping ps reboot runfile sync sysexec top touch uptime
+nc nslookup perf ping pm ps reboot runfile sync sysexec top touch uptime
 PSH_COMMANDS ?= $(PSH_ALLCOMMANDS)
 PSH_APPLETS := pshapp help $(filter $(PSH_ALLCOMMANDS), $(PSH_COMMANDS))
 
