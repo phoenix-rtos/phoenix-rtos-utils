@@ -3,8 +3,8 @@
  *
  * cat - concatenate file(s) to standard output
  *
- * Copyright 2017, 2018, 2020, 2021 Phoenix Systems
- * Author: Pawel Pisarczyk, Jan Sikorski, Lukasz Kosinski, Mateusz Niewiadomski
+ * Copyright 2017, 2018, 2020-2022 Phoenix Systems
+ * Author: Pawel Pisarczyk, Jan Sikorski, Lukasz Kosinski, Mateusz Niewiadomski, Aleksander Kaminski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -19,6 +19,8 @@
 
 #include "../psh.h"
 
+#define SIZE_BUFF 1024
+
 void psh_catinfo(void)
 {
 	printf("concatenate file(s) to standard output");
@@ -31,45 +33,75 @@ static void psh_cat_help(const char *prog)
 }
 
 
+static inline int psh_cat_isExit(void)
+{
+	return ((psh_common.sigint != 0) || (psh_common.sigquit != 0) || (psh_common.sigstop != 0)) ? 1 : 0;
+}
+
+
 int psh_cat(int argc, char **argv)
 {
 	FILE *file;
 	char *buff;
-	size_t ret;
-	int c;
+	size_t ret, len, wrote;
+	int c, i, retval = EXIT_SUCCESS;
 
 	while ((c = getopt(argc, argv, "h")) != -1) {
 		switch (c) {
-		case 'h':
-		default:
-			psh_cat_help(argv[0]);
-			return EOK;
+			case 'h':
+				psh_cat_help(argv[0]);
+				break;
+			default:
+				psh_cat_help(argv[0]);
+				retval = EXIT_FAILURE;
+				break;
 		}
+
+		return retval;
 	}
 
-	if ((buff = malloc(1024)) == NULL) {
+	/* FIXME? We're operating on streams, there should be no need for big buffers */
+	if ((buff = malloc(SIZE_BUFF)) == NULL) {
 		fprintf(stderr, "cat: out of memory\n");
-		return -ENOMEM;
+		return EXIT_FAILURE;
 	}
 
-	for (; !psh_common.sigint && !psh_common.sigquit && !psh_common.sigstop && (optind < argc); optind++) {
-		if ((file = fopen(argv[optind], "r")) == NULL) {
-			fprintf(stderr, "cat: %s no such file\n", argv[optind]);
+	for (i = optind; (psh_cat_isExit() == 0) && (i < argc); ++i) {
+		if ((file = fopen(argv[i], "r")) == NULL) {
+			fprintf(stderr, "cat: %s no such file\n", argv[i]);
+			retval = EXIT_FAILURE;
 		}
 		else {
-			while (!psh_common.sigint && !psh_common.sigquit && !psh_common.sigstop && ((ret = fread(buff, 1, 1024, file)) > 0))
-				fwrite(buff, 1, ret, stdout);
+			while (psh_cat_isExit() == 0) {
+				if ((len = fread(buff, 1, SIZE_BUFF, file)) > 0) {
+					wrote = 0;
+					do {
+						if ((ret = fwrite(buff + wrote, 1, len, stdout)) == 0) {
+							retval = EXIT_FAILURE;
+							break;
+						}
+						len -= ret;
+						wrote += ret;
+					} while (len > 0);
+				}
+				else {
+					if (ferror(file) != 0) {
+						retval = EXIT_FAILURE;
+					}
+					break;
+				}
+			}
 			fclose(file);
 		}
 	}
 	free(buff);
 
-	return EOK;
+	return retval;
 }
 
 
 void __attribute__((constructor)) cat_registerapp(void)
 {
-	static psh_appentry_t app = {.name = "cat", .run = psh_cat, .info = psh_catinfo};
+	static psh_appentry_t app = { .name = "cat", .run = psh_cat, .info = psh_catinfo };
 	psh_registerapp(&app);
 }
