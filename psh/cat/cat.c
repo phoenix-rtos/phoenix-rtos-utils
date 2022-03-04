@@ -35,8 +35,7 @@ static void psh_cat_help(const char *prog)
 
 static inline int psh_cat_isExit(void)
 {
-	return ((psh_common.sigint != 0) || (psh_common.sigquit != 0) ||
-		(psh_common.sigstop != 0)) ? 1 : 0;
+	return ((psh_common.sigint != 0) || (psh_common.sigquit != 0) || (psh_common.sigstop != 0)) ? 1 : 0;
 }
 
 
@@ -103,6 +102,6 @@ int psh_cat(int argc, char **argv)
 
 void __attribute__((constructor)) cat_registerapp(void)
 {
-	static psh_appentry_t app = {.name = "cat", .run = psh_cat, .info = psh_catinfo};
+	static psh_appentry_t app = { .name = "cat", .run = psh_cat, .info = psh_catinfo };
 	psh_registerapp(&app);
 }
