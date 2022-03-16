@@ -106,7 +106,7 @@ static size_t *psh_ls_computerows(size_t *rows, size_t *cols, size_t nfiles)
 
 	/* Estimate lower bound of nrows */
 	for (i = 0; i < nfiles; i++)
-		sum += files[i].namelen;
+		sum += min(files[i].namelen, psh_ls_common.ws.ws_col - 1);
 
 	nrows = sum / psh_ls_common.ws.ws_col + 1;
 	ncols = nfiles / nrows + 1;
@@ -124,7 +124,7 @@ static size_t *psh_ls_computerows(size_t *rows, size_t *cols, size_t nfiles)
 		/* Compute widths of each column */
 		for (i = 0; i < nfiles; i++) {
 			col = i / nrows;
-			colsz[col] = max(colsz[col], files[i].namelen + 2);
+			colsz[col] = max(colsz[col], min(files[i].namelen + 2, psh_ls_common.ws.ws_col - 1));
 		}
 		colsz[ncols - 1] -= 2;
 
