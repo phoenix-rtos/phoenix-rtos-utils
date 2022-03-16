@@ -145,17 +145,27 @@ static size_t *psh_ls_computerows(size_t *rows, size_t *cols, size_t nfiles)
 
 static void psh_ls_printfile(fileinfo_t *file, int width)
 {
-	if (S_ISREG(file->stat.st_mode) && file->stat.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH))
+	unsigned char iscolor = 1;
+	if (S_ISREG(file->stat.st_mode) && file->stat.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) {
 		printf(EXE_COLOR);
-	else if (S_ISDIR(file->stat.st_mode))
+	}
+	else if (S_ISDIR(file->stat.st_mode)) {
 		printf(DIR_COLOR);
-	else if (S_ISCHR(file->stat.st_mode) || S_ISBLK(file->stat.st_mode))
+	}
+	else if (S_ISCHR(file->stat.st_mode) || S_ISBLK(file->stat.st_mode)) {
 		printf(DEV_COLOR);
-	else if (S_ISLNK(file->stat.st_mode))
+	}
+	else if (S_ISLNK(file->stat.st_mode)) {
 		printf(SYM_COLOR);
+	}
+	else {
+		iscolor = 0;
+	}
 
 	printf("%-*s", width, file->name);
-	printf("\033[0m");
+	if (iscolor) {
+		printf("\033[0m");
+	}
 }
 
 
