@@ -32,6 +32,7 @@ static int psh_mem_summary(void)
 	info.page.mapsz = -1;
 	info.entry.mapsz = -1;
 	info.entry.kmapsz = -1;
+	info.maps.mapsz = -1;
 
 	meminfo(&info);
 	printf("(%d+%d)/%dKB ", (info.page.alloc - info.page.boot) / 1024, info.page.boot / 1024, (info.page.alloc + info.page.free) / 1024);
@@ -227,26 +228,115 @@ static int psh_mem_page(void)
 }
 
 
-void psh_meminfo(void)
+static void psh_meminfo(void)
 {
 	printf("prints memory map");
 }
 
 
-int psh_mem(int argc, char **argv)
+static int psh_help(const char *progname)
+{
+	printf("Usage: %s [OPTION]\n"
+		"\t-m    process memory info\n"
+		"\t-p    page info\n"
+		"\t-s    shared memory maps info\n"
+		"\t-h    help\n", progname);
+
+	return 0;
+}
+
+
+static void psh_bytes2humanReadable(char *buff, size_t buffsz, size_t bytes)
+{
+	static const char suf[4][4] = { "B", "KiB", "MiB", "GiB" };
+	int i;
+	size_t tmp;
+
+	for (i = 0; i < 3; ++i) {
+		tmp = bytes / 1024;
+		if (tmp == 0) {
+			break;
+		}
+		bytes = tmp;
+	}
+
+	snprintf(buff, buffsz, "%zu %s", bytes, suf[i]);
+}
+
+
+static int psh_sharedMaps(void)
+{
+	meminfo_t info;
+	int i;
+	char buff[32];
+
+	info.page.mapsz = -1;
+	info.entry.kmapsz = -1;
+	info.entry.mapsz = -1;
+	info.maps.mapsz = 0;
+	info.maps.map = NULL;
+
+	meminfo(&info);
+	if (info.maps.mapsz == 0) {
+		printf("mem: no shared memory maps are present\n");
+		return 0;
+	}
+
+	info.maps.map = malloc(info.maps.mapsz * sizeof(mapinfo_t));
+	if (info.maps.map == NULL) {
+		fprintf(stderr, "mem: out of memory\n");
+		return -ENOMEM;
+	}
+	meminfo(&info);
+
+	printf("All maps:\n");
+	psh_bytes2humanReadable(buff, sizeof(buff), info.maps.total);
+	printf("\tTotal: %s (%zu bytes)\n", buff, info.maps.total);
+	psh_bytes2humanReadable(buff, sizeof(buff), info.maps.free);
+	printf("\tFree:  %s (%zu bytes)\n", buff, info.maps.free);
+
+	for (i = 0; i < info.maps.mapsz; ++i) {
+		if (info.maps.map[i].alloc == 0 && info.maps.map[i].free == 0) {
+			continue;
+		}
+
+		printf("\nMap #%d\n", info.maps.map[i].id);
+		psh_bytes2humanReadable(buff, sizeof(buff), info.maps.map[i].alloc + info.maps.map[i].free);
+		printf("\tSize:     %s (%zu bytes)\n", buff, info.maps.map[i].alloc + info.maps.map[i].free);
+		psh_bytes2humanReadable(buff, sizeof(buff), info.maps.map[i].alloc);
+		printf("\tAlloc:    %s (%zu bytes)\n", buff, info.maps.map[i].alloc);
+		psh_bytes2humanReadable(buff, sizeof(buff), info.maps.map[i].free);
+		printf("\tFree:     %s (%zu bytes)\n", buff, info.maps.map[i].free);
+		printf("\tPhysical: 0x%p:0x%p\n", (void *)info.maps.map[i].pstart, (void *)info.maps.map[i].pend);
+		printf("\tVirtual:  0x%p:0x%p\n", (void *)info.maps.map[i].vstart, (void *)info.maps.map[i].vend);
+	}
+
+	free(info.maps.map);
+
+	return 0;
+}
+
+
+static int psh_mem(int argc, char **argv)
 {
 	int c;
 
 	if (argc == 1)
 		return psh_mem_summary();
 
-	while ((c = getopt(argc, argv, "mp")) != -1) {
+	while ((c = getopt(argc, argv, "mpsh")) != -1) {
 		switch (c) {
 		case 'm':
 			return psh_mem_process(argv[optind]);
 
 		case 'p':
 			return psh_mem_page();
+
+		case 'h':
+			return psh_help(argv[0]);
+
+		case 's':
+			return psh_sharedMaps();
 
 		default:
 			return EOK;
