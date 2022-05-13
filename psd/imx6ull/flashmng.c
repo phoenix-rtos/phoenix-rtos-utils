@@ -199,17 +199,8 @@ int flashmng_checkRange(oid_t oid, unsigned int start, unsigned int size, dbbt_t
 /* write JFFS2 clean block markers */
 int flashmng_cleanMarkers(oid_t oid, unsigned int start, unsigned int size)
 {
-	void *metabuf;
 	int ret = 0;
 	uint32_t addr;
-
-	metabuf = malloc(flashmng_common.info.writesz);
-
-	if (!metabuf)
-		return -1;
-
-	memset(metabuf, 0xff, flashmng_common.info.writesz);
-	memcpy(metabuf, &oob_cleanmarker, sizeof(oob_cleanmarker));
 
 	for (addr = start; addr < start + size; addr += flashmng_common.info.erasesz) {
 		unsigned int blockno = addr / flashmng_common.info.erasesz; /* note: this is relative to the beginning of the partition */
@@ -218,10 +209,9 @@ int flashmng_cleanMarkers(oid_t oid, unsigned int start, unsigned int size)
 			printf("CleanMarkers: block %u is marked as bad - skipping\n", blockno);
 			continue;
 		}
-		ret += flashmng_writedev(oid, addr, metabuf, flashmng_common.info.writesz, flashsrv_devctl_writemeta);
+		ret += flashmng_writedev(oid, addr, (void *)&oob_cleanmarker, sizeof(oob_cleanmarker), flashsrv_devctl_writemeta);
 	}
 
-	free(metabuf);
 	return ret;
 }
 
