@@ -78,10 +78,9 @@ static struct {
 
 
 /* TODO remove after fixing flash-imxrt */
-#define SIZE_FPAGE 256
 static size_t fwrite_workaround(const void *ptr, size_t size, size_t nmemb, FILE *stream)
 {
-	static unsigned char pagebuff[SIZE_FPAGE];
+	static unsigned char chunkbuff[SIZE_SECTOR];
 	long pos, tmp, missalign;
 	size_t chunk, offset = 0;
 	size_t tsize;
@@ -93,7 +92,7 @@ static size_t fwrite_workaround(const void *ptr, size_t size, size_t nmemb, FILE
 		return 0;
 	}
 
-	missalign = pos % SIZE_FPAGE;
+	missalign = pos % SIZE_SECTOR;
 
 	if (missalign != 0) {
 		tmp = pos - missalign;
@@ -101,22 +100,22 @@ static size_t fwrite_workaround(const void *ptr, size_t size, size_t nmemb, FILE
 			return 0;
 		}
 
-		if (fread(pagebuff, sizeof(pagebuff), 1, stream) == 0) {
+		if (fread(chunkbuff, sizeof(chunkbuff), 1, stream) == 0) {
 			return 0;
 		}
 
-		chunk = SIZE_FPAGE - missalign;
+		chunk = SIZE_SECTOR - missalign;
 		if (chunk > tsize) {
 			chunk = tsize;
 		}
 
-		memcpy(pagebuff + missalign, ptr, chunk);
+		memcpy(chunkbuff + missalign, ptr, chunk);
 
 		if (fseek(stream, tmp, SEEK_SET) != 0) {
 			return 0;
 		}
 
-		if (fwrite(pagebuff, sizeof(pagebuff), 1, stream) == 0) {
+		if (fwrite(chunkbuff, sizeof(chunkbuff), 1, stream) == 0) {
 			return 0;
 		}
 
@@ -124,13 +123,13 @@ static size_t fwrite_workaround(const void *ptr, size_t size, size_t nmemb, FILE
 		offset += chunk;
 	}
 
-	while (tsize >= SIZE_FPAGE) {
-		if (fwrite((const char *)ptr + offset, SIZE_FPAGE, 1, stream) == 0) {
+	while (tsize >= SIZE_SECTOR) {
+		if (fwrite((const char *)ptr + offset, SIZE_SECTOR, 1, stream) == 0) {
 			return 0;
 		}
 
-		offset += SIZE_FPAGE;
-		tsize -= SIZE_FPAGE;
+		offset += SIZE_SECTOR;
+		tsize -= SIZE_SECTOR;
 	}
 
 	if (tsize != 0) {
@@ -139,17 +138,17 @@ static size_t fwrite_workaround(const void *ptr, size_t size, size_t nmemb, FILE
 			return 0;
 		}
 
-		if (fread(pagebuff, sizeof(pagebuff), 1, stream) == 0) {
+		if (fread(chunkbuff, sizeof(chunkbuff), 1, stream) == 0) {
 			return 0;
 		}
 
-		memcpy(pagebuff, (const char *)ptr + offset, tsize);
+		memcpy(chunkbuff, (const char *)ptr + offset, tsize);
 
 		if (fseek(stream, tmp, SEEK_SET) != 0) {
 			return 0;
 		}
 
-		if (fwrite(pagebuff, sizeof(pagebuff), 1, stream) == 0) {
+		if (fwrite(chunkbuff, sizeof(chunkbuff), 1, stream) == 0) {
 			return 0;
 		}
 	}
