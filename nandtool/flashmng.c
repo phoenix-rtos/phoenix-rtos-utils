@@ -111,7 +111,6 @@ int flashmng_erase(oid_t oid, unsigned int start, unsigned int size)
 /* write JFFS2 clean block markers */
 int flashmng_cleanMarkers(oid_t oid, unsigned int start, unsigned int size)
 {
-	void *metabuf;
 	int ret = 0;
 	unsigned int blockno;
 	flashsrv_info_t *info = flashmng_info(oid);
@@ -119,23 +118,14 @@ int flashmng_cleanMarkers(oid_t oid, unsigned int start, unsigned int size)
 	if (info == NULL)
 		return -EFAULT;
 
-	metabuf = malloc(info->writesz);
-
-	if (metabuf == NULL)
-		return -ENOMEM;
-
-	memset(metabuf, 0xff, info->writesz);
-	memcpy(metabuf, &oob_cleanmarker, sizeof(oob_cleanmarker));
-
 	for (blockno = start; blockno < start + size; ++blockno) {
 		if (flashmng_isbad(oid, blockno)) {
 			printf("cleanMarkers: block %u is marked as bad - skipping\n", blockno);
 			continue;
 		}
-		ret += writemeta(oid, blockno * info->erasesz, metabuf, info->writesz);
+		ret += writemeta(oid, blockno * info->erasesz, (void *)&oob_cleanmarker, sizeof(oob_cleanmarker));
 	}
 
-	free(metabuf);
 	return ret;
 }
 
