@@ -84,8 +84,9 @@ static size_t fwrite_workaround(const void *ptr, size_t size, size_t nmemb, FILE
 	static unsigned char pagebuff[SIZE_FPAGE];
 	long pos, tmp, missalign;
 	size_t chunk, offset = 0;
+	size_t tsize;
 
-	size *= nmemb;
+	tsize = size * nmemb;
 
 	pos = ftell(stream);
 	if (pos < 0) {
@@ -105,8 +106,8 @@ static size_t fwrite_workaround(const void *ptr, size_t size, size_t nmemb, FILE
 		}
 
 		chunk = SIZE_FPAGE - missalign;
-		if (chunk > size) {
-			chunk = size;
+		if (chunk > tsize) {
+			chunk = tsize;
 		}
 
 		memcpy(pagebuff + missalign, ptr, chunk);
@@ -119,20 +120,20 @@ static size_t fwrite_workaround(const void *ptr, size_t size, size_t nmemb, FILE
 			return 0;
 		}
 
-		size -= chunk;
+		tsize -= chunk;
 		offset += chunk;
 	}
 
-	while (size >= SIZE_FPAGE) {
+	while (tsize >= SIZE_FPAGE) {
 		if (fwrite((const char *)ptr + offset, SIZE_FPAGE, 1, stream) == 0) {
 			return 0;
 		}
 
 		offset += SIZE_FPAGE;
-		size -= SIZE_FPAGE;
+		tsize -= SIZE_FPAGE;
 	}
 
-	if (size != 0) {
+	if (tsize != 0) {
 		tmp = ftell(stream);
 		if (tmp < 0) {
 			return 0;
@@ -142,7 +143,7 @@ static size_t fwrite_workaround(const void *ptr, size_t size, size_t nmemb, FILE
 			return 0;
 		}
 
-		memcpy(pagebuff, (const char *)ptr + offset, size);
+		memcpy(pagebuff, (const char *)ptr + offset, tsize);
 
 		if (fseek(stream, tmp, SEEK_SET) != 0) {
 			return 0;
@@ -152,6 +153,9 @@ static size_t fwrite_workaround(const void *ptr, size_t size, size_t nmemb, FILE
 			return 0;
 		}
 	}
+
+	/* Mimic real fwrite - set stream position correctly. Ignore error, write has happened */
+	(void)fseek(stream, pos + (size * nmemb), SEEK_SET);
 
 	return nmemb;
 }
