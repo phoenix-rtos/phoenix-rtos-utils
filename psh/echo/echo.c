@@ -35,14 +35,14 @@ static void psh_echo_help(const char *prog)
 }
 
 
-static size_t psh_echo_printVar(const char *var)
+static size_t psh_echo_printVar(const char *var, FILE *stream)
 {
 	size_t i;
 
 	if (*var == '?') {
 		/* ? is a special case - we eat only ?, even if no space is present */
 		i = 1;
-		printf("%d", psh_common.exitStatus);
+		fprintf(stream, "%d", psh_common.exitStatus);
 	}
 	else {
 		/* Just eat non-existend variable name */
@@ -57,8 +57,9 @@ static size_t psh_echo_printVar(const char *var)
 
 static int psh_echo(int argc, char **argv)
 {
-	int c, i;
+	int c, i, argend = argc;
 	size_t j;
+	FILE *output = stdout;
 
 	while ((c = getopt(argc, argv, "h")) != -1) {
 		switch (c) {
@@ -72,21 +73,44 @@ static int psh_echo(int argc, char **argv)
 		}
 	}
 
-	for (i = optind; i < argc; ++i) {
-		if (i != optind)
-			putchar(' ');
+	if (argc - optind > 2) {
+		if (strcmp(argv[argc - 2], ">") == 0) {
+			output = fopen(argv[argc - 1], "w");
+		}
+		else if (strcmp(argv[argc - 2], ">>") == 0) {
+			output = fopen(argv[argc - 1], "a");
+		}
+
+		if (output == NULL) {
+			fprintf(stderr, "echo: Failed to open %s\n", argv[argc - 1]);
+			return EXIT_FAILURE;
+		}
+		else if (output != stdout) {
+			argend = argc - 2;
+		}
+	}
+
+	for (i = optind; i < argend; ++i) {
+		if (i != optind) {
+			fputc(' ', output);
+		}
 
 		for (j = 0; argv[i][j] != '\0'; ++j) {
 			if (argv[i][j] == '$') {
-				j += psh_echo_printVar(&argv[i][j + 1]);
+				j += psh_echo_printVar(&argv[i][j + 1], output);
 			}
 			else if (argv[i][j] != '"') { /* Primitive - just eat "" */
-				putchar(argv[i][j]);
+				fputc(argv[i][j], output);
 			}
 		}
 	}
 
-	putchar('\n');
+	fputc('\n', output);
+	fflush(output);
+
+	if (output != stdout) {
+		fclose(output);
+	}
 
 	return EOK;
 }
