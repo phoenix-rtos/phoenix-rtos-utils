@@ -26,6 +26,12 @@ PSH_APPLETS := pshapp help $(filter $(PSH_ALLCOMMANDS), $(PSH_COMMANDS))
 
 SRCS := $(foreach app, $(PSH_APPLETS), $(wildcard $(LOCAL_PATH)$(app)/*.c))
 
+# Header for project-specific applets
+HEADERS:= $(LOCAL_PATH)/psh.h
+
+# Project-specific applets .a files and their dependencies
+LIBS := $(PSH_PROJECT_DEPS)
+
 # Applets to create links:
 PSH_LINK_APPLETS := $(PSH_APPLETS) pshlogin
 # custom installation - automatically create rootfs hardlinks for all applets
