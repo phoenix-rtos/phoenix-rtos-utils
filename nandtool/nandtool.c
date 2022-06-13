@@ -189,6 +189,7 @@ static void nandtool_help(const char *prog)
 	printf("\t-r                - flash raw data\n");
 	printf("\t-s <block>        - start flashing from given block (requires -i)\n");
 	printf("\t-h                - print this help message\n");
+	printf("\t-q                - quiet: don't print flashing progress\n");
 }
 
 
@@ -201,7 +202,7 @@ int main(int argc, char **argv)
 	if (isatty(STDOUT_FILENO))
 		nandtool_common.interactive = 1;
 
-	while ((c = getopt(argc, argv, "e:i:r:s:chj")) != -1) {
+	while ((c = getopt(argc, argv, "e:i:r:s:chjq")) != -1) {
 		switch (c) {
 			case 'e':
 				tok = strtok(optarg, ":");
@@ -230,17 +231,21 @@ int main(int argc, char **argv)
 				check = 1;
 				break;
 
+			case 'q':
+				nandtool_common.interactive = 0;
+				break;
+
 			case 'h':
 			default:
 				nandtool_help(argv[0]);
-				return EOK;
+				return 0;
 		}
 	}
 
 	if (optind >= argc) {
 		fprintf(stderr, "nandtool: missing device arg\n");
 		nandtool_help(argv[0]);
-		return -EINVAL;
+		return 1;
 	}
 
 	if ((dev = realpath(argv[optind], NULL)) == NULL) {
