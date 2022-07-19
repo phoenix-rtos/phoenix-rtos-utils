@@ -495,7 +495,7 @@ static int updateRecords(FILE *part, fileheader_t *file)
 		record->id = oldrecord->id;
 		record->checksum = 0;
 		memcpy(record->data, oldrecord->data, file->recordsz);
-		record->checksum = calcChecksum(record, sizeof(entry_t) + file->recordsz);
+		record->checksum = calcChecksum(record->data, file->recordsz);
 
 		if (writeRecord(part, common.freeSector, record, file->recordsz, i) < 0) {
 			free(record);
