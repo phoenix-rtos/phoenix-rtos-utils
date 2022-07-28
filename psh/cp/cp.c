@@ -82,6 +82,7 @@ static int psh_cp(int argc, char **argv)
 			close(fdsrc);
 			retval = EXIT_FAILURE;
 			fprintf(stderr, "cp: stat failed: %s\n", strerror(errno));
+			break;
 		}
 
 		if (!S_ISREG(stat.st_mode)) {
