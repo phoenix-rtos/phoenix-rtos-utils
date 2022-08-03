@@ -74,14 +74,14 @@ static int psh_cp(int argc, char **argv)
 		fdsrc = open(argv[optind], O_RDONLY);
 		if (fdsrc < 0) {
 			retval = EXIT_FAILURE;
-			fprintf(stderr, "cp: could not open source file - %s\n", strerror(errno));
+			perror("cp: could not open source file");
 			break;
 		}
 
 		if (fstat(fdsrc, &stat) < 0) {
 			close(fdsrc);
 			retval = EXIT_FAILURE;
-			fprintf(stderr, "cp: stat failed: %s\n", strerror(errno));
+			perror("cp: stat failed");
 			break;
 		}
 
@@ -96,7 +96,7 @@ static int psh_cp(int argc, char **argv)
 		if (src == NULL) {
 			close(fdsrc);
 			retval = EXIT_FAILURE;
-			fprintf(stderr, "cp: could not open source file: %s\n", strerror(errno));
+			perror("cp: could not open source file");
 			break;
 		}
 
@@ -115,7 +115,7 @@ static int psh_cp(int argc, char **argv)
 				destpath = malloc(destlen + filelen + 2);
 				if (destpath == NULL) {
 					retval = EXIT_FAILURE;
-					fprintf(stderr, "cp: out of memory: %s\n", strerror(errno));
+					perror("cp");
 					break;
 				}
 
@@ -127,12 +127,12 @@ static int psh_cp(int argc, char **argv)
 
 				if (fddst < 0) {
 					retval = EXIT_FAILURE;
-					fprintf(stderr, "cp: could not open destination file: %s\n", strerror(errno));
+					perror("cp: could not open destination file");
 					break;
 				}
 			}
 			else {
-				fprintf(stderr, "cp: could not open destination file: %s\n", strerror(errno));
+				perror("cp: could not open destination file");
 				retval = EXIT_FAILURE;
 				break;
 			}
@@ -142,7 +142,7 @@ static int psh_cp(int argc, char **argv)
 		if (dst == NULL) {
 			close(fddst);
 			retval = EXIT_FAILURE;
-			fprintf(stderr, "cp: could not open destination file: %s\n", strerror(errno));
+			perror("cp: could not open destination file");
 			break;
 		}
 
@@ -191,17 +191,17 @@ static int psh_cp(int argc, char **argv)
 
 		if (chown(attrpath, stat.st_uid, stat.st_gid) < 0) {
 			retval = EXIT_FAILURE;
-			fprintf(stderr, "cp: destination chown failed: %s\n", strerror(errno));
+			perror("cp: destination chown failed");
 		}
 
 		if (chmod(attrpath, stat.st_mode) < 0) {
 			retval = EXIT_FAILURE;
-			fprintf(stderr, "cp: destination chmod failed: %s\n", strerror(errno));
+			perror("cp: destination chmod failed");
 		}
 
 		if (utimes(attrpath, times) < 0) {
 			retval = EXIT_FAILURE;
-			fprintf(stderr, "cp: destination utimes failed: %s\n", strerror(errno));
+			perror("cp: destination utimes failed");
 		}
 	}
 
