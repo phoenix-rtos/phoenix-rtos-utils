@@ -1001,8 +1001,8 @@ static int psh_run(int exitable, const char *console)
 	psh_histent_t *entry;
 	const psh_appentry_t *app;
 	struct termios orig;
-	char *cmd, **argv;
-	int err, n, argc;
+	char *tmp, *cmd, **argv;
+	int cnt, err, n, argc;
 	pid_t pgrp;
 	int retries;
 
@@ -1112,8 +1112,25 @@ static int psh_run(int exitable, const char *console)
 		optind = 1;
 
 		/* Find and run */
-		if ((app = psh_findapp(argv[0])) == NULL && argv[0][0] == '/')
-			app = psh_findapp("/");
+		app = psh_findapp(argv[0]);
+		if (app == NULL) {
+
+			/* Allow executable path start with "/", "./", "../" */
+			cnt = 0;
+			for (tmp = argv[0]; *tmp; tmp++) {
+				if (*tmp != '.') {
+					if (*tmp != '/') {
+						cnt = 3;
+					}
+					break;
+				}
+				cnt++;
+			}
+
+			if (cnt < 3 && *tmp == '/') {
+				app = psh_findapp("/");
+			}
+		}
 
 		if (app != NULL) {
 			err = app->run(argc, argv);
