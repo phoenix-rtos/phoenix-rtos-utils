@@ -197,7 +197,7 @@ int main(int argc, char *argv[])
 		beginthread(rx_thread, 4, stack, 1024, f);
 		tx_thread(f);
 
-		threadJoin(0);
+		threadJoin(-1, 0);
 		free(stack);
 
 		fprintf(stderr, "Terminal done\n");
