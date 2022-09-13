@@ -22,11 +22,13 @@
 
 #include "../psh.h"
 
+#define SIGNAL_SHIFT 128
+
 
 int psh_runfile(int argc, char **argv)
 {
 	pid_t pid, ret;
-	int status = 0;
+	int status = 0, retval = 0;
 
 	pid = vfork();
 	if (pid > 0) {
@@ -80,7 +82,19 @@ int psh_runfile(int argc, char **argv)
 	/* Take back terminal control */
 	tcsetpgrp(STDIN_FILENO, getpgid(getpid()));
 
-	return ((pid > 0) && (ret >= 0)) ? WEXITSTATUS(status) : EXIT_FAILURE;
+	if (!((pid > 0) && (ret >= 0))) {
+		retval = EXIT_FAILURE;
+	}
+	else if (WIFSIGNALED(status) != 0) {
+		/* Checking for the signal termination */
+		retval = SIGNAL_SHIFT + WTERMSIG(status);
+	}
+	else {
+		/* Checking for the normal termination */
+		retval = WEXITSTATUS(status);
+	}
+
+	return retval;
 }
 
 
