@@ -6,4 +6,4 @@
 # Copyright 2019 Phoenix Systems
 #
 
-DEFAULT_COMPONENTS := psh psd psd-old nandtool
+DEFAULT_COMPONENTS := psh psd psd-old nandtool metacheck
