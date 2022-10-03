@@ -131,14 +131,11 @@ static int isErased(const uint8_t *buf, size_t buflen)
 
 static uint8_t reverse_bit(uint8_t in_byte)
 {
-	int i;
-	uint8_t out_byte = 0;
+	uint8_t out_byte = in_byte;
 
-	for (i = 0; i < 8; i++) {
-		if (in_byte & ((0x80) >> i)) {
-			out_byte |= 1 << i;
-		}
-	}
+	out_byte = (((out_byte & 0xaa) >> 1) | ((out_byte & 0x55) << 1));
+	out_byte = (((out_byte & 0xcc) >> 2) | ((out_byte & 0x33) << 2));
+	out_byte = (((out_byte & 0xf0) >> 4) | ((out_byte & 0x0f) << 4));
 
 	return out_byte;
 }
