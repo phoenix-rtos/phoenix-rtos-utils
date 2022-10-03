@@ -38,7 +38,7 @@ static int psh_mem_summary(void)
 	printf("(%d+%d)/%dKB ", (info.page.alloc - info.page.boot) / 1024, info.page.boot / 1024, (info.page.alloc + info.page.free) / 1024);
 	printf("%d/%d entries\n", info.entry.total - info.entry.free, info.entry.total);
 
-	return EOK;
+	return 0;
 }
 
 
@@ -166,7 +166,7 @@ static int psh_mem_process(char *memarg)
 	free(info.entry.map);
 	free(info.entry.kmap);
 
-	return EOK;
+	return 0;
 }
 
 
@@ -224,7 +224,7 @@ static int psh_mem_page(void)
 	}
 
 	free(info.page.map);
-	return EOK;
+	return 0;
 }
 
 
@@ -322,33 +322,33 @@ static int psh_mem(int argc, char **argv)
 	int c;
 
 	if (argc == 1)
-		return psh_mem_summary();
+		return psh_mem_summary() < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 
 	while ((c = getopt(argc, argv, "mpsh")) != -1) {
 		switch (c) {
 		case 'm':
-			return psh_mem_process(argv[optind]);
+			return psh_mem_process(argv[optind]) < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 
 		case 'p':
-			return psh_mem_page();
+			return psh_mem_page() < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 
 		case 'h':
-			return psh_help(argv[0]);
+			return psh_help(argv[0]) < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 
 		case 's':
-			return psh_sharedMaps();
+			return psh_sharedMaps() < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 
 		default:
-			return EOK;
+			return EXIT_FAILURE;
 		}
 	}
 
 	if (optind < argc) {
 		fprintf(stderr, "mem: unknown argument: %s\n", argv[optind]);
-		return -EINVAL;
+		return EXIT_FAILURE;
 	}
 
-	return EOK;
+	return EXIT_SUCCESS;
 }
 
 
