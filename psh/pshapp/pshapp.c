@@ -254,7 +254,7 @@ int psh_prefix(unsigned int base, int x, int y, unsigned int prec, char *buff)
 	else
 		sprintf(buff, "%d%s", ipart, prefix);
 
-	return EOK;
+	return 0;
 }
 
 
@@ -279,7 +279,7 @@ static void psh_printhistent(psh_histent_t *entry)
 static int psh_completepath(char *dir, char *base, char ***files)
 {
 	size_t i, size = 32, dlen = strlen(dir), blen = strlen(base);
-	int nfiles = 0, err = EOK;
+	int nfiles = 0, err = 0;
 	char *path, **rfiles;
 	struct stat st;
 	DIR *stream;
@@ -412,7 +412,7 @@ static int psh_printfiles(char **files, int nfiles)
 	fflush(stdout);
 	free(colsz);
 
-	return EOK;
+	return 0;
 }
 
 
@@ -501,7 +501,7 @@ extern void cfmakeraw(struct termios *termios);
 
 static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 {
-	int i, k, nfiles, err = EOK, esc = 0, n = 0, m = 0, ln = 0, hp = cmdhist->he;
+	int i, k, nfiles, err = 0, esc = 0, n = 0, m = 0, ln = 0, hp = cmdhist->he;
 	char c, *path, *fpath, *dir, *base, **files, buff[8];
 	struct termios raw = *orig;
 
@@ -820,7 +820,7 @@ static int psh_parsecmd(char *line, int *argc, char ***argv)
 	}
 	(*argv)[*argc] = NULL;
 
-	return EOK;
+	return 0;
 }
 
 
@@ -897,7 +897,7 @@ static int psh_runscript(char *path)
 	free(line);
 	fclose(stream);
 
-	return EOK;
+	return 0;
 }
 
 
@@ -923,7 +923,7 @@ int psh_history(int argc, char **argv)
 
 	if (cmdhist == NULL) {
 		fprintf(stderr, "psh: history not initialized\n");
-		return EFAULT;
+		return EXIT_FAILURE;
 	}
 
 	/* Process options */
@@ -940,14 +940,14 @@ int psh_history(int argc, char **argv)
 
 				default:
 					psh_historyhelp();
-					return EOK;
+					return EXIT_FAILURE;
 			}
 		}
 
 		/* History command doesn't take any arguments */
 		if (optind < argc) {
 			psh_historyhelp();
-			return EOK;
+			return EXIT_FAILURE;
 		}
 
 		if (clear) {
@@ -973,7 +973,7 @@ int psh_history(int argc, char **argv)
 		}
 	}
 
-	return EOK;
+	return EXIT_SUCCESS;
 }
 
 
@@ -1191,7 +1191,7 @@ int psh_pshapp(int argc, char **argv)
 					printf("  -i <script path>:   selects psh script to execute\n");
 					printf("  -t <terminal dev>:  path to terminal device, default %s\n", _PATH_CONSOLE);
 					printf("  -h:                 shows this help message\n");
-					return EOK;
+					return EXIT_SUCCESS;
 			}
 		}
 
@@ -1199,14 +1199,14 @@ int psh_pshapp(int argc, char **argv)
 			path = argv[optind];
 
 		if (path != NULL)
-			return psh_runscript(path);
+			return psh_runscript(path) < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 	}
 	/* Run shell interactively */
 	else {
-		return psh_run(1, consolePath);
+		return psh_run(1, consolePath) < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 	}
 
-	return -ENOSYS;
+	return EXIT_FAILURE;
 }
 
 
