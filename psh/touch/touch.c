@@ -13,6 +13,7 @@
 
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <time.h>
@@ -30,11 +31,13 @@ void psh_touchinfo(void)
 int psh_touch(int argc, char **argv)
 {
 	FILE *file;
-	int i;
+	int i, err;
+
+	err = EXIT_SUCCESS;
 
 	if (argc < 2) {
 		fprintf(stderr, "usage: %s <file path>...\n", argv[0]);
-		return -EINVAL;
+		return EXIT_FAILURE;
 	}
 
 	for (i = 1; i < argc; i++) {
@@ -55,10 +58,11 @@ int psh_touch(int argc, char **argv)
 			if (utimes(argv[i], NULL) == 0)
 				continue;
 		}
+		err = EXIT_FAILURE;
 		fprintf(stderr, "psh: failed to touch %s\n", argv[i]);
 	}
 
-	return EOK;
+	return err;
 }
 
 
