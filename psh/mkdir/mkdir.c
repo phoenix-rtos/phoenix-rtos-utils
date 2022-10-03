@@ -13,6 +13,7 @@
 
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <sys/stat.h>
@@ -28,20 +29,23 @@ void psh_mkdirinfo(void)
 
 int psh_mkdir(int argc, char **argv)
 {
-	int i;
+	int i, err;
+
+	err = EXIT_SUCCESS;
 
 	if (argc < 2) {
 		fprintf(stderr, "usage: %s <dir path>...\n", argv[0]);
-		return -EINVAL;
+		return EXIT_FAILURE;
 	}
 
 	for (i = 1; i < argc; i++) {
 		if (mkdir(argv[i], 0) < 0) {
+			err = EXIT_FAILURE;
 			fprintf(stderr, "mkdir: failed to create %s directory: %s\n", argv[i], strerror(errno));
 		}
 	}
 
-	return EOK;
+	return err;
 }
 
 
