@@ -945,7 +945,7 @@ int psh_history(int argc, char **argv)
 		}
 
 		/* History command doesn't take any arguments */
-		if (optind < argc) {
+		if (optind <= argc && !help && !clear) {
 			psh_historyhelp();
 			return EXIT_FAILURE;
 		}
