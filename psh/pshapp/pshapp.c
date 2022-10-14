@@ -1109,7 +1109,7 @@ static int psh_run(int exitable, const char *console)
 		psh_common.sigstop = 0;
 
 		/* Reset getopt */
-		optind = 1;
+		optind = 0;
 
 		/* Find and run */
 		app = psh_findapp(argv[0]);
