@@ -62,7 +62,7 @@ static int psh_hm_spawn(proc_t *p)
 {
 	pid_t pid;
 
-	pid = spawnSyspage(NULL, p->path, p->argv);
+	pid = spawnSyspage(NULL, NULL, p->path, p->argv);
 	if (pid < 0)
 		return pid;
 
