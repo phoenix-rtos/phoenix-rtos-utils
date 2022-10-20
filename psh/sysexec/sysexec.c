@@ -109,6 +109,8 @@ int psh_sysexec(int argc, char **argv)
 	int status = 0;
 	const char *progname, *mapname;
 
+	/* TODO handle code map */
+
 	if (argc < 2) {
 		fprintf(stderr, "usage: %s [-m mapname] progname [args]...\n", argv[0]);
 		return -EINVAL;
@@ -124,10 +126,10 @@ int psh_sysexec(int argc, char **argv)
 			fprintf(stderr, "Invalid arguments!\n");
 			return -EINVAL;
 		}
-		pid = spawnSyspage((mapname = argv[2]), (progname = argv[3]), argv + 3);
+		pid = spawnSyspage(NULL, (mapname = argv[2]), (progname = argv[3]), argv + 3);
 	}
 	else {
-		pid = spawnSyspage((mapname = NULL), (progname = argv[1]), argv + 1);
+		pid = spawnSyspage(NULL, (mapname = NULL), (progname = argv[1]), argv + 1);
 	}
 
 	if (pid > 0) {
