@@ -42,6 +42,30 @@ static struct cleanmarker {
 };
 
 
+int flashmng_readraw(oid_t oid, offs_t addr, void *data, size_t size)
+{
+	msg_t msg = { 0 };
+	flash_i_devctl_t *idevctl = (flash_i_devctl_t *)msg.i.raw;
+	flash_o_devctl_t *odevctl = (flash_o_devctl_t *)msg.o.raw;
+
+	msg.type = mtDevCtl;
+	msg.o.data = data;
+	msg.o.size = size;
+
+	idevctl->type = flashsrv_devctl_readraw;
+	idevctl->readraw.oid = oid;
+	idevctl->readraw.size = size;
+	/* FIXME: Now imx6ull nand DevCtl API supports only 32-bit offsets */
+	idevctl->readraw.address = (uint32_t)addr;
+
+	if (msgSend(oid.port, &msg) < 0) {
+		return -1;
+	}
+
+	return odevctl->err;
+}
+
+
 static int write_ex(oid_t oid, uint32_t addr, const void *data, size_t size, int type)
 {
 	msg_t msg = { 0 };
