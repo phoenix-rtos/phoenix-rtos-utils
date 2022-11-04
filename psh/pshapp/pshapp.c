@@ -71,6 +71,7 @@ typedef struct {
 
 typedef struct {
 	psh_hist_t *cmdhist;
+	unsigned char newline;
 } pshapp_common_t;
 
 
@@ -660,6 +661,16 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 			}
 			/* LF or CR => go to new line and break (finished reading command) */
 			else if ((c == '\r') || (c == '\n')) {
+				/* handle crlf line ending */
+				if (c == '\r') {
+					pshapp_common.newline = 1;
+				}
+				/* lf after cr - skip */
+				else if ((c == '\n') && (pshapp_common.newline != 0)) {
+					pshapp_common.newline = 0;
+					break;
+				}
+
 				if (hp != cmdhist->he) {
 					psh_histentcmd(cmd, cmdhist->entries + hp);
 					hp = cmdhist->he;
@@ -668,10 +679,13 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 				write(STDOUT_FILENO, "\r\n", 2);
 				break;
 			}
-			/* ESC => process escape code keys */
-			else if (c == '\033') {
-				buff[esc++] = '^';
-				buff[esc++] = '[';
+			else {
+				pshapp_common.newline = 0;
+				/* ESC => process escape code keys */
+				if (c == '\033') {
+					buff[esc++] = '^';
+					buff[esc++] = '[';
+				}
 			}
 		}
 		/* Process regular characters */
