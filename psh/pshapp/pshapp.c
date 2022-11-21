@@ -1151,6 +1151,8 @@ static int psh_run(int exitable, const char *console)
 			psh_common.exitStatus = err;
 		}
 		else {
+			err = PSH_UNKNOWN_CMD;
+			psh_common.exitStatus = err;
 			printf("Unknown command!\n");
 		}
 

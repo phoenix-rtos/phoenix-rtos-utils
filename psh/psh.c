@@ -126,6 +126,8 @@ int main(int argc, char **argv)
 			psh_common.exitStatus = err;
 		}
 		else {
+			err = PSH_UNKNOWN_CMD;
+			psh_common.exitStatus = err;
 			fprintf(stderr, "psh: %s: unknown command\n", argv[0]);
 			break;
 		}
@@ -134,5 +136,5 @@ int main(int argc, char **argv)
 
 	keepidle(0);
 
-	return err == EOK ? 0 : 1;
+	return (err < 0) ? 1 : err;
 }
