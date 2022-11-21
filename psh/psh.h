@@ -14,6 +14,9 @@
 #ifndef _PSH_H_
 #define _PSH_H_
 
+/* Exit code based on POSIX - Shell Command Language */
+#define PSH_UNKNOWN_CMD 127
+
 
 typedef struct psh_app {
 	const char name[11];
