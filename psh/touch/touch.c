@@ -3,8 +3,8 @@
  *
  * touch - changes file timestamp
  *
- * Copyright 2017, 2018, 2020, 2021 Phoenix Systems
- * Author: Pawel Pisarczyk, Jan Sikorski, Maciej Purski, Lukasz Kosinski, Mateusz Niewiadomski
+ * Copyright 2017, 2018, 2020, 2021, 2022 Phoenix Systems
+ * Author: Pawel Pisarczyk, Jan Sikorski, Maciej Purski, Lukasz Kosinski, Mateusz Niewiadomski, Damian Loewnau
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -41,8 +41,8 @@ int psh_touch(int argc, char **argv)
 	}
 
 	for (i = 1; i < argc; i++) {
-		file = fopen(argv[i], "r");
-		if (file == NULL) {
+		/* try to update timestamps */
+		if (utimes(argv[i], NULL) != 0) {
 			if (errno == ENOENT) {
 				/* file does not exist -> create it */
 				file = fopen(argv[i], "w");
@@ -51,15 +51,9 @@ int psh_touch(int argc, char **argv)
 					continue;
 				}
 			}
+			err = EXIT_FAILURE;
+			fprintf(stderr, "psh: failed to touch %s\n", argv[i]);
 		}
-		else {
-			/* file exists -> update timestamps */
-			fclose(file);
-			if (utimes(argv[i], NULL) == 0)
-				continue;
-		}
-		err = EXIT_FAILURE;
-		fprintf(stderr, "psh: failed to touch %s\n", argv[i]);
 	}
 
 	return err;
