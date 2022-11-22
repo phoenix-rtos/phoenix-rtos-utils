@@ -14,9 +14,11 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <time.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 
 #include "../psh.h"
@@ -30,8 +32,7 @@ void psh_touchinfo(void)
 
 int psh_touch(int argc, char **argv)
 {
-	FILE *file;
-	int i, err;
+	int fd, i, err;
 
 	err = EXIT_SUCCESS;
 
@@ -45,14 +46,14 @@ int psh_touch(int argc, char **argv)
 		if (utimes(argv[i], NULL) != 0) {
 			if (errno == ENOENT) {
 				/* file does not exist -> create it */
-				file = fopen(argv[i], "w");
-				if (file != NULL) {
-					fclose(file);
+				fd = open(argv[i], (O_WRONLY | O_CREAT | O_TRUNC), DEFFILEMODE);
+				if (fd >= 0) {
+					close(fd);
 					continue;
 				}
 			}
 			err = EXIT_FAILURE;
-			fprintf(stderr, "psh: failed to touch %s\n", argv[i]);
+			fprintf(stderr, "psh: failed to touch %s: %s\n", argv[i], strerror(errno));
 		}
 	}
 
