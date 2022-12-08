@@ -1018,15 +1018,10 @@ static int psh_run(int exitable, const char *console)
 	char *tmp, *cmd, **argv;
 	int cnt, err, n, argc;
 	pid_t pgrp;
-	int retries;
 
-	/* This is temporary, until all architectures support /dev/console */
-	for (retries = 5; retries > 0; retries--) {
-		if (psh_ttyopen(console) == 0)
-			break;
-		else
-			usleep(100000);
-	}
+	/* Time for klog to print data from buffer */
+	usleep(500000);
+	psh_ttyopen(console);
 
 	/* Check if we run interactively */
 	if (!isatty(STDIN_FILENO))
