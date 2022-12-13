@@ -615,7 +615,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 						qsort(files, nfiles, sizeof(char *), psh_cmpname);
 						if ((err = psh_printfiles(files, nfiles)) < 0)
 							break;
-						write(STDOUT_FILENO, "\r\033[0J", 5);
+						write(STDOUT_FILENO, "\033[0J", 4);
 						write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
 						if (hp == cmdhist->he)
 							write(STDOUT_FILENO, *cmd, n + m);
@@ -651,7 +651,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 			/* FF => clear screen */
 			else if (c == '\014') {
 				write(STDOUT_FILENO, "\033[f", 3);
-				write(STDOUT_FILENO, "\r\033[0J", 5);
+				write(STDOUT_FILENO, "\033[0J", 4);
 				write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
 				if (hp != cmdhist->he)
 					psh_printhistent(cmdhist->entries + hp);
@@ -722,7 +722,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 					if (hp == cmdhist->he)
 						ln = n + m;
 					psh_movecursor(n + sizeof(PROMPT) - 1, -(n + sizeof(PROMPT) - 1));
-					write(STDOUT_FILENO, "\r\033[0J", 5);
+					write(STDOUT_FILENO, "\033[0J", 4);
 					write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
 					psh_printhistent(cmdhist->entries + (hp = (hp) ? hp - 1 : HISTSZ - 1));
 					n = cmdhist->entries[hp].n;
@@ -732,7 +732,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 			else if (k == kDown) {
 				if (hp != cmdhist->he) {
 					psh_movecursor(n + sizeof(PROMPT) - 1, -(n + sizeof(PROMPT) - 1));
-					write(STDOUT_FILENO, "\r\033[0J", 5);
+					write(STDOUT_FILENO, "\033[0J", 4);
 					write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
 					if ((hp = (hp + 1) % HISTSZ) == cmdhist->he) {
 						n = ln;
@@ -1073,7 +1073,7 @@ static int psh_run(int exitable, const char *console)
 	pshapp_common.cmdhist = cmdhist;
 
 	while (pgrp == tcgetpgrp(STDIN_FILENO)) {
-		write(STDOUT_FILENO, "\r\033[0J", 5);
+		write(STDOUT_FILENO, "\033[0J", 4);
 		write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
 
 		if ((n = psh_readcmd(&orig, cmdhist, &cmd)) < 0) {
