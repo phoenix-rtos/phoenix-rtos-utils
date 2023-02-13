@@ -352,19 +352,22 @@ static int psd_writeRegister(sdp_cmd_t *cmd)
 
 static int psd_writeFile(sdp_cmd_t *cmd)
 {
-	int res, err = hidOK, buffOffset = 0;
-	offs_t writesz, fileOffs;
-
+	int res, err = hidOK, buffOffset = 0, badBlock = 0;
+	offs_t writesz, fileOffs = cmd->address;
 	char *outdata = NULL;
 
-	fileOffs = cmd->address * psd_common.flash.writesz;
-
 	/* Check command parameters */
-	if (cmd->datasz + fileOffs > psd_common.partsz)
+	if (fileOffs % psd_common.flash.writesz != 0) {
 		return -eReport1;
+	}
 
-	if (lseek(psd_common.f->fd, fileOffs, SEEK_SET) < 0)
+	if (fileOffs + cmd->datasz > psd_common.partsz) {
 		return -eReport1;
+	}
+
+	if (lseek(psd_common.f->fd, fileOffs, SEEK_SET) < 0) {
+		return -eReport1;
+	}
 
 	printf("PSD: Writing file.\n");
 
@@ -388,8 +391,15 @@ static int psd_writeFile(sdp_cmd_t *cmd)
 			/* check for badblocks - TODO: test it */
 			if (fileOffs % psd_common.flash.erasesz == 0) {
 				while (flashmng_isBadBlock(psd_common.f->oid, fileOffs)) {
+					printf("writeFile: badblock at offs: 0x%x\n", (uint32_t)fileOffs);
+
+					/* Direct write - abort without error */
+					if (cmd->format == 1) {
+						badBlock = 1;
+						break;
+					}
+
 					/* badblock - skip it */
-					printf("writeFile: skipping badblock at offs: 0x%x\n", (uint32_t)fileOffs);
 					if (lseek(psd_common.f->fd, psd_common.flash.erasesz, SEEK_CUR) < 0) {
 						err = -eReport2;
 						break;
@@ -397,6 +407,11 @@ static int psd_writeFile(sdp_cmd_t *cmd)
 
 					fileOffs += psd_common.flash.erasesz;
 				}
+			}
+
+			/* Direct write - abort due to bad block */
+			if (badBlock == 1) {
+				break;
 			}
 
 			if (!err && ((res = write(psd_common.f->fd, psd_common.buff, psd_common.flash.writesz)) != psd_common.flash.writesz)) {
@@ -411,10 +426,9 @@ static int psd_writeFile(sdp_cmd_t *cmd)
 		}
 	}
 
-	err = psd_hidResponse(err, SDP_WRITE_FILE);
-
-	return err;
+	return psd_hidResponse(err, SDP_WRITE_FILE);
 }
+
 
 static void *wdg_kicker_thr(void *args)
 {
