@@ -3,8 +3,8 @@
  *
  * Phoenix-RTOS SHell
  *
- * Copyright 2017, 2018, 2020, 2021 Phoenix Systems
- * Author: Pawel Pisarczyk, Jan Sikorski, Lukasz Kosinski, Mateusz Niewiadomski
+ * Copyright 2017, 2018, 2020-2023 Phoenix Systems
+ * Author: Pawel Pisarczyk, Jan Sikorski, Lukasz Kosinski, Mateusz Niewiadomski, Gerard Swiderski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <termios.h>
 #include <unistd.h>
@@ -45,7 +46,7 @@ const psh_appentry_t *psh_applist_next(const psh_appentry_t *current)
 
 
 void psh_registerapp(psh_appentry_t *newapp)
-{	
+{
 	psh_appentry_t *prevapp = NULL;
 
 	/* find position */
@@ -75,12 +76,38 @@ const psh_appentry_t *psh_findapp(char *appname) {
 }
 
 
-int psh_ttyopen(const char *dev)
+static char *psh_stralloc(char *oldstr, const char *str)
 {
-	int fd;
+	size_t len = strlen(str) + sizeof('\0');
+	char *newstr = realloc(oldstr, len);
+	if (newstr != NULL) {
+		memcpy(newstr, str, len);
+	}
+	return newstr;
+}
 
-	while ((fd = open(dev, O_RDWR)) < 0)
-		return -1;
+
+int psh_ttyopen(const char *ttydev)
+{
+	char *newPath;
+
+	int fd = open(ttydev, O_RDWR);
+	if (fd < 0) {
+		return -errno;
+	}
+
+	if (isatty(fd) != 1) {
+		close(fd);
+		return -ENOTTY;
+	}
+
+	newPath = psh_stralloc(psh_common.ttydev, ttydev);
+	if (newPath == NULL) {
+		close(fd);
+		return -ENOMEM;
+	}
+
+	psh_common.ttydev = newPath;
 
 	dup2(fd, STDIN_FILENO);
 	dup2(fd, STDOUT_FILENO);
@@ -88,7 +115,7 @@ int psh_ttyopen(const char *dev)
 
 	close(fd);
 
-	return 0;
+	return EOK;
 }
 
 
@@ -133,6 +160,8 @@ int main(int argc, char **argv)
 		}
 
 	} while (psh_common.tcpid == -1 && ispshlogin);
+
+	free(psh_common.ttydev);
 
 	keepidle(0);
 
