@@ -28,6 +28,7 @@ typedef struct psh_app {
 
 typedef struct {
 	psh_appentry_t *pshapplist;
+	char *ttydev;
 	volatile unsigned char sigint;  /* Received SIGINT */
 	volatile unsigned char sigquit; /* Received SIGQUIT */
 	volatile unsigned char sigstop; /* Received SIGTSTP */

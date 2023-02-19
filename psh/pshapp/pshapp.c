@@ -1021,11 +1021,11 @@ static int psh_run(int exitable, const char *console)
 
 	/* Time for klog to print data from buffer */
 	usleep(500000);
-	psh_ttyopen(console);
 
-	/* Check if we run interactively */
-	if (!isatty(STDIN_FILENO))
-		return -ENOTTY;
+	err = psh_ttyopen(console);
+	if (err < 0) {
+		return err;
+	}
 
 	/* Wait till we run in foreground */
 	if (tcgetpgrp(STDIN_FILENO) != -1) {
