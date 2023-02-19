@@ -3,8 +3,8 @@
  *
  * sysexec - launch program from syspage using given map
  *
- * Copyright 2017, 2018, 2020, 2021 Phoenix Systems
- * Author: Pawel Pisarczyk, Jan Sikorski, Lukasz Kosinski, Mateusz Niewiadomski
+ * Copyright 2017, 2018, 2020-2023 Phoenix Systems
+ * Author: Pawel Pisarczyk, Jan Sikorski, Lukasz Kosinski, Mateusz Niewiadomski, Gerard Swiderski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <termios.h>
+#include <getopt.h>
 
 #include <sys/threads.h>
 #include <sys/types.h>
@@ -25,9 +26,15 @@
 #include "../psh.h"
 
 
-void psh_sysexecinfo(void)
+static void psh_sysexecinfo(void)
 {
 	printf("launch program from syspage using given map");
+}
+
+
+static void psh_sysexecUsage(void)
+{
+	fputs("Usage: sysexec [-m datamap] [-M codemap] progname [args]...\n", stderr);
 }
 
 
@@ -103,16 +110,38 @@ static int psh_sysexec_checkcommand(int argc, const char **argv)
 }
 
 
-int psh_sysexec(int argc, char **argv)
+static int psh_sysexec(int argc, char **argv)
 {
 	pid_t pid, err;
-	int status = 0;
-	const char *progname, *mapname;
+	int opt, status = 0;
+	const char *progName;
+	const char *codeMapName = NULL;
+	const char *dataMapName = NULL;
 
-	/* TODO handle code map */
+	while ((opt = getopt(argc, argv, "hm:M:")) != -1) {
+		switch (opt) {
+			case 'm':
+				dataMapName = optarg;
+				break;
 
-	if (argc < 2) {
-		fprintf(stderr, "usage: %s [-m mapname] progname [args]...\n", argv[0]);
+			case 'M':
+				codeMapName = optarg;
+				break;
+
+			case 'h':
+				psh_sysexecUsage();
+				return EOK;
+
+			default:
+				psh_sysexecUsage();
+				return -EINVAL;
+		}
+	}
+
+	progName = argv[optind];
+	if (progName == NULL) {
+		fprintf(stderr, "psh: missing program name for sysexec\n");
+		psh_sysexecUsage();
 		return -EINVAL;
 	}
 
@@ -121,17 +150,7 @@ int psh_sysexec(int argc, char **argv)
 		return -EINVAL;
 	}
 
-	if (argv[1][0] == '-') {
-		if (argc < 4 || argv[1][1] != 'm') {
-			fprintf(stderr, "Invalid arguments!\n");
-			return -EINVAL;
-		}
-		pid = spawnSyspage(NULL, (mapname = argv[2]), (progname = argv[3]), argv + 3);
-	}
-	else {
-		pid = spawnSyspage(NULL, (mapname = NULL), (progname = argv[1]), argv + 1);
-	}
-
+	pid = spawnSyspage(codeMapName, dataMapName, progName, &argv[optind]);
 	if (pid > 0) {
 		do {
 			err = waitpid(pid, &status, 0);
@@ -147,14 +166,26 @@ int psh_sysexec(int argc, char **argv)
 			break;
 
 		case -ENOENT:
-			fprintf(stderr, "psh: syspage program '%s' not found\n", progname);
+			fprintf(stderr, "psh: syspage program '%s' not found\n", progName);
 			break;
 
 		case -EINVAL:
-			if (mapname)
-				fprintf(stderr, "psh: invalid map '%s'\n", mapname);
-			else
-				fprintf(stderr, "psh: invalid program '%s'\n", progname);
+			if (dataMapName != NULL || codeMapName != NULL) {
+				fprintf(stderr, "psh: invalid map set:");
+				if (dataMapName != NULL) {
+					fprintf(stderr, " '%s'", dataMapName);
+				}
+				if (codeMapName != NULL) {
+					if (dataMapName != NULL) {
+						fputc(',', stderr);
+					}
+					fprintf(stderr, " '%s'", codeMapName);
+				}
+				fputc('\n', stderr);
+			}
+			else {
+				fprintf(stderr, "psh: invalid program '%s'\n", progName);
+			}
 			break;
 
 		default:
@@ -167,6 +198,6 @@ int psh_sysexec(int argc, char **argv)
 
 void __attribute__((constructor)) sysexec_registerapp(void)
 {
-	static psh_appentry_t app = {.name = "sysexec", .run = psh_sysexec, .info = psh_sysexecinfo};
+	static psh_appentry_t app = { .name = "sysexec", .run = psh_sysexec, .info = psh_sysexecinfo };
 	psh_registerapp(&app);
 }
