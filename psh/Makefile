@@ -22,9 +22,9 @@ LOCAL_LDFLAGS := -z stack-size=4096 -z noexecstack
 PSH_ALLCOMMANDS := bind cat cd cp date df dmesg echo edit exec hm kill ls mem mkdir mount \
 nc nslookup ntpclient perf ping pm ps pwd reboot runfile sync sysexec top touch umount uptime wget
 PSH_COMMANDS ?= $(PSH_ALLCOMMANDS)
-PSH_APPLETS := pshapp help $(filter $(PSH_ALLCOMMANDS), $(PSH_COMMANDS))
+PSH_INTERNAL_APPLETS := pshapp help $(filter $(PSH_ALLCOMMANDS), $(PSH_COMMANDS))
 
-SRCS := $(foreach app, $(PSH_APPLETS), $(wildcard $(LOCAL_PATH)$(app)/*.c))
+SRCS := $(foreach app, $(PSH_INTERNAL_APPLETS), $(wildcard $(LOCAL_PATH)$(app)/*.c))
 
 # Header for project-specific applets
 HEADERS:= $(LOCAL_PATH)/psh.h
@@ -33,7 +33,7 @@ HEADERS:= $(LOCAL_PATH)/psh.h
 LIBS := $(PSH_PROJECT_DEPS)
 
 # Applets to create links:
-PSH_LINK_APPLETS := $(PSH_APPLETS) pshlogin
+PSH_LINK_APPLETS := $(PSH_COMMANDS) pshlogin
 # custom installation - automatically create rootfs hardlinks for all applets
 $(NAME)-install:
 	$(SIL)for applet in $(PSH_LINK_APPLETS); do \
