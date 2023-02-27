@@ -81,9 +81,9 @@ static int readraw(oid_t oid, uint32_t addr, void *data, int size)
 	msg.o.size = size;
 
 	idevctl->type = flashsrv_devctl_readraw;
-	idevctl->readraw.oid = oid;
-	idevctl->readraw.size = size;
-	idevctl->readraw.address = addr;
+	idevctl->read.oid = oid;
+	idevctl->read.size = size;
+	idevctl->read.address = addr;
 
 	if (msgSend(oid.port, &msg) < 0) {
 		return -1;
