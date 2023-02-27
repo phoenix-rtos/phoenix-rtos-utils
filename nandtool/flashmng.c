@@ -53,10 +53,10 @@ int flashmng_readraw(oid_t oid, offs_t addr, void *data, size_t size)
 	msg.o.size = size;
 
 	idevctl->type = flashsrv_devctl_readraw;
-	idevctl->readraw.oid = oid;
-	idevctl->readraw.size = size;
+	idevctl->read.oid = oid;
+	idevctl->read.size = size;
 	/* FIXME: Now imx6ull nand DevCtl API supports only 32-bit offsets */
-	idevctl->readraw.address = (uint32_t)addr;
+	idevctl->read.address = (uint32_t)addr;
 
 	if (msgSend(oid.port, &msg) < 0) {
 		return -1;
