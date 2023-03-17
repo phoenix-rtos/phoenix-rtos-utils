@@ -1016,13 +1016,19 @@ static int psh_run(int exitable, const char *console)
 	const psh_appentry_t *app;
 	struct termios orig;
 	char *tmp, *cmd, **argv;
-	int cnt, err, n, argc;
+	int cnt, err, n, argc, retries;
 	pid_t pgrp;
 
 	/* Time for klog to print data from buffer */
 	usleep(500000);
 
-	err = psh_ttyopen(console);
+	for (retries = 5; retries > 0; retries--) {
+		err = psh_ttyopen(console);
+		if (err == 0) {
+			break;
+		}
+		usleep(100000);
+	}
 	if (err < 0) {
 		return err;
 	}
