@@ -753,7 +753,7 @@ static void edit_drawStatusBar(int force)
 
 	fprintf(stdout, "\033[%d;%dH%s", edit_common.rows + 1, edit_common.cols - len, buf);
 
-	fprintf(stdout, "\033[0m\0338");
+	fprintf(stdout, "\0338\033[0m");
 }
 
 
@@ -788,7 +788,7 @@ static void edit_drawKeys(int force)
 			len += fprintf(stdout, "|");
 	}
 
-	fprintf(stdout, "\033[0K\033[0m\0338");
+	fprintf(stdout, "\033[0K\0338\033[0m");
 }
 
 
