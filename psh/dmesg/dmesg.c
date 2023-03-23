@@ -57,11 +57,13 @@ int psh_dmesg(int argc, char **argv)
 
 	while (1) {
 		n = read(fd, buf, sizeof(buf));
-		if (n < 0) {
-			if (errno == -EINTR || errno == -EPIPE)
+		if (n <= 0) {
+			if ((n == 0) || (errno == EINTR) || (errno == EPIPE)) {
 				continue;
-			else
+			}
+			else {
 				break;
+			}
 		}
 		written = 0;
 		while (written < n) {
