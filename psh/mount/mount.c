@@ -23,7 +23,7 @@
 
 void psh_mountinfo(void)
 {
-	printf("mounts a filesystem");
+	(void)printf("mounts a filesystem");
 }
 
 
@@ -31,26 +31,35 @@ int psh_mount(int argc, char **argv)
 {
 	int err;
 	char *mount_data = NULL;
+	char *endptr;
+	unsigned long mode;
 
-	if (argc < 5 || argc > 6) {
-		fprintf(stderr, "usage: %s <source> <target> <fstype> <mode> [data]\n", argv[0]);
-		return -EINVAL;
+	if ((argc < 5) || (argc > 6)) {
+		(void)fprintf(stderr, "usage: %s <source> <target> <fstype> <mode> [data]\n", argv[0]);
+		return EXIT_FAILURE;
 	}
 
-	if (argc == 6)
+	if (argc == 6) {
 		mount_data = argv[5];
-
-	if ((err = mount(argv[1], argv[2], argv[3], atoi(argv[4]), mount_data)) < 0) {
-		fprintf(stderr, "mount: %s\n", strerror(err));
-		return 1;
 	}
 
-	return EOK;
+	mode = strtoul(argv[4], &endptr, 0);
+	if (*endptr != '\0') {
+		(void)fprintf(stderr, "mount: invalid mode\n");
+		return EXIT_FAILURE;
+	}
+	err = mount(argv[1], argv[2], argv[3], mode, mount_data);
+	if (err < 0) {
+		(void)fprintf(stderr, "mount: %s\n", strerror(errno));
+		return EXIT_FAILURE;
+	}
+
+	return EXIT_SUCCESS;
 }
 
 
 void __attribute__((constructor)) mount_registerapp(void)
 {
-	static psh_appentry_t app = {.name = "mount", .run = psh_mount, .info = psh_mountinfo};
+	static psh_appentry_t app = { .name = "mount", .run = psh_mount, .info = psh_mountinfo };
 	psh_registerapp(&app);
 }
