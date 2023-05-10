@@ -62,7 +62,8 @@ int main(int argc, char *argv[])
 	msg_t msg;
 	imxrt117xM4DevCtli_t *i = (void *)msg.i.raw;
 	imxrt117xM4DevCtlo_t *o = (void *)msg.o.raw;
-	int opt, usage = 0, file = 0, example = 0, terminal = 0, termno = -1;
+	int opt, usage = 0, file = 0, example = 0, start = 0, terminal = 0, termno = -1;
+	unsigned int offset = 0;
 	char *path = NULL;
 	oid_t driver;
 	FILE *f;
@@ -78,7 +79,7 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	while ((opt = getopt(argc, argv, "f:t:e")) >= 0) {
+	while ((opt = getopt(argc, argv, "f:t:eso:")) >= 0) {
 		switch (opt) {
 		case 'f':
 			file = 1;
@@ -92,9 +93,17 @@ int main(int argc, char *argv[])
 			example = 1;
 			break;
 
+		case 's':
+			start = 1;
+			break;
+
 		case 't':
 			terminal = 1;
 			termno = (int)strtol(optarg, NULL, 10);
+			break;
+
+		case 'o':
+			offset = (unsigned int)strtol(optarg, NULL, 10);
 			break;
 
 		default:
@@ -103,13 +112,15 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (usage || (file && example) || (!file && !example && !terminal) ||
+	if (usage || (file + example + start) > 1 || (!file && !example && !start && !terminal) ||
 			(terminal && (termno < 0 || termno > 4))) {
 		fprintf(stderr, "Shell tool for imxrt117x-cm4 driver. Usage:\n");
-		fprintf(stderr, "%s [-t term] <-f file | -e>\n", argv[0]);
+		fprintf(stderr, "%s [-t term] [-o addr] <-f file | -e | -s>\n", argv[0]);
 		fprintf(stderr, "\t-f Run binary file <file>]\n");
 		fprintf(stderr, "\t-e Run example (blinky)\n");
+		fprintf(stderr, "\t-s Start core only\n");
 		fprintf(stderr, "\t-t Run terminal <term>. Exit with ESC\n");
+		fprintf(stderr, "\t-o Set vectors table offset to <addr> (default 0)\n");
 
 		free(path);
 
@@ -146,11 +157,18 @@ int main(int argc, char *argv[])
 			return -1;
 		}
 
-		fprintf(stderr, "Loading successful, starting the core\n");
+		fprintf(stderr, "Loading successful\n");
+	}
 
+	if (file || example || start) {
+		fprintf(stderr, "Starting the core\n");
+
+		msg.type = mtDevCtl;
+		msg.o.data = NULL;
+		msg.o.size = 0;
 		i->type = m4_runCore;
-		msg.i.data = NULL;
-		msg.i.size = 0;
+		msg.i.data = (void *)&offset;
+		msg.i.size = sizeof(offset);
 
 		if (msgSend(driver.port, &msg) < 0) {
 			fprintf(stderr, "msgSend failed\n");
