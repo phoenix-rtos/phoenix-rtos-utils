@@ -136,17 +136,17 @@ static int psh_ps(int argc, char **argv)
 				tcnt -= j - i - 1;
 			}
 		}
-		printf("%8s %8s %2s %5s %5s %6s %11s %6s %3s %-17s\n", "PID", "PPID", "PR", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "THR", "CMD");
+		printf("%8s %8s %2s %5s %5s %7s %11s %6s %3s %-16s\n", "PID", "PPID", "PR", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "THR", "CMD");
 	}
 	else {
-		printf("%8s %8s %2s %5s %5s %6s %11s %6s %-21s\n", "PID", "PPID", "PR", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "CMD");
+		printf("%8s %8s %2s %5s %5s %7s %11s %6s %-20s\n", "PID", "PPID", "PR", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "CMD");
 	}
 
 	qsort(info, tcnt, sizeof(threadinfo_t), cmp);
 
 	for (i = 0; i < tcnt; i++) {
 		psh_prefix(10, info[i].wait, -6, 1, buff);
-		printf("%8u %8u %2d %5s %3u.%u %5ss ", info[i].pid, info[i].ppid, info[i].priority, (info[i].state) ? "sleep" : "ready",
+		printf("%8u %8u %2d %5s %3u.%u %6ss ", info[i].pid, info[i].ppid, info[i].priority, (info[i].state) ? "sleep" : "ready",
 			info[i].load / 10, info[i].load % 10, buff);
 
 		s = (info[i].cpuTime + 500000) / 1000000;
@@ -167,10 +167,10 @@ static int psh_ps(int argc, char **argv)
 		printf("%02u:%02u:%02u %6s ", h, m, s, buff);
 
 		if (!threads) {
-			printf("%3u %.*s\n", info[i].tid, (int)(fullcmd ? sizeof(info[i].name) : 17), info[i].name);
+			printf("%3u %.*s\n", info[i].tid, (int)(fullcmd ? sizeof(info[i].name) : 16), info[i].name);
 		}
 		else {
-			printf("%.*s\n", (int)(fullcmd ? sizeof(info[i].name) : 21), info[i].name);
+			printf("%.*s\n", (int)(fullcmd ? sizeof(info[i].name) : 20), info[i].name);
 		}
 	}
 
