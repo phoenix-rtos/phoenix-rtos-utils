@@ -99,11 +99,11 @@ int main(int argc, char *argv[])
 
 		case 't':
 			terminal = 1;
-			termno = (int)strtol(optarg, NULL, 10);
+			termno = (int)strtol(optarg, NULL, 0);
 			break;
 
 		case 'o':
-			offset = (unsigned int)strtol(optarg, NULL, 10);
+			offset = (unsigned int)strtol(optarg, NULL, 0);
 			break;
 
 		default:
