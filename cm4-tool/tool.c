@@ -16,7 +16,7 @@
 #include <termios.h>
 #include <sys/msg.h>
 #include <sys/threads.h>
-#include <imxrt117x-cm4.h>
+#include <imxrt-multi.h>
 
 
 static const char blinky[] = {
@@ -60,8 +60,8 @@ void tx_thread(void *arg)
 int main(int argc, char *argv[])
 {
 	msg_t msg;
-	imxrt117xM4DevCtli_t *i = (void *)msg.i.raw;
-	imxrt117xM4DevCtlo_t *o = (void *)msg.o.raw;
+	multi_i_t *i = (void *)msg.i.raw;
+	multi_o_t *o = (void *)msg.o.raw;
 	int opt, usage = 0, file = 0, example = 0, start = 0, terminal = 0, termno = -1;
 	unsigned int offset = 0;
 	char *path = NULL;
@@ -132,13 +132,15 @@ int main(int argc, char *argv[])
 		msg.o.data = NULL;
 		msg.o.size = 0;
 
+		i->id = driver.id;
+
 		if (file) {
-			i->type = m4_loadFile;
+			i->cm4_type = CM4_LOAD_FILE;
 			msg.i.data = path;
 			msg.i.size = strlen(path);
 		}
 		else {
-			i->type = m4_loadBuff;
+			i->cm4_type = CM4_LOAD_BUFF;
 			msg.i.data = (void *)blinky;
 			msg.i.size = sizeof(blinky);
 		}
@@ -166,7 +168,8 @@ int main(int argc, char *argv[])
 		msg.type = mtDevCtl;
 		msg.o.data = NULL;
 		msg.o.size = 0;
-		i->type = m4_runCore;
+		i->cm4_type = CM4_RUN_CORE;
+		i->id = driver.id;
 		msg.i.data = (void *)&offset;
 		msg.i.size = sizeof(offset);
 
