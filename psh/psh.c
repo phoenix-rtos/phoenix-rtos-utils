@@ -28,7 +28,7 @@
 #include "psh.h"
 
 
-psh_common_t psh_common = {NULL};
+psh_common_t psh_common = { NULL };
 
 
 const psh_appentry_t *psh_applist_first(void)
@@ -66,7 +66,8 @@ void psh_registerapp(psh_appentry_t *newapp)
 }
 
 
-const psh_appentry_t *psh_findapp(char *appname) {
+const psh_appentry_t *psh_findapp(char *appname)
+{
 	const psh_appentry_t *app;
 	for (app = psh_common.pshapplist; app != NULL; app = app->next) {
 		if (strcmp(appname, app->name) == 0)
@@ -132,10 +133,6 @@ int main(int argc, char **argv)
 	/* Wait for root filesystem */
 	while (lookup("/", NULL, &oid) < 0)
 		usleep(10000);
-
-	/* Wait for console */
-	while (write(1, "", 0) < 0)
-		usleep(50000);
 
 	/* Check if its first shell */
 	psh_common.tcpid = tcgetpgrp(STDIN_FILENO);

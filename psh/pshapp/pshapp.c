@@ -53,7 +53,9 @@
 
 
 /* Special key codes */
+/* clang-format off */
 enum { kUp = 1, kDown, kRight, kLeft, kDelete, kHome, kEnd };
+/* clang-format on */
 
 
 typedef struct {
@@ -1022,15 +1024,18 @@ static int psh_run(int exitable, const char *console)
 	/* Time for klog to print data from buffer */
 	usleep(500000);
 
-	for (retries = 5; retries > 0; retries--) {
-		err = psh_ttyopen(console);
-		if (err == 0) {
-			break;
+	/* Only open tty if we are the first shell. */
+	if (psh_common.tcpid == -1) {
+		for (retries = 5; retries > 0; retries--) {
+			err = psh_ttyopen(console);
+			if (err == 0) {
+				break;
+			}
+			usleep(100000);
 		}
-		usleep(100000);
-	}
-	if (err < 0) {
-		return err;
+		if (err < 0) {
+			return err;
+		}
 	}
 
 	/* Wait till we run in foreground */
