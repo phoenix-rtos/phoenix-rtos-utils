@@ -82,36 +82,34 @@ static void psh_dd_usage(void)
 
 static ssize_t getnumber(const char *numstr)
 {
-	ssize_t value;
+	char *str;
+	ssize_t retval;
+	ssize_t mult = 1;
+	ssize_t value = strtoul(numstr, &str, 10);
 
-	if (isdigit(*numstr) == 0) {
+	if (numstr == str) {
 		return -EINVAL;
 	}
 
-	value = 0;
-	while (isdigit(*numstr) != 0) {
-		value = value * 10 + *(numstr++) - '0';
-	}
-
-	switch (*(numstr++)) {
+	switch (*(str++)) {
 		case 'M':
-			value *= 1024 * 1024;
+			mult = 1024 * 1024;
 			break;
 
 		case 'k':
-			value *= 1024;
+			mult = 1024;
 			break;
 
 		case 'b':
-			value *= 512;
+			mult = 512;
 			break;
 
 		case 'w':
-			value *= 2;
+			mult = 2;
 			break;
 
 		case 'c':
-			/* value *= 1; */
+			/* mult *= 1; */
 			break;
 
 		case '\0':
@@ -121,11 +119,16 @@ static ssize_t getnumber(const char *numstr)
 			return -1;
 	}
 
-	if (*numstr != '\0') {
+	if (*str != '\0') {
 		return -EINVAL;
 	}
 
-	return value;
+	retval = value * mult;
+	if (value > SSIZE_MAX / mult) {
+		return -EOVERFLOW;
+	}
+
+	return retval;
 }
 
 
@@ -173,13 +176,14 @@ static int psh_dd(int argc, char **argv)
 	const struct param_s *par;
 	const char *str, *cp;
 	char *buf, *p;
-	int infd, outfd, incc, outcc;
+	int infd, outfd;
+	ssize_t incc, outcc;
 	ssize_t intotal, outtotal;
 
 	const char *infile = NULL;
 	const char *outfile = NULL;
 	mode_t outmode = O_CREAT | O_TRUNC;
-	ssize_t count = SSIZE_MAX;
+	ssize_t tmp, count = SSIZE_MAX;
 	ssize_t seekval = 0;
 	ssize_t skipval = 0;
 	ssize_t inmax = 0;
@@ -269,6 +273,32 @@ static int psh_dd(int argc, char **argv)
 		}
 	}
 
+	if (skipval > 0) {
+		tmp = skipval;
+		skipval *= blocksz;
+		if (tmp > SSIZE_MAX / blocksz) {
+			fprintf(stderr, "Skip value overflowed\n");
+			return EXIT_FAILURE;
+		}
+	}
+
+	if (seekval > 0) {
+		tmp = seekval;
+		seekval *= blocksz;
+		if (tmp > SSIZE_MAX / blocksz) {
+			fprintf(stderr, "Seek value overflowed\n");
+			return EXIT_FAILURE;
+		}
+	}
+
+	if (count != SSIZE_MAX) {
+		inmax = count * blocksz;
+		if (count > SSIZE_MAX / blocksz) {
+			fprintf(stderr, "Transfer total size overflowed\n");
+			return EXIT_FAILURE;
+		}
+	}
+
 	buf = malloc(blocksz);
 	if (buf == NULL) {
 		fprintf(stderr, "Cannot allocate buffer\n");
@@ -297,7 +327,7 @@ static int psh_dd(int argc, char **argv)
 
 	do {
 		if (skipval > 0) {
-			if (lseek(infd, skipval * blocksz, 0) < 0) {
+			if (lseek(infd, skipval, 0) < 0) {
 				while (skipval-- > 0) {
 					incc = read(infd, buf, blocksz);
 					if (incc < 0) {
@@ -319,14 +349,10 @@ static int psh_dd(int argc, char **argv)
 		}
 
 		if (seekval > 0) {
-			if (lseek(outfd, seekval * blocksz, 0) < 0) {
+			if (lseek(outfd, seekval, 0) < 0) {
 				perror(outfile);
 				break;
 			}
-		}
-
-		if (count != SSIZE_MAX) {
-			inmax = count * blocksz;
 		}
 
 		for (;;) {
