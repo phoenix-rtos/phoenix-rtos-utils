@@ -77,7 +77,7 @@ const psh_appentry_t *psh_findapp(char *appname)
 }
 
 
-static char *psh_stralloc(char *oldstr, const char *str)
+char *psh_stralloc(char *oldstr, const char *str)
 {
 	size_t len = strlen(str) + sizeof('\0');
 	char *newstr = realloc(oldstr, len);
