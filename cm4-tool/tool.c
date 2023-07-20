@@ -25,17 +25,19 @@ static const char blinky[] = {
 
 
 static volatile int done = 0;
+static char buf[256];
 
 
 void rx_thread(void *arg)
 {
-	char byte;
+	size_t n;
 	FILE *f = arg;
 
 	while (!done) {
-		if (fread(&byte, 1, 1, f)) {
-			printf("%c", byte);
-			fflush(NULL);
+		n = fread(buf, 1, sizeof(buf), f);
+		if (n > 0) {
+			fwrite(buf, 1, n, stdout);
+			fflush(stdout);
 		}
 	}
 
