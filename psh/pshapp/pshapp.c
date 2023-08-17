@@ -52,6 +52,15 @@
 #define SI_EXP_OFFS 3  /* Offset between consecutive entries exponents in SI prefix table */
 
 
+/* ANSI escape terminal control codes */
+#define TERM_INIT       "\033c"
+#define CSI_RESETSCROLL "\033[r"
+#define CSI_HOME        "\033[f"
+#define CSI_CLEAR0      "\033[0J"
+#define CSI_NORMAL      "\033[m"
+#define CSI_CURSOR_SHOW "\033[?25h"
+
+
 /* Special key codes */
 /* clang-format off */
 enum { kUp = 1, kDown, kRight, kLeft, kDelete, kHome, kEnd };
@@ -521,7 +530,8 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 		return err;
 	}
 
-	(void)psh_write(STDOUT_FILENO, "\033[0J" PROMPT, 4 + sizeof(PROMPT) - 1);
+	(void)psh_write(STDOUT_FILENO, CSI_CLEAR0, sizeof(CSI_CLEAR0) - 1u);
+	(void)psh_write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1u);
 
 	for (;;) {
 		read(STDIN_FILENO, &c, 1);
@@ -548,7 +558,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 						hp = cmdhist->he;
 					}
 					memmove(*cmd + n, *cmd + n + 1, --m);
-					(void)psh_write(STDOUT_FILENO, "\033[0J", 4);
+					(void)psh_write(STDOUT_FILENO, CSI_CLEAR0, sizeof(CSI_CLEAR0) - 1u);
 					(void)psh_write(STDOUT_FILENO, *cmd + n, m);
 					psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
 				}
@@ -569,7 +579,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 					(void)psh_write(STDOUT_FILENO, "\b", 1);
 					n--;
 					memmove(*cmd + n, *cmd + n + 1, m);
-					(void)psh_write(STDOUT_FILENO, "\033[0J", 4);
+					(void)psh_write(STDOUT_FILENO, CSI_CLEAR0, sizeof(CSI_CLEAR0) - 1u);
 					(void)psh_write(STDOUT_FILENO, *cmd + n, m);
 					psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
 				}
@@ -617,7 +627,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 						qsort(files, nfiles, sizeof(char *), psh_cmpname);
 						if ((err = psh_printfiles(files, nfiles)) < 0)
 							break;
-						(void)psh_write(STDOUT_FILENO, "\033[0J", 4);
+						(void)psh_write(STDOUT_FILENO, CSI_CLEAR0, sizeof(CSI_CLEAR0) - 1u);
 						(void)psh_write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
 						if (hp == cmdhist->he) {
 							(void)psh_write(STDOUT_FILENO, *cmd, n + m);
@@ -654,8 +664,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 			}
 			/* FF => clear screen */
 			else if (c == '\014') {
-				(void)psh_write(STDOUT_FILENO, "\033[f", 3);
-				(void)psh_write(STDOUT_FILENO, "\033[0J", 4);
+				(void)psh_write(STDOUT_FILENO, CSI_HOME CSI_CLEAR0, sizeof(CSI_HOME CSI_CLEAR0) - 1u);
 				(void)psh_write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
 				if (hp != cmdhist->he) {
 					psh_printhistent(cmdhist->entries + hp);
@@ -728,7 +737,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 					if (hp == cmdhist->he)
 						ln = n + m;
 					psh_movecursor(n + sizeof(PROMPT) - 1, -(n + sizeof(PROMPT) - 1));
-					(void)psh_write(STDOUT_FILENO, "\033[0J", 4);
+					(void)psh_write(STDOUT_FILENO, CSI_CLEAR0, sizeof(CSI_CLEAR0) - 1u);
 					(void)psh_write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
 					psh_printhistent(cmdhist->entries + (hp = (hp) ? hp - 1 : HISTSZ - 1));
 					n = cmdhist->entries[hp].n;
@@ -738,7 +747,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 			else if (k == kDown) {
 				if (hp != cmdhist->he) {
 					psh_movecursor(n + sizeof(PROMPT) - 1, -(n + sizeof(PROMPT) - 1));
-					(void)psh_write(STDOUT_FILENO, "\033[0J", 4);
+					(void)psh_write(STDOUT_FILENO, CSI_CLEAR0, sizeof(CSI_CLEAR0) - 1u);
 					(void)psh_write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
 					if ((hp = (hp + 1) % HISTSZ) == cmdhist->he) {
 						n = ln;
@@ -786,7 +795,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 						hp = cmdhist->he;
 					}
 					memmove(*cmd + n, *cmd + n + 1, --m);
-					(void)psh_write(STDOUT_FILENO, "\033[0J", 4);
+					(void)psh_write(STDOUT_FILENO, CSI_CLEAR0, sizeof(CSI_CLEAR0) - 1u);
 					(void)psh_write(STDOUT_FILENO, *cmd + n, m);
 					psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
 				}
@@ -918,6 +927,65 @@ static int psh_runscript(char *path)
 	fclose(stream);
 
 	return 0;
+}
+
+
+static void psh_clearinfo(void)
+{
+	printf("clear the terminal screen");
+}
+
+
+static int psh_clear(int argc, char **argv)
+{
+	if (argc > 1) {
+		fprintf(stderr, "clear: Invalid argument\n");
+		return EXIT_FAILURE;
+	}
+
+	(void)psh_write(STDOUT_FILENO, CSI_HOME CSI_CLEAR0,
+		sizeof(CSI_HOME CSI_CLEAR0) - 1u);
+
+	return EXIT_SUCCESS;
+}
+
+
+static void psh_resetinfo(void)
+{
+	printf("restore terminal from abnormal state");
+}
+
+
+static int psh_reset(int argc, char **argv)
+{
+	struct termios term;
+
+	if (argc > 1) {
+		fprintf(stderr, "reset: Invalid argument\n");
+		return EXIT_FAILURE;
+	}
+
+	fflush(stdout);
+
+	if (tcgetattr(STDIN_FILENO, &term) < 0) {
+		fprintf(stderr, "reset: tcgetattr() failed\n");
+		return EXIT_FAILURE;
+	}
+
+	term.c_lflag |= ICANON | ISIG | ECHO;
+	term.c_iflag |= IXON | BRKINT | PARMRK;
+	term.c_oflag |= OPOST;
+
+	if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &term) < 0) {
+		fprintf(stderr, "reset: failed to set cooked mode\n");
+		return EXIT_FAILURE;
+	}
+
+	(void)psh_write(STDOUT_FILENO,
+		TERM_INIT CSI_RESETSCROLL CSI_NORMAL CSI_CURSOR_SHOW,
+		sizeof(TERM_INIT CSI_RESETSCROLL CSI_NORMAL CSI_CURSOR_SHOW) - 1u);
+
+	return EXIT_SUCCESS;
 }
 
 
@@ -1088,9 +1156,6 @@ static int psh_run(int exitable, const char *console)
 	pshapp_common.cmdhist = cmdhist;
 
 	while (pgrp == tcgetpgrp(STDIN_FILENO)) {
-		(void)psh_write(STDOUT_FILENO, "\033[0J", 4);
-		(void)psh_write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
-
 		if ((n = psh_readcmd(&orig, cmdhist, &cmd)) < 0) {
 			err = n;
 			break;
@@ -1238,13 +1303,17 @@ int psh_pshapp(int argc, char **argv)
 
 void __attribute__((constructor)) pshapp_registerapp(void)
 {
-	static psh_appentry_t app_pshapp = { .name = "psh", .run = psh_pshapp, .info = NULL };
-	static psh_appentry_t app_pshappexit = { .name = "exit", .run = psh_pshappexit, .info = psh_pshappexitinfo };
-	static psh_appentry_t app_pshlogin = { .name = "pshlogin", .run = psh_pshapp, .info = NULL };
-	static psh_appentry_t app_pshhistory = { .name = "history", .run = psh_history, .info = psh_historyinfo };
+	static psh_appentry_t app_pshApp = { .name = "psh", .run = psh_pshapp, .info = NULL };
+	static psh_appentry_t app_pshAppExit = { .name = "exit", .run = psh_pshappexit, .info = psh_pshappexitinfo };
+	static psh_appentry_t app_pshLogin = { .name = "pshlogin", .run = psh_pshapp, .info = NULL };
+	static psh_appentry_t app_pshHistory = { .name = "history", .run = psh_history, .info = psh_historyinfo };
+	static psh_appentry_t app_pshClear = { .name = "clear", .run = psh_clear, .info = psh_clearinfo };
+	static psh_appentry_t app_pshReset = { .name = "reset", .run = psh_reset, .info = psh_resetinfo };
 
-	psh_registerapp(&app_pshapp);
-	psh_registerapp(&app_pshappexit);
-	psh_registerapp(&app_pshlogin);
-	psh_registerapp(&app_pshhistory);
+	psh_registerapp(&app_pshApp);
+	psh_registerapp(&app_pshAppExit);
+	psh_registerapp(&app_pshLogin);
+	psh_registerapp(&app_pshHistory);
+	psh_registerapp(&app_pshClear);
+	psh_registerapp(&app_pshReset);
 }
