@@ -16,7 +16,6 @@
 #include <paths.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 
 #include "../psh.h"
@@ -38,24 +37,29 @@ static void psh_dmesg_help(const char *prog)
 int psh_dmesg(int argc, char **argv)
 {
 	char buf[256];
-	int n;
 	int c, fd;
+	ssize_t n;
 
-	while ((c = getopt(argc, argv, "h")) != -1) {
+	for (;;) {
+		c = getopt(argc, argv, "h");
+		if (c == -1) {
+			break;
+		}
 		switch (c) {
 			case 'h':
 			default:
 				psh_dmesg_help(argv[0]);
-				return EOK;
+				return EXIT_FAILURE;
 		}
 	}
 
-	if ((fd = open(_PATH_KLOG, O_RDONLY | O_NONBLOCK)) < 0) {
-		printf("dmesg: Fail to open %s\n", _PATH_KLOG);
+	fd = open(_PATH_KLOG, O_RDONLY | O_NONBLOCK);
+	if (fd < 0) {
+		fprintf(stderr, "dmesg: Fail to open %s\n", _PATH_KLOG);
 		return 1;
 	}
 
-	while (1) {
+	for (;;) {
 		n = read(fd, buf, sizeof(buf));
 		if (n <= 0) {
 			if ((n == 0) || (errno == EINTR) || (errno == EPIPE)) {
@@ -67,12 +71,12 @@ int psh_dmesg(int argc, char **argv)
 		}
 		if (psh_write(STDOUT_FILENO, buf, n) != n) {
 			close(fd);
-			return 1;
+			return EXIT_FAILURE;
 		}
 	}
 	close(fd);
 
-	return 0;
+	return EXIT_SUCCESS;
 }
 
 
