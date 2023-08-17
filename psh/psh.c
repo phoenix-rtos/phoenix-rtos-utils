@@ -88,6 +88,29 @@ static char *psh_stralloc(char *oldstr, const char *str)
 }
 
 
+size_t psh_write(int fd, const void *buf, size_t count)
+{
+	ssize_t res;
+	size_t len = 0;
+
+	while (len != count) {
+		res = write(fd, (const uint8_t *)buf + len, count - len);
+		if (res <= 0) {
+			if ((errno == EINTR) || (errno == EAGAIN)) {
+				continue;
+			}
+			break;
+		}
+		else {
+			len += (size_t)res;
+		}
+	}
+
+	/* on error: (len != count) and errno is set */
+	return len;
+}
+
+
 int psh_ttyopen(const char *ttydev)
 {
 	char *newPath;
