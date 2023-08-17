@@ -106,13 +106,9 @@ enum {
 };
 
 
-static ssize_t term_print(const char *str)
+static void term_print(const char *str)
 {
-	size_t len = 0;
-	while (str[len] != '\0')
-		len++;
-
-	return write(STDOUT_FILENO, str, len);
+	(void)psh_write(STDOUT_FILENO, str, strlen(str));
 }
 
 

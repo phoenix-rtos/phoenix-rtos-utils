@@ -174,7 +174,7 @@ static int psh_nc_sockstreamListen(int sfd, int socktype, struct sockaddr *socka
 					fprintf(stderr, "nc: Can't receive msg!\n");
 					return -1;
 				}
-				write(STDOUT_FILENO, buf, c);
+				(void)psh_write(STDOUT_FILENO, buf, c);
 
 				if ((connect(sfd, (struct sockaddr *) &sin, raddrlen)) < 0) {
 					fprintf(stderr, "nc: Fail to connect!\n");
@@ -217,7 +217,7 @@ static void psh_nc_socktalk(int fd)
 		if (FD_ISSET(fd, &fds)) {
 			if ((n = recv(fd, buf, sizeof(buf), 0)) <= 0)
 				return;
-			write(STDOUT_FILENO, buf, n);
+			(void)psh_write(STDOUT_FILENO, buf, n);
 			memset(buf, 0, n);
 		}
 	}
