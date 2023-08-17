@@ -38,7 +38,7 @@ static void psh_dmesg_help(const char *prog)
 int psh_dmesg(int argc, char **argv)
 {
 	char buf[256];
-	int n, written, ret;
+	int n;
 	int c, fd;
 
 	while ((c = getopt(argc, argv, "h")) != -1) {
@@ -65,19 +65,9 @@ int psh_dmesg(int argc, char **argv)
 				break;
 			}
 		}
-		written = 0;
-		while (written < n) {
-			ret = write(STDOUT_FILENO, buf + written, n - written);
-			if (ret > 0) {
-				written += ret;
-			}
-			else if (errno == EINTR) {
-				continue;
-			}
-			else {
-				close(fd);
-				return 1;
-			}
+		if (psh_write(STDOUT_FILENO, buf, n) != n) {
+			close(fd);
+			return 1;
 		}
 	}
 	close(fd);

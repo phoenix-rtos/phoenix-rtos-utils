@@ -274,8 +274,9 @@ static void psh_printhistent(psh_histent_t *entry)
 {
 	int i;
 
-	for (i = 0; i < entry->n; i++)
-		write(STDOUT_FILENO, (entry->cmd[i] == '\0') ? " " : entry->cmd + i, 1);
+	for (i = 0; i < entry->n; i++) {
+		(void)psh_write(STDOUT_FILENO, (entry->cmd[i] == '\0') ? " " : entry->cmd + i, 1);
+	}
 }
 
 
@@ -520,7 +521,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 		return err;
 	}
 
-	write(STDOUT_FILENO, "\033[0J" PROMPT, 4 + sizeof(PROMPT) - 1);
+	(void)psh_write(STDOUT_FILENO, "\033[0J" PROMPT, 4 + sizeof(PROMPT) - 1);
 
 	for (;;) {
 		read(STDIN_FILENO, &c, 1);
@@ -547,8 +548,8 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 						hp = cmdhist->he;
 					}
 					memmove(*cmd + n, *cmd + n + 1, --m);
-					write(STDOUT_FILENO, "\033[0J", 4);
-					write(STDOUT_FILENO, *cmd + n, m);
+					(void)psh_write(STDOUT_FILENO, "\033[0J", 4);
+					(void)psh_write(STDOUT_FILENO, *cmd + n, m);
 					psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
 				}
 				else if (!(n + m)) {
@@ -565,11 +566,11 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 						psh_histentcmd(cmd, cmdhist->entries + hp);
 						hp = cmdhist->he;
 					}
-					write(STDOUT_FILENO, "\b", 1);
+					(void)psh_write(STDOUT_FILENO, "\b", 1);
 					n--;
 					memmove(*cmd + n, *cmd + n + 1, m);
-					write(STDOUT_FILENO, "\033[0J", 4);
-					write(STDOUT_FILENO, *cmd + n, m);
+					(void)psh_write(STDOUT_FILENO, "\033[0J", 4);
+					(void)psh_write(STDOUT_FILENO, *cmd + n, m);
 					psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
 				}
 			}
@@ -616,12 +617,14 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 						qsort(files, nfiles, sizeof(char *), psh_cmpname);
 						if ((err = psh_printfiles(files, nfiles)) < 0)
 							break;
-						write(STDOUT_FILENO, "\033[0J", 4);
-						write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
-						if (hp == cmdhist->he)
-							write(STDOUT_FILENO, *cmd, n + m);
-						else
+						(void)psh_write(STDOUT_FILENO, "\033[0J", 4);
+						(void)psh_write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
+						if (hp == cmdhist->he) {
+							(void)psh_write(STDOUT_FILENO, *cmd, n + m);
+						}
+						else {
 							psh_printhistent(cmdhist->entries + hp);
+						}
 						psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
 					}
 					/* Complete path */
@@ -635,7 +638,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 							i = CMDSZ - n - m;
 						memmove(*cmd + n + i, *cmd + n, m);
 						memcpy(*cmd + n, files[0] + strlen(base), i);
-						write(STDOUT_FILENO, *cmd + n, i + m);
+						(void)psh_write(STDOUT_FILENO, *cmd + n, i + m);
 						n += i;
 						psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
 					}
@@ -651,13 +654,15 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 			}
 			/* FF => clear screen */
 			else if (c == '\014') {
-				write(STDOUT_FILENO, "\033[f", 3);
-				write(STDOUT_FILENO, "\033[0J", 4);
-				write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
-				if (hp != cmdhist->he)
+				(void)psh_write(STDOUT_FILENO, "\033[f", 3);
+				(void)psh_write(STDOUT_FILENO, "\033[0J", 4);
+				(void)psh_write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
+				if (hp != cmdhist->he) {
 					psh_printhistent(cmdhist->entries + hp);
-				else
-					write(STDOUT_FILENO, *cmd, n + m);
+				}
+				else {
+					(void)psh_write(STDOUT_FILENO, *cmd, n + m);
+				}
 				psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
 			}
 			/* LF or CR => go to new line and break (finished reading command) */
@@ -677,7 +682,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 					hp = cmdhist->he;
 				}
 				psh_movecursor(n + sizeof(PROMPT) - 1, m);
-				write(STDOUT_FILENO, "\r\n", 2);
+				(void)psh_write(STDOUT_FILENO, "\r\n", 2);
 				break;
 			}
 			else {
@@ -699,7 +704,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 					}
 					memmove(*cmd + n + 1, *cmd + n, m);
 					(*cmd)[n++] = c;
-					write(STDOUT_FILENO, *cmd + n - 1, m + 1);
+					(void)psh_write(STDOUT_FILENO, *cmd + n - 1, m + 1);
 					psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
 				}
 				continue;
@@ -723,8 +728,8 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 					if (hp == cmdhist->he)
 						ln = n + m;
 					psh_movecursor(n + sizeof(PROMPT) - 1, -(n + sizeof(PROMPT) - 1));
-					write(STDOUT_FILENO, "\033[0J", 4);
-					write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
+					(void)psh_write(STDOUT_FILENO, "\033[0J", 4);
+					(void)psh_write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
 					psh_printhistent(cmdhist->entries + (hp = (hp) ? hp - 1 : HISTSZ - 1));
 					n = cmdhist->entries[hp].n;
 					m = 0;
@@ -733,11 +738,11 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 			else if (k == kDown) {
 				if (hp != cmdhist->he) {
 					psh_movecursor(n + sizeof(PROMPT) - 1, -(n + sizeof(PROMPT) - 1));
-					write(STDOUT_FILENO, "\033[0J", 4);
-					write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
+					(void)psh_write(STDOUT_FILENO, "\033[0J", 4);
+					(void)psh_write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
 					if ((hp = (hp + 1) % HISTSZ) == cmdhist->he) {
 						n = ln;
-						write(STDOUT_FILENO, *cmd, n);
+						(void)psh_write(STDOUT_FILENO, *cmd, n);
 					}
 					else {
 						n = cmdhist->entries[hp].n;
@@ -781,8 +786,8 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 						hp = cmdhist->he;
 					}
 					memmove(*cmd + n, *cmd + n + 1, --m);
-					write(STDOUT_FILENO, "\033[0J", 4);
-					write(STDOUT_FILENO, *cmd + n, m);
+					(void)psh_write(STDOUT_FILENO, "\033[0J", 4);
+					(void)psh_write(STDOUT_FILENO, *cmd + n, m);
 					psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
 				}
 			}
@@ -1083,6 +1088,9 @@ static int psh_run(int exitable, const char *console)
 	pshapp_common.cmdhist = cmdhist;
 
 	while (pgrp == tcgetpgrp(STDIN_FILENO)) {
+		(void)psh_write(STDOUT_FILENO, "\033[0J", 4);
+		(void)psh_write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
+
 		if ((n = psh_readcmd(&orig, cmdhist, &cmd)) < 0) {
 			err = n;
 			break;
