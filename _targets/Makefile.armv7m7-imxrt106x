@@ -3,7 +3,13 @@
 #
 # iMX RT tool set
 #
-# Copyright 2019 Phoenix Systems
+# Copyright 2019, 2023 Phoenix Systems
 #
 
-DEFAULT_COMPONENTS := psh psd meterfs-migrate
+DEFAULT_COMPONENTS := psh meterfs-migrate
+
+ifneq (, $(findstring 106, $(TARGET)))
+  DEFAULT_COMPONENTS += psd
+else ifneq (, $(findstring 105, $(TARGET)))
+  # placeholder
+endif
