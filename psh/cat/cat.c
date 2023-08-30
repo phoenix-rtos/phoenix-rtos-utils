@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 #include "../psh.h"
 
@@ -45,38 +46,57 @@ int psh_cat(int argc, char **argv)
 	char *buff;
 	size_t ret, len, wrote;
 	int c, i, retval = EXIT_SUCCESS;
+	struct stat sbuff;
 
-	while ((c = getopt(argc, argv, "h")) != -1) {
+	for (;;) {
+		c = getopt(argc, argv, "h");
+		if (c == -1) {
+			break;
+		}
+
 		switch (c) {
 			case 'h':
 				psh_cat_help(argv[0]);
-				break;
+				return EXIT_SUCCESS;
 			default:
 				psh_cat_help(argv[0]);
-				retval = EXIT_FAILURE;
-				break;
+				return EXIT_FAILURE;
 		}
-
-		return retval;
 	}
 
 	/* FIXME? We're operating on streams, there should be no need for big buffers */
-	if ((buff = malloc(SIZE_BUFF)) == NULL) {
-		fprintf(stderr, "cat: out of memory\n");
+	buff = malloc(SIZE_BUFF);
+	if (buff == NULL) {
+		perror("cat");
 		return EXIT_FAILURE;
 	}
 
 	for (i = optind; (psh_cat_isExit() == 0) && (i < argc); ++i) {
-		if ((file = fopen(argv[i], "r")) == NULL) {
-			fprintf(stderr, "cat: %s no such file\n", argv[i]);
+		if (stat(argv[i], &sbuff) < 0) {
+			fprintf(stderr, "cat: %s: %s\n", argv[i], strerror(errno));
 			retval = EXIT_FAILURE;
+			continue;
+		}
+		else if (S_ISDIR(sbuff.st_mode)) {
+			fprintf(stderr, "cat: %s: %s\n", argv[i], strerror(EISDIR));
+			retval = EXIT_FAILURE;
+			continue;
 		}
 		else {
+			file = fopen(argv[i], "r");
+			if (file == NULL) {
+				fprintf(stderr, "cat: %s: %s\n", argv[i], strerror(errno));
+				retval = EXIT_FAILURE;
+				continue;
+			}
+
 			while (psh_cat_isExit() == 0) {
-				if ((len = fread(buff, 1, SIZE_BUFF, file)) > 0) {
+				len = fread(buff, 1, SIZE_BUFF, file);
+				if (len > 0) {
 					wrote = 0;
 					do {
-						if ((ret = fwrite(buff + wrote, 1, len, stdout)) == 0) {
+						ret = fwrite(buff + wrote, 1, len, stdout);
+						if (ret == 0) {
 							retval = EXIT_FAILURE;
 							break;
 						}
