@@ -20,8 +20,8 @@
 
 typedef struct psh_app {
 	const char name[11];
-	const int (*run)(int argc, char **argv);
-	const void (*info)(void);
+	int (*const run)(int argc, char **argv);
+	void (*const info)(void);
 	struct psh_app *next;
 } psh_appentry_t;
 

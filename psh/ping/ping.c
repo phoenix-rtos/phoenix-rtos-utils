@@ -18,6 +18,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -106,26 +107,25 @@ static int ping_sockconf(void)
 }
 
 
-static void ping_reqinit(char *data, int len)
+static void ping_reqinit(uint8_t *data, int len)
 {
 	struct icmphdr *hdr = (struct icmphdr *)data;
-	int i;
 
 	hdr->type = ICMP_ECHO;
 	hdr->un.echo.id = htons(getpid());
 
-	for (i = 0; i < len - sizeof(struct icmphdr); i++)
-		data[sizeof(struct icmphdr) + i] = (char)i;
+	for (unsigned int i = 0; i < len - sizeof(struct icmphdr); i++)
+		data[sizeof(struct icmphdr) + i] = (uint8_t)i;
 }
 
 
-static int ping_echo(int fd, char *data, int len)
+static int ping_echo(int fd, uint8_t *data, int len)
 {
 	struct icmphdr *hdr = (struct icmphdr *)data;
 
 	hdr->un.echo.sequence = htons(ping_common.seq++);
 	hdr->checksum = 0;
-	hdr->checksum = htons(ping_chksum((uint8_t *)data, len));
+	hdr->checksum = htons(ping_chksum(data, len));
 
 	if (sendto(fd, data, len, 0, (struct sockaddr *)&ping_common.raddr, sizeof(ping_common.raddr)) != len)
 		return -1;
@@ -134,7 +134,7 @@ static int ping_echo(int fd, char *data, int len)
 }
 
 
-static int ping_reply(int fd, char *data, size_t len, char *addrstr, int addrlen)
+static int ping_reply(int fd, uint8_t *data, size_t len, char *addrstr, int addrlen)
 {
 	struct sockaddr_in rsin;
 	socklen_t rlen = sizeof(rsin);
@@ -185,7 +185,7 @@ static int ping_reply(int fd, char *data, size_t len, char *addrstr, int addrlen
 }
 
 
-static int ping_echoreply(int fd, char *req, char *resp)
+static int ping_echoreply(int fd, uint8_t *req, uint8_t *resp)
 {
 	struct icmphdr *icmphdr;
 	struct iphdr *iphdr;
@@ -225,7 +225,7 @@ static int ping_echoreply(int fd, char *req, char *resp)
 
 int psh_ping(int argc, char **argv)
 {
-	char *resp, *req;
+	uint8_t *resp, *req;
 	int fd, c, ret = 0;
 	char *end;
 
