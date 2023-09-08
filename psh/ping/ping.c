@@ -38,6 +38,7 @@ static struct {
 	int timeout;  /* ms */
 	int reqsz;
 	int respsz;
+	uint16_t myid; /* ping session ID - in network order */
 } ping_common;
 
 
@@ -112,7 +113,8 @@ static void ping_reqinit(uint8_t *data, int len)
 	struct icmphdr *hdr = (struct icmphdr *)data;
 
 	hdr->type = ICMP_ECHO;
-	hdr->un.echo.id = htons(getpid());
+	ping_common.myid = htons(getpid());
+	hdr->un.echo.id = ping_common.myid;
 
 	for (unsigned int i = 0; i < len - sizeof(struct icmphdr); i++)
 		data[sizeof(struct icmphdr) + i] = (uint8_t)i;
@@ -142,20 +144,27 @@ static int ping_reply(int fd, uint8_t *data, size_t len, char *addrstr, int addr
 	int bytes;
 	uint16_t chksum;
 
-	if ((bytes = recvfrom(fd, data, len, 0, (struct sockaddr *)&rsin, &rlen)) <= 0) {
-		if (errno == EAGAIN || errno == EWOULDBLOCK)
-			fprintf(stderr, "Host timeout\n");
-		else
-			fprintf(stderr, "ping: Fail to receive packet on socket!\n");
-		return -1;
-	}
+	do {
+		if ((bytes = recvfrom(fd, data, len, 0, (struct sockaddr *)&rsin, &rlen)) <= 0) {
+			if (errno == EAGAIN || errno == EWOULDBLOCK)
+				fprintf(stderr, "Host timeout\n");
+			else
+				fprintf(stderr, "ping: Fail to receive packet on socket!\n");
+			return -1;
+		}
 
-	if (bytes < sizeof(struct iphdr) + sizeof(struct icmphdr)) {
-		fprintf(stderr, "ping: Received msg too short (%d)!\n", bytes);
-		return -1;
-	}
+		if (bytes < (int)(sizeof(struct iphdr) + sizeof(struct icmphdr))) {
+			fprintf(stderr, "ping: Received msg too short (%d)!\n", bytes);
+			return -1;
+		}
 
-	bytes -= sizeof(struct iphdr);
+		icmphdr = (struct icmphdr *)(data + sizeof(struct iphdr));
+		bytes -= sizeof(struct iphdr);
+
+		if (icmphdr->un.echo.id != ping_common.myid) {
+			continue;
+		}
+	} while (icmphdr->type != ICMP_ECHOREPLY);
 
 	if (inet_ntop(ping_common.af, &rsin.sin_addr, addrstr, addrlen) == NULL) {
 		fprintf(stderr, "ping: Invalid address received!\n");
@@ -167,17 +176,16 @@ static int ping_reply(int fd, uint8_t *data, size_t len, char *addrstr, int addr
 		return -1;
 	}
 
-	icmphdr = (struct icmphdr *)(data + sizeof(struct iphdr));
 	chksum = ntohs(icmphdr->checksum);
 	icmphdr->checksum = 0;
 
-	if (ntohs(icmphdr->un.echo.sequence) != ping_common.seq - 1) {
-		fprintf(stderr, "ping: Response out of sequence!\n");
+	if (ping_chksum((uint8_t *)icmphdr, bytes) != chksum) {
+		fprintf(stderr, "ping: Response invalid checksum!\n");
 		return -1;
 	}
 
-	if (ping_chksum((uint8_t *)icmphdr, bytes) != chksum) {
-		fprintf(stderr, "ping: Response invalid checksum!\n");
+	if (ntohs(icmphdr->un.echo.sequence) != ping_common.seq - 1) {
+		fprintf(stderr, "ping: Response out of sequence (recv_seq=%u, expected_seq=%u)!\n", ntohs(icmphdr->un.echo.sequence), ping_common.seq - 1);
 		return -1;
 	}
 
