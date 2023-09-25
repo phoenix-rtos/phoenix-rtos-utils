@@ -269,6 +269,12 @@ static void psh_ls_printlong(size_t nfiles)
 	int daysz = 1;
 	unsigned int i, j;
 	struct tm t;
+	int currentYear = 0;
+	time_t currentTime = time(NULL);
+
+	if (localtime_r(&currentTime, &t) != NULL) {
+		currentYear = t.tm_year;
+	}
 
 	for (i = 0; i < nfiles; i++) {
 		linksz = max(psh_ls_numplaces(files[i].stat.st_nlink), linksz);
@@ -326,7 +332,12 @@ static void psh_ls_printlong(size_t nfiles)
 		localtime_r(&files[i].stat.st_mtime, &t);
 		strftime(buff, 80, "%b ", &t);
 		sprintf(buff + 4, "%*d ", daysz, t.tm_mday);
-		strftime(buff + 5 + daysz, 75 - daysz, "%H:%M", &t);
+		if (t.tm_year == currentYear) {
+			strftime(buff + 5 + daysz, 75 - daysz, "%H:%M", &t);
+		}
+		else {
+			snprintf(buff + 5 + daysz, 75 - daysz, "%5d", t.tm_year + 1900);
+		}
 
 		printf("%s %*d ", perms, linksz, files[i].stat.st_nlink);
 		printf("%-*s ", usersz, (files[i].pw != NULL) ? files[i].pw->pw_name : "---");
