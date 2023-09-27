@@ -499,9 +499,6 @@ static int psh_keyCode(const char *buff, int *pEsc)
 }
 
 
-extern void cfmakeraw(struct termios *termios);
-
-
 static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 {
 	int i, k, nfiles, err = 0, esc = 0, n = 0, m = 0, ln = 0, hp = cmdhist->he;
@@ -522,6 +519,8 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 		free(*cmd);
 		return err;
 	}
+
+	write(STDOUT_FILENO, "\033[0J" PROMPT, 4 + sizeof(PROMPT) - 1);
 
 	for (;;) {
 		read(STDIN_FILENO, &c, 1);
@@ -1084,9 +1083,6 @@ static int psh_run(int exitable, const char *console)
 	pshapp_common.cmdhist = cmdhist;
 
 	while (pgrp == tcgetpgrp(STDIN_FILENO)) {
-		write(STDOUT_FILENO, "\033[0J", 4);
-		write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1);
-
 		if ((n = psh_readcmd(&orig, cmdhist, &cmd)) < 0) {
 			err = n;
 			break;
