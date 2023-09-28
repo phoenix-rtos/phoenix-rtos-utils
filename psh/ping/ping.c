@@ -55,7 +55,7 @@ static void ping_help(void)
 	printf("Options\n");
 	printf("  -h:  prints help\n");
 	printf("  -c:  count, number of requests to be sent, default 5\n");
-	printf("  -i:  interval in milliseconds, minimum 200 ms, default 1000\n");
+	printf("  -i:  interval in milliseconds, default 1000\n");
 	printf("  -t:  IP Time To Live, default 64\n");
 	printf("  -s:  payload size, default 56, maximum 2040\n");
 	printf("  -W:  socket timetout, default 2000\n\n");
