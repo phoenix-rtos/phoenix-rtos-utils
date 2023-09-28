@@ -1,0 +1,9 @@
+#
+# Makefile for Phoenix-RTOS 3 utils
+#
+# sparcv8leon3-gr712rc tool set
+#
+# Copyright 2023 Phoenix Systems
+#
+
+DEFAULT_COMPONENTS := psh
