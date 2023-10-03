@@ -123,7 +123,7 @@ static const char *si[] = {
 };
 
 
-#define PSH_REDIRSZ 2
+#define PSH_REDIRSZ 3
 struct psh_redir {
 	int save[PSH_REDIRSZ];
 	int red[PSH_REDIRSZ];
@@ -871,85 +871,101 @@ static int psh_parsecmd(char *line, int *argc, char ***argv)
 }
 
 
+static void psh_redirCleanup(struct psh_redir *redir)
+{
+	for (int i = 0; i < PSH_REDIRSZ; ++i) {
+		if (redir->red[i] >= 0) {
+			close(redir->red[i]);
+			redir->red[i] = -1;
+		}
+
+		if (redir->save[i] >= 0) {
+			close(redir->save[i]);
+			redir->save[i] = -1;
+		}
+	}
+}
+
+
+#define PSH_MARKER_IN  (1 << 0)
+#define PSH_MARKER_OUT (1 << 1)
+#define PSH_MARKER_ERR (1 << 2)
+
+
 static int psh_parseRedirections(int *argc, char ***argv, struct psh_redir *redir)
 {
-	int fd, flags, eat;
+	int flags, eat, marker;
 	char *path;
 
-	redir->red[0] = -1;
-	redir->red[1] = -1;
+	for (int i = 0; i < PSH_REDIRSZ; ++i) {
+		redir->red[i] = -1;
+	}
 
-	for (int i = 0; i < *argc; ++i) {
-		/* clang-format off */
-		enum { marker_in, marker_out } marker;
-		/* clang-format on */
+	int i = 0;
+	while (i < *argc) {
+		int c = 1;
+		switch ((*argv)[i][0]) {
+			case '1':
+				marker = PSH_MARKER_OUT;
+				break;
+			case '2':
+				marker = PSH_MARKER_ERR;
+				break;
+			case '&':
+				marker = PSH_MARKER_OUT | PSH_MARKER_ERR;
+				break;
+			default:
+				marker = 0;
+				c = 0;
+				break;
+		}
 
-		if ((*argv)[i][0] == '>') {
-			marker = marker_out;
+		if ((*argv)[i][c] == '>') {
+			if (marker == 0) {
+				marker = PSH_MARKER_OUT;
+			}
 			flags = O_WRONLY | O_CREAT;
 
-			if ((*argv)[i][1] == '>') {
+			if ((*argv)[i][c + 1] == '>') {
 				flags |= O_APPEND;
-				if ((*argv)[i][2] == '\0') {
-					if (i == *argc - 1) {
-						break;
-					}
-					path = (*argv)[i + 1];
-					eat = 2;
-				}
-				else {
-					path = &(*argv)[i][2];
-					eat = 1;
-				}
+				++c;
 			}
 			else {
 				flags |= O_TRUNC;
-				if ((*argv)[i][1] == '\0') {
-					if (i == *argc - 1) {
-						break;
-					}
-					path = (*argv)[i + 1];
-					eat = 2;
-				}
-				else {
-					path = &(*argv)[i][1];
-					eat = 1;
-				}
 			}
 		}
-		else if ((*argv)[i][0] == '<') {
-			marker = marker_in;
+		else if ((marker == 0) && ((*argv)[i][0] == '<')) {
+			marker = PSH_MARKER_IN;
 			flags = O_RDONLY;
-
-			if ((*argv)[i][1] == '\0') {
-				path = (*argv)[i + 1];
-				eat = 2;
-			}
-			else {
-				path = &(*argv)[i][1];
-				eat = 1;
-			}
 		}
 		else {
+			++i;
 			continue;
 		}
 
-		fd = open(path, flags, DEFFILEMODE);
+		if ((*argv)[i][c + 1] == '\0') {
+			if ((i + 1) >= *argc) {
+				fprintf(stderr, "psh: Syntax error\n");
+				psh_redirCleanup(redir);
+				return -EINVAL;
+			}
+			path = (*argv)[i + 1];
+			eat = 2;
+		}
+		else {
+			path = &(*argv)[i][c + 1];
+			eat = 1;
+		}
+
+		int fd = open(path, flags, DEFFILEMODE);
 		if (fd < 0) {
-			fprintf(stderr, "%s: %s", (*argv)[i + 1], strerror(errno));
-			if (redir->red[0] >= 0) {
-				close(redir->red[0]);
-				redir->red[0] = -1;
-			}
-			if (redir->red[1] >= 0) {
-				close(redir->red[1]);
-				redir->red[1] = -1;
-			}
+			fprintf(stderr, "psh: %s: %s\n", path, strerror(errno));
+			psh_redirCleanup(redir);
 			return -ENOENT;
 		}
 
 		/* Eat stream redirection */
-		if (i + eat < *argc) {
+		if ((i + eat) < *argc) {
 			for (int j = i + eat; j < *argc; ++j) {
 				(*argv)[j - eat] = (*argv)[j];
 			}
@@ -957,17 +973,36 @@ static int psh_parseRedirections(int *argc, char ***argv, struct psh_redir *redi
 		*argc -= eat;
 		(*argv)[*argc] = NULL;
 
-		if (marker == marker_in) {
+		if ((marker & PSH_MARKER_IN) != 0) {
 			if (redir->red[0] >= 0) {
 				close(redir->red[0]);
 			}
 			redir->red[0] = fd;
 		}
 		else {
-			if (redir->red[1] >= 0) {
-				close(redir->red[1]);
+			if ((marker & PSH_MARKER_OUT) != 0) {
+				if (redir->red[1] >= 0) {
+					close(redir->red[1]);
+				}
+				redir->red[1] = fd;
 			}
-			redir->red[1] = fd;
+			if ((marker & PSH_MARKER_ERR) != 0) {
+				if (redir->red[2] >= 0) {
+					close(redir->red[2]);
+				}
+				if ((marker & PSH_MARKER_OUT) != 0) {
+					/* Makes logic way simpler to never have
+					 * same fd in two fields */
+					redir->red[2] = dup(fd);
+					if (redir->red[2] < 0) {
+						psh_redirCleanup(redir);
+						return -errno;
+					}
+				}
+				else {
+					redir->red[2] = fd;
+				}
+			}
 		}
 	}
 
@@ -975,8 +1010,8 @@ static int psh_parseRedirections(int *argc, char ***argv, struct psh_redir *redi
 }
 
 
-static FILE **const psh_flut[PSH_REDIRSZ] = { &stdin, &stdout };
-static const char *const psh_clut[PSH_REDIRSZ] = { "stdin", "stdout" };
+static FILE **const psh_flut[PSH_REDIRSZ] = { &stdin, &stdout, &stderr };
+static const char *const psh_clut[PSH_REDIRSZ] = { "stdin", "stdout", "stderr" };
 
 
 static int psh_streamRedirect(struct psh_redir *redir)
@@ -991,7 +1026,7 @@ static int psh_streamRedirect(struct psh_redir *redir)
 		if (redir->red[i] >= 0) {
 			redir->save[i] = dup(fileno(*psh_flut[i]));
 			if (redir->save[i] < 0) {
-				fprintf(stderr, "cannot save %s fd: %s\n", psh_clut[i], strerror(errno));
+				fprintf(stderr, "psh: cannot save %s fd: %s\n", psh_clut[i], strerror(errno));
 				close(redir->red[i]);
 				redir->red[i] = -1;
 				err = -1;
@@ -1000,7 +1035,7 @@ static int psh_streamRedirect(struct psh_redir *redir)
 
 			fflush(*psh_flut[i]);
 			if (dup2(redir->red[i], fileno(*psh_flut[i])) < 0) {
-				fprintf(stderr, "cannot redirect %s: %s\n", psh_clut[i], strerror(errno));
+				fprintf(stderr, "psh: cannot redirect %s: %s\n", psh_clut[i], strerror(errno));
 				close(redir->save[i]);
 				redir->save[i] = -1;
 				err = -1;
@@ -1022,26 +1057,15 @@ static int psh_streamRestore(struct psh_redir *redir)
 		if (redir->save[i] >= 0) {
 			fflush(*psh_flut[i]);
 			if (dup2(redir->save[i], fileno(*psh_flut[i])) < 0) {
-				fprintf(stderr, "cannot restore %s: %s\n", psh_clut[i], strerror(errno));
-				err = 0;
+				fprintf(stderr, "psh: cannot restore %s: %s\n", psh_clut[i], strerror(errno));
+				err = -1;
 			}
 			close(redir->save[i]);
 			redir->save[i] = -1;
 		}
 	}
 
-	/* Cleanup */
-	for (int i = 0; i < PSH_REDIRSZ; ++i) {
-		if (redir->red[i] >= 0) {
-			close(redir->red[i]);
-			redir->red[i] = -1;
-		}
-
-		if (redir->save[i] >= 0) {
-			close(redir->save[i]);
-			redir->save[i] = -1;
-		}
-	}
+	psh_redirCleanup(redir);
 
 	return err;
 }
