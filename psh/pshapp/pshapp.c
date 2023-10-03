@@ -25,6 +25,7 @@
 #include <string.h>
 #include <termios.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include <sys/file.h>
 #include <sys/ioctl.h>
@@ -119,6 +120,13 @@ static const char *si[] = {
 	"E", /* 10^18  exa   */
 	"Z", /* 10^21  zetta */
 	"Y", /* 10^24  yotta */
+};
+
+
+#define PSH_REDIRSZ 2
+struct psh_redir {
+	int save[PSH_REDIRSZ];
+	int red[PSH_REDIRSZ];
 };
 
 
@@ -829,17 +837,26 @@ static int psh_parsecmd(char *line, int *argc, char ***argv)
 {
 	char *cmd, *arg, **rargv;
 
-	if ((cmd = strtok(line, "\t ")) == NULL)
+	cmd = strtok(line, "\t ");
+	if (cmd == NULL) {
 		return -EINVAL;
-
-	if ((*argv = malloc(2 * sizeof(char *))) == NULL)
+	}
+	*argv = malloc(2 * sizeof(char *));
+	if (*argv == NULL) {
 		return -ENOMEM;
+	}
 
 	*argc = 0;
 	(*argv)[(*argc)++] = cmd;
 
-	while ((arg = strtok(NULL, "\t ")) != NULL) {
-		if ((rargv = realloc(*argv, (*argc + 2) * sizeof(char *))) == NULL) {
+	for (;;) {
+		arg = strtok(NULL, "\t ");
+		if (arg == NULL) {
+			break;
+		}
+
+		rargv = realloc(*argv, (*argc + 2) * sizeof(char *));
+		if (rargv == NULL) {
 			free(*argv);
 			return -ENOMEM;
 		}
@@ -847,9 +864,186 @@ static int psh_parsecmd(char *line, int *argc, char ***argv)
 		*argv = rargv;
 		(*argv)[(*argc)++] = arg;
 	}
+
 	(*argv)[*argc] = NULL;
 
 	return 0;
+}
+
+
+static int psh_parseRedirections(int *argc, char ***argv, struct psh_redir *redir)
+{
+	int fd, flags, eat;
+	char *path;
+
+	redir->red[0] = -1;
+	redir->red[1] = -1;
+
+	for (int i = 0; i < *argc; ++i) {
+		/* clang-format off */
+		enum { marker_in, marker_out } marker;
+		/* clang-format on */
+
+		if ((*argv)[i][0] == '>') {
+			marker = marker_out;
+			flags = O_WRONLY | O_CREAT;
+
+			if ((*argv)[i][1] == '>') {
+				flags |= O_APPEND;
+				if ((*argv)[i][2] == '\0') {
+					if (i == *argc - 1) {
+						break;
+					}
+					path = (*argv)[i + 1];
+					eat = 2;
+				}
+				else {
+					path = &(*argv)[i][2];
+					eat = 1;
+				}
+			}
+			else {
+				flags |= O_TRUNC;
+				if ((*argv)[i][1] == '\0') {
+					if (i == *argc - 1) {
+						break;
+					}
+					path = (*argv)[i + 1];
+					eat = 2;
+				}
+				else {
+					path = &(*argv)[i][1];
+					eat = 1;
+				}
+			}
+		}
+		else if ((*argv)[i][0] == '<') {
+			marker = marker_in;
+			flags = O_RDONLY;
+
+			if ((*argv)[i][1] == '\0') {
+				path = (*argv)[i + 1];
+				eat = 2;
+			}
+			else {
+				path = &(*argv)[i][1];
+				eat = 1;
+			}
+		}
+		else {
+			continue;
+		}
+
+		fd = open(path, flags, DEFFILEMODE);
+		if (fd < 0) {
+			fprintf(stderr, "%s: %s", (*argv)[i + 1], strerror(errno));
+			if (redir->red[0] >= 0) {
+				close(redir->red[0]);
+				redir->red[0] = -1;
+			}
+			if (redir->red[1] >= 0) {
+				close(redir->red[1]);
+				redir->red[1] = -1;
+			}
+			return -ENOENT;
+		}
+
+		/* Eat stream redirection */
+		if (i + eat < *argc) {
+			for (int j = i + eat; j < *argc; ++j) {
+				(*argv)[j - eat] = (*argv)[j];
+			}
+		}
+		*argc -= eat;
+		(*argv)[*argc] = NULL;
+
+		if (marker == marker_in) {
+			if (redir->red[0] >= 0) {
+				close(redir->red[0]);
+			}
+			redir->red[0] = fd;
+		}
+		else {
+			if (redir->red[1] >= 0) {
+				close(redir->red[1]);
+			}
+			redir->red[1] = fd;
+		}
+	}
+
+	return 0;
+}
+
+
+static FILE **const psh_flut[PSH_REDIRSZ] = { &stdin, &stdout };
+static const char *const psh_clut[PSH_REDIRSZ] = { "stdin", "stdout" };
+
+
+static int psh_streamRedirect(struct psh_redir *redir)
+{
+	int err = 0;
+
+	for (int i = 0; i < PSH_REDIRSZ; ++i) {
+		redir->save[i] = -1;
+	}
+
+	for (int i = 0; i < PSH_REDIRSZ; ++i) {
+		if (redir->red[i] >= 0) {
+			redir->save[i] = dup(fileno(*psh_flut[i]));
+			if (redir->save[i] < 0) {
+				fprintf(stderr, "cannot save %s fd: %s\n", psh_clut[i], strerror(errno));
+				close(redir->red[i]);
+				redir->red[i] = -1;
+				err = -1;
+				break;
+			}
+
+			fflush(*psh_flut[i]);
+			if (dup2(redir->red[i], fileno(*psh_flut[i])) < 0) {
+				fprintf(stderr, "cannot redirect %s: %s\n", psh_clut[i], strerror(errno));
+				close(redir->save[i]);
+				redir->save[i] = -1;
+				err = -1;
+			}
+			close(redir->red[i]);
+			redir->red[i] = -1;
+		}
+	}
+
+	return (err == 0) ? 0 : PSH_UNKNOWN_CMD;
+}
+
+
+static int psh_streamRestore(struct psh_redir *redir)
+{
+	int err = 0;
+
+	for (int i = 0; i < PSH_REDIRSZ; ++i) {
+		if (redir->save[i] >= 0) {
+			fflush(*psh_flut[i]);
+			if (dup2(redir->save[i], fileno(*psh_flut[i])) < 0) {
+				fprintf(stderr, "cannot restore %s: %s\n", psh_clut[i], strerror(errno));
+				err = 0;
+			}
+			close(redir->save[i]);
+			redir->save[i] = -1;
+		}
+	}
+
+	/* Cleanup */
+	for (int i = 0; i < PSH_REDIRSZ; ++i) {
+		if (redir->red[i] >= 0) {
+			close(redir->red[i]);
+			redir->red[i] = -1;
+		}
+
+		if (redir->save[i] >= 0) {
+			close(redir->save[i]);
+			redir->save[i] = -1;
+		}
+	}
+
+	return err;
 }
 
 
@@ -1090,7 +1284,7 @@ static int psh_run(int exitable, const char *console)
 	const psh_appentry_t *app;
 	struct termios orig;
 	char *tmp, *cmd, **argv;
-	int cnt, err, n, argc, retries;
+	int cnt, err, argc, retries;
 	pid_t pgrp;
 
 	/* Time for klog to print data from buffer */
@@ -1112,9 +1306,16 @@ static int psh_run(int exitable, const char *console)
 
 	/* Wait till we run in foreground */
 	if (tcgetpgrp(STDIN_FILENO) != -1) {
-		while ((pgrp = tcgetpgrp(STDIN_FILENO)) != getpgrp())
-			if (kill(-pgrp, SIGTTIN) == 0)
+		for (;;) {
+			pgrp = tcgetpgrp(STDIN_FILENO);
+			if (pgrp == getpgrp()) {
 				break;
+			}
+
+			if (kill(-pgrp, SIGTTIN) == 0) {
+				break;
+			}
+		}
 	}
 
 	/* Set signal handlers */
@@ -1132,46 +1333,55 @@ static int psh_run(int exitable, const char *console)
 
 	/* Put ourselves in our own process group */
 	pgrp = getpid();
-	if ((err = setpgid(pgrp, pgrp)) < 0) {
+	err = setpgid(pgrp, pgrp);
+	if (err < 0) {
 		fprintf(stderr, "psh: failed to put shell in its own process group\n");
 		return err;
 	}
 
 	/* Save original terminal settings */
-	if ((err = tcgetattr(STDIN_FILENO, &orig)) < 0) {
+	err = tcgetattr(STDIN_FILENO, &orig);
+	if (err < 0) {
 		fprintf(stderr, "psh: failed to save terminal settings\n");
 		return err;
 	}
 
 	/* Take terminal control - only interactive psh should take control */
-	if ((err = tcsetpgrp(STDIN_FILENO, pgrp)) < 0) {
+	err = tcsetpgrp(STDIN_FILENO, pgrp);
+	if (err < 0) {
 		fprintf(stderr, "psh: failed to take terminal control\n");
 		return err;
 	}
 
-	if ((cmdhist = calloc(1, sizeof(*cmdhist))) == NULL) {
+	cmdhist = calloc(1, sizeof(*cmdhist));
+	if (cmdhist == NULL) {
 		fprintf(stderr, "psh: failed to allocate command history storage\n");
 		return -ENOMEM;
 	}
 	pshapp_common.cmdhist = cmdhist;
 
 	while (pgrp == tcgetpgrp(STDIN_FILENO)) {
-		if ((n = psh_readcmd(&orig, cmdhist, &cmd)) < 0) {
+		struct psh_redir redir;
+
+		int n = psh_readcmd(&orig, cmdhist, &cmd);
+		if (n < 0) {
 			err = n;
 			break;
 		}
 
-		if ((err = psh_parsecmd(cmd, &argc, &argv)) < 0) {
+		err = psh_parsecmd(cmd, &argc, &argv);
+		if (err < 0) {
 			free(cmd);
-			if (err == -EINVAL)
+			if (err == -EINVAL) {
 				continue;
+			}
 			break;
 		}
 
 		/* Select command history entry */
 		if (cmdhist->he != cmdhist->hb) {
 			entry = &cmdhist->entries[(cmdhist->he) ? cmdhist->he - 1 : HISTSZ - 1];
-			if ((n == entry->n) && !memcmp(cmd, entry->cmd, n)) {
+			if ((n == entry->n) && (memcmp(cmd, entry->cmd, n) == 0)) {
 				cmdhist->he = (cmdhist->he) ? cmdhist->he - 1 : HISTSZ - 1;
 				free(entry->cmd);
 			}
@@ -1186,10 +1396,22 @@ static int psh_run(int exitable, const char *console)
 		/* Update command history */
 		entry->cmd = cmd;
 		entry->n = n;
-		if ((cmdhist->he = (cmdhist->he + 1) % HISTSZ) == cmdhist->hb) {
+		cmdhist->he = (cmdhist->he + 1) % HISTSZ;
+		if (cmdhist->he == cmdhist->hb) {
 			free(cmdhist->entries[cmdhist->hb].cmd);
 			cmdhist->entries[cmdhist->hb].cmd = NULL;
 			cmdhist->hb = (cmdhist->hb + 1) % HISTSZ;
+		}
+
+		if (psh_parseRedirections(&argc, &argv, &redir) < 0) {
+			free(argv);
+			continue;
+		}
+
+		/* psh_parseRedirections() might've consumed whole argv[] */
+		if (argv[0] == NULL) {
+			free(argv);
+			continue;
 		}
 
 		/* Clear signals */
@@ -1216,14 +1438,18 @@ static int psh_run(int exitable, const char *console)
 				cnt++;
 			}
 
-			if (cnt < 3 && *tmp == '/') {
+			if ((cnt < 3) && (*tmp == '/')) {
 				app = psh_findapp("/");
 			}
 		}
 
 		if (app != NULL) {
-			err = app->run(argc, argv);
+			err = psh_streamRedirect(&redir);
+			if (err == 0) {
+				err = app->run(argc, argv);
+			}
 			psh_common.exitStatus = err;
+			(void)psh_streamRestore(&redir);
 		}
 		else {
 			err = PSH_UNKNOWN_CMD;
@@ -1236,8 +1462,9 @@ static int psh_run(int exitable, const char *console)
 	}
 
 	/* Free command history */
-	for (; cmdhist->hb != cmdhist->he; cmdhist->hb = (cmdhist->hb + 1) % HISTSZ)
+	for (; cmdhist->hb != cmdhist->he; cmdhist->hb = (cmdhist->hb + 1) % HISTSZ) {
 		free(cmdhist->entries[cmdhist->hb].cmd);
+	}
 
 	free(cmdhist);
 	pshapp_common.cmdhist = NULL;
