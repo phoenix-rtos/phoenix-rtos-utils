@@ -118,7 +118,6 @@ pshapp_common_t pshapp_common;
 
 void _psh_exit(int code)
 {
-	keepidle(0);
 	_exit(code);
 }
 
