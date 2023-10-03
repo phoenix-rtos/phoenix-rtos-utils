@@ -421,11 +421,11 @@ static int psh_dd(int argc, char **argv)
 
 	free(buf);
 
-	printf("%zu+%d records in\n",
+	fprintf(stderr, "%zu+%d records in\n",
 		(size_t)(intotal / blocksz),
 		(int)(intotal % blocksz) != 0);
 
-	printf("%zu+%d records out\n",
+	fprintf(stderr, "%zu+%d records out\n",
 		(size_t)(outtotal / blocksz),
 		(int)(outtotal % blocksz) != 0);
 
