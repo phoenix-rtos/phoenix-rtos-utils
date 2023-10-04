@@ -319,7 +319,7 @@ static int psh_sharedMaps(void)
 
 static int psh_mem(int argc, char **argv)
 {
-	int c;
+	int c, ind;
 
 	if (argc == 1)
 		return psh_mem_summary() < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
@@ -343,8 +343,9 @@ static int psh_mem(int argc, char **argv)
 		}
 	}
 
-	if (optind < argc) {
-		fprintf(stderr, "mem: unknown argument: %s\n", argv[optind]);
+	if (optind <= argc) {
+		ind = (optind == argc) ? optind - 1 : optind;
+		fprintf(stderr, "mem: unknown argument: %s\n", argv[ind]);
 		return EXIT_FAILURE;
 	}
 

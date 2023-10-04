@@ -90,8 +90,8 @@ static int psh_echo(int argc, char **argv)
 		}
 	}
 
-	for (i = optind; i < argend; ++i) {
-		if (i != optind) {
+	for (i = 1; i < argend; ++i) {
+		if (i != 1) {
 			fputc(' ', output);
 		}
 
