@@ -83,6 +83,7 @@ typedef struct {
 typedef struct {
 	psh_hist_t *cmdhist;
 	unsigned char newline;
+	char *cmdscratchpad;
 } pshapp_common_t;
 
 
@@ -825,20 +826,95 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 }
 
 
-static int psh_parsecmd(char *line, int *argc, char ***argv)
+static char *psh_unescape(char *token, char ch)
 {
-	char *cmd, *arg, **rargv;
+	char *src = token;
+	char *dst = token;
 
-	if ((cmd = strtok(line, "\t ")) == NULL)
+	while (*src != '\0') {
+		if (src[0] == '\\' && src[1] == ch) {
+			*(dst++) = ch;
+			src += 2;
+		}
+		else {
+			*(dst++) = *(src++);
+		}
+	}
+	*dst = '\0';
+	return token;
+}
+
+
+static char *psh_tokenize(char **pstr)
+{
+	char *ptr = *pstr;
+	char *ret = *pstr;
+	char quote = 0;
+
+	if (*ptr == '\0') {
+		return NULL;
+	}
+
+	while (*ptr != '\0' && isspace(*ptr)) {
+		ptr++;
+	}
+
+	ret = ptr;
+
+	if (*ptr == '"' || *ptr == '\'') {
+		quote = *(ptr++);
+		ret = ptr;
+		for (;;) {
+			while (*ptr != '\0' && *ptr != quote) {
+				ptr++;
+			}
+			if (*ptr == '\0' || *(ptr - 1) != '\\') {
+				break;
+			}
+			ptr++;
+		}
+	}
+	else {
+		while (*ptr != '\0' && !isspace(*ptr)) {
+			ptr++;
+		}
+	}
+
+	if (*ptr != '\0') {
+		*(ptr++) = '\0';
+		while (*ptr != '\0' && isspace(*ptr)) {
+			ptr++;
+		}
+	}
+
+	*pstr = ptr;
+
+	return (quote == 0) ? ret : psh_unescape(ret, quote);
+}
+
+
+static int psh_parsecmd(char *line, int *argc, char ***argv, int scratchpad)
+{
+	char *arg, **rargv;
+	char *next = line;
+
+	if (line == NULL || *line == '\0') {
 		return -EINVAL;
+	}
 
-	if ((*argv = malloc(2 * sizeof(char *))) == NULL)
-		return -ENOMEM;
+	if (scratchpad != 0) {
+		next = psh_stralloc(pshapp_common.cmdscratchpad, line);
+		if (next == NULL) {
+			return -ENOMEM;
+		}
+		pshapp_common.cmdscratchpad = next;
+	}
 
 	*argc = 0;
-	(*argv)[(*argc)++] = cmd;
+	*argv = NULL;
 
-	while ((arg = strtok(NULL, "\t ")) != NULL) {
+	while (*next != '\0') {
+		arg = psh_tokenize(&next);
 		if ((rargv = realloc(*argv, (*argc + 2) * sizeof(char *))) == NULL) {
 			free(*argv);
 			return -ENOMEM;
@@ -884,7 +960,8 @@ static int psh_runscript(char *path)
 				line[ret - 1] = '\0';
 
 			do {
-				if ((err = psh_parsecmd(line + 1, &argc, &argv)) < 0) {
+				err = psh_parsecmd(line + 1, &argc, &argv, 0);
+				if (err < 0) {
 					fprintf(stderr, "psh: failed to parse line %d\n", i);
 					break;
 				}
@@ -1154,6 +1231,7 @@ static int psh_run(int exitable, const char *console)
 		return -ENOMEM;
 	}
 	pshapp_common.cmdhist = cmdhist;
+	pshapp_common.cmdscratchpad = NULL;
 
 	while (pgrp == tcgetpgrp(STDIN_FILENO)) {
 		if ((n = psh_readcmd(&orig, cmdhist, &cmd)) < 0) {
@@ -1161,7 +1239,8 @@ static int psh_run(int exitable, const char *console)
 			break;
 		}
 
-		if ((err = psh_parsecmd(cmd, &argc, &argv)) < 0) {
+		err = psh_parsecmd(cmd, &argc, &argv, 1);
+		if (err < 0) {
 			free(cmd);
 			if (err == -EINVAL)
 				continue;
@@ -1238,6 +1317,9 @@ static int psh_run(int exitable, const char *console)
 	/* Free command history */
 	for (; cmdhist->hb != cmdhist->he; cmdhist->hb = (cmdhist->hb + 1) % HISTSZ)
 		free(cmdhist->entries[cmdhist->hb].cmd);
+
+	free(pshapp_common.cmdscratchpad);
+	pshapp_common.cmdscratchpad = NULL;
 
 	free(cmdhist);
 	pshapp_common.cmdhist = NULL;

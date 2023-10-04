@@ -68,4 +68,7 @@ extern size_t psh_write(int fd, const void *buf, size_t count);
 extern int psh_ttyopen(const char *dev);
 
 
+extern char *psh_stralloc(char *oldstr, const char *str);
+
+
 #endif

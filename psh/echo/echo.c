@@ -99,7 +99,7 @@ static int psh_echo(int argc, char **argv)
 			if (argv[i][j] == '$') {
 				j += psh_echo_printVar(&argv[i][j + 1], output);
 			}
-			else if (argv[i][j] != '"') { /* Primitive - just eat "" */
+			else {
 				fputc(argv[i][j], output);
 			}
 		}
