@@ -19,6 +19,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <sys/time.h>
 
 #include "../psh.h"
 
@@ -173,12 +174,14 @@ static int getconvmode(mode_t *m, const char *str)
 
 static int psh_dd(int argc, char **argv)
 {
+	struct timeval start_time, end_time;
 	const struct param_s *par;
 	const char *str, *cp;
 	char *buf, *p;
 	int infd, outfd;
 	ssize_t incc, outcc;
 	ssize_t intotal, outtotal;
+	float elapsed_time;
 
 	const char *infile = NULL;
 	const char *outfile = NULL;
@@ -325,6 +328,8 @@ static int psh_dd(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
+	gettimeofday(&start_time, NULL);
+
 	do {
 		if (skipval > 0) {
 			if (lseek(infd, skipval, 0) < 0) {
@@ -408,6 +413,8 @@ static int psh_dd(int argc, char **argv)
 
 	} while (0);
 
+	gettimeofday(&end_time, NULL);
+
 	/* cleanup: */
 	if (infd != fileno(stdin)) {
 		close(infd);
@@ -429,7 +436,11 @@ static int psh_dd(int argc, char **argv)
 		(size_t)(outtotal / blocksz),
 		(int)(outtotal % blocksz) != 0);
 
-	return EXIT_FAILURE;
+	elapsed_time = (end_time.tv_sec - start_time.tv_sec) + (end_time.tv_usec - start_time.tv_usec) / 1000000.0f;
+	fprintf(stderr, "%zu byte%s copied, %.3f s, %.1f kB/s\n", (size_t)intotal, ((intotal != 1) ? "s" : ""),
+		elapsed_time, (float)intotal / elapsed_time / 1024.0f);
+
+	return EXIT_SUCCESS;
 }
 
 
