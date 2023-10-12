@@ -1312,7 +1312,7 @@ static int psh_run(int exitable, const char *console)
 	pid_t pgrp;
 
 	/* Time for klog to print data from buffer */
-	usleep(500000);
+	sleep(1);
 
 	/* Only open tty if we are the first shell. */
 	if (psh_common.tcpid == -1) {
