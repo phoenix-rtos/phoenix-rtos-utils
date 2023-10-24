@@ -174,14 +174,14 @@ static int getconvmode(mode_t *m, const char *str)
 
 static int psh_dd(int argc, char **argv)
 {
-	struct timeval start_time, end_time;
+	struct timespec start_time, end_time;
 	const struct param_s *par;
 	const char *str, *cp;
 	char *buf, *p;
 	int infd, outfd;
 	ssize_t incc, outcc;
 	ssize_t intotal, outtotal;
-	float elapsed_time;
+	double elapsed_time;
 
 	const char *infile = NULL;
 	const char *outfile = NULL;
@@ -312,6 +312,7 @@ static int psh_dd(int argc, char **argv)
 	outtotal = 0;
 
 	infd = ((infile == NULL) ? fileno(stdin) : open(infile, O_RDONLY));
+	infile = (infile == NULL) ? "stdin" : infile;
 	if (infd < 0) {
 		fprintf(stderr, "'%s': %s\n", infile, strerror(errno));
 		free(buf);
@@ -319,6 +320,7 @@ static int psh_dd(int argc, char **argv)
 	}
 
 	outfd = ((outfile == NULL) ? fileno(stdout) : open(outfile, outmode | O_WRONLY, 0666));
+	outfile = (outfile == NULL) ? "stdout" : outfile;
 	if (outfd < 0) {
 		fprintf(stderr, "'%s': %s\n", outfile, strerror(errno));
 		if (infd != fileno(stdin)) {
@@ -328,7 +330,7 @@ static int psh_dd(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	gettimeofday(&start_time, NULL);
+	clock_gettime(CLOCK_MONOTONIC, &start_time);
 
 	do {
 		if (skipval > 0) {
@@ -413,7 +415,7 @@ static int psh_dd(int argc, char **argv)
 
 	} while (0);
 
-	gettimeofday(&end_time, NULL);
+	clock_gettime(CLOCK_MONOTONIC, &end_time);
 
 	/* cleanup: */
 	if (infd != fileno(stdin)) {
@@ -436,9 +438,14 @@ static int psh_dd(int argc, char **argv)
 		(size_t)(outtotal / blocksz),
 		(int)(outtotal % blocksz) != 0);
 
-	elapsed_time = (end_time.tv_sec - start_time.tv_sec) + (end_time.tv_usec - start_time.tv_usec) / 1000000.0f;
-	fprintf(stderr, "%zu byte%s copied, %.3f s, %.1f kB/s\n", (size_t)intotal, ((intotal != 1) ? "s" : ""),
-		elapsed_time, (float)intotal / elapsed_time / 1024.0f);
+	elapsed_time = (end_time.tv_sec - start_time.tv_sec) + (end_time.tv_nsec - start_time.tv_nsec) / 1000000000.0;
+	fprintf(stderr, "%zu byte%s copied, ", (size_t)outtotal, ((outtotal != 1) ? "s" : ""));
+	if (elapsed_time > 0.0) {
+		fprintf(stderr, "%.3f s, %.1f kB/s\n", elapsed_time, (double)outtotal / elapsed_time / 1024.0);
+	}
+	else {
+		fprintf(stderr, "speed not estimated\n");
+	}
 
 	return EXIT_SUCCESS;
 }
