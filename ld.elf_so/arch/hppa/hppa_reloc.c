@@ -33,10 +33,10 @@
 
 #include <stdlib.h>
 #include <sys/types.h>
-#include <sys/queue.h>
 
 #include <string.h>
 
+#include "queue.h"
 #include "rtld.h"
 #include "debug.h"
 

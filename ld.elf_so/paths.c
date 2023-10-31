@@ -42,11 +42,6 @@
 #include <sys/param.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
-#include <sys/gmon.h>
-#include <sys/socket.h>
-#include <sys/mount.h>
-#include <sys/resource.h>
-#include <machine/cpu.h>
 
 #include "debug.h"
 #include "rtld.h"
