@@ -126,15 +126,6 @@ typedef struct Struct_Ver_Entry {
 #define RTLD_MAX_ENTRY 10
 #define RTLD_MAX_LIBRARY 4
 #define RTLD_MAX_CTL 2
-typedef struct _rtld_library_xform_t {
-	struct _rtld_library_xform_t *next;
-	char *name;
-	const char *ctlname;
-	struct {
-		char *value;
-		char *library[RTLD_MAX_LIBRARY];
-	} entry[RTLD_MAX_ENTRY];
-} Library_Xform;
 
 /*
  * Shared object descriptor.
@@ -341,7 +332,6 @@ extern const uintptr_t _rtld_compat_obj[];
 extern Obj_Entry *_rtld_objmain;
 extern Obj_Entry _rtld_objself;
 extern Search_Path *_rtld_paths;
-extern Library_Xform *_rtld_xforms;
 extern bool _rtld_trust;
 extern Objlist _rtld_list_global;
 extern Objlist _rtld_list_main;
@@ -424,7 +414,6 @@ int _rtld_preload(const char *);
 void _rtld_add_paths(const char *, Search_Path **, const char *);
 void _rtld_process_hints(const char *, Search_Path **, Library_Xform **,
     const char *);
-int _rtld_sysctl(const char *, void *, size_t *);
 
 /* reloc.c */
 int _rtld_do_copy_relocations(const Obj_Entry *);
