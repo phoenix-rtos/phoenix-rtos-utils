@@ -28,9 +28,6 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: xprintf.c,v 1.23 2021/03/06 20:09:39 christos Exp $");
-#endif /* not lint */
 
 #include <string.h>
 #include <stdlib.h>

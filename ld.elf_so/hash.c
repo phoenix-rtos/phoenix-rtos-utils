@@ -39,9 +39,6 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: hash.c,v 1.1 2023/07/30 09:20:14 riastradh Exp $");
-#endif /* not lint */
 
 #include <stdint.h>
 

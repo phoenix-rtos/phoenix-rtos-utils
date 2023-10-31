@@ -30,9 +30,6 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: mdreloc.c,v 1.58 2023/09/24 11:08:32 martin Exp $");
-#endif /* not lint */
 
 #include <machine/elf_support.h>
 

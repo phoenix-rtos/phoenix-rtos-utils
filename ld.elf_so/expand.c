@@ -29,13 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: expand.c,v 1.7 2023/01/04 01:37:00 christos Exp $");
-#endif /* not lint */
 
 #include <ctype.h>
 #include <string.h>
-#include <sys/sysctl.h>
 
 #ifdef DEBUG_EXPAND
 #include <stdio.h>
@@ -91,13 +87,9 @@ expand(char *buf, const char *execname, size_t what, size_t bl)
 	case 3:	/* OSNAME */
 	case 4:	/* OSREL */
 	case 5:	/* PLATFORM */
-		len = sizeof(name);
-		if (sysctl(mib[what - 3], 2, name, &len, NULL, 0) == -1) {
-			xwarn("sysctl");
-			return 0;
-		}
-		ep = (p = name) + len - 1;
-		break;
+		/* FIXME */
+		xerr("expand of OSNAME, OSREL, PLATFORM is not yet supported");
+		return 0;
 	default:
 		return 0;
 	}

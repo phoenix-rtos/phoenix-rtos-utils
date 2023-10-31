@@ -1,9 +1,6 @@
 /*	$NetBSD: mdreloc.c,v 1.43 2023/06/04 20:02:29 martin Exp $	*/
 
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: mdreloc.c,v 1.43 2023/06/04 20:02:29 martin Exp $");
-#endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/ucontext.h>

@@ -39,9 +39,6 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: load.c,v 1.49 2020/09/21 16:08:57 kamil Exp $");
-#endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/param.h>

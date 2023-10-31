@@ -389,7 +389,7 @@ __dso_public _Unwind_Ptr __gnu_Unwind_Find_exidx(_Unwind_Ptr, int *);
 
 /* These aren't exported */
 void _rtld_error(const char *, ...) __printflike(1,2);
-void _rtld_die(void) __dead;
+void _rtld_die(void) __attribute__((noreturn));
 void *_rtld_objmain_sym(const char *);
 __dso_public void _rtld_debug_state(void) __noinline;
 void _rtld_linkmap_add(Obj_Entry *);

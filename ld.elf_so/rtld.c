@@ -39,9 +39,6 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: rtld.c,v 1.216 2023/10/03 09:48:18 martin Exp $");
-#endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/atomic.h>

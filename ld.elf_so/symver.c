@@ -59,7 +59,6 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: symver.c,v 1.4 2013/05/09 15:38:14 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/exec_elf.h>

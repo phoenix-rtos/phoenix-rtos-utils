@@ -57,7 +57,7 @@ void xerr(int, const char *, ...)
 void xerrx(int, const char *, ...)
     __attribute__((__noreturn__, __format__(__printf__, 2, 3)));
 
-void     xassert(const char *, int, const char *) __dead;
+void     xassert(const char *, int, const char *) __attribute__((noreturn));
 const char *xstrerror(int);
 int	xunsetenv(const char *);
 

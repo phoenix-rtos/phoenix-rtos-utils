@@ -29,7 +29,6 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: tls.c,v 1.19 2023/06/07 13:50:04 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/ucontext.h>

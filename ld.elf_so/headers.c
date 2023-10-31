@@ -39,9 +39,6 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: headers.c,v 1.71 2023/01/04 01:37:24 christos Exp $");
-#endif /* not lint */
 
 #include <err.h>
 #include <errno.h>
@@ -53,9 +50,9 @@ __RCSID("$NetBSD: headers.c,v 1.71 2023/01/04 01:37:24 christos Exp $");
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/mman.h>
-#include <sys/bitops.h>
 #include <dirent.h>
 
+#include "bitops.h"
 #include "debug.h"
 #include "rtld.h"
 

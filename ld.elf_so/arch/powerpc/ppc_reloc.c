@@ -29,9 +29,6 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: ppc_reloc.c,v 1.63 2023/06/04 01:24:57 joerg Exp $");
-#endif /* not lint */
 
 #include <stdarg.h>
 #include <stdio.h>

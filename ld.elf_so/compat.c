@@ -38,7 +38,6 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: compat.c,v 1.1 2018/10/17 23:36:58 joerg Exp $");
 
 #include "rtld.h"
 

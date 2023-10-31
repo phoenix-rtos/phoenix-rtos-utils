@@ -33,9 +33,6 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: map_object.c,v 1.67 2023/06/04 01:24:56 joerg Exp $");
-#endif /* not lint */
 
 #include <errno.h>
 #include <stddef.h>

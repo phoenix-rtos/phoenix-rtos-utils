@@ -28,9 +28,6 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: find_exidx.c,v 1.4 2014/08/10 23:35:27 matt Exp $");
-#endif /* not lint */
 
 #include "debug.h"
 #include "rtld.h"

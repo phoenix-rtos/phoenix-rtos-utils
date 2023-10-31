@@ -39,9 +39,6 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: symbol.c,v 1.76 2023/07/30 09:20:14 riastradh Exp $");
-#endif /* not lint */
 
 #include <err.h>
 #include <errno.h>
@@ -53,9 +50,9 @@ __RCSID("$NetBSD: symbol.c,v 1.76 2023/07/30 09:20:14 riastradh Exp $");
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/mman.h>
-#include <sys/bitops.h>
 #include <dirent.h>
 
+#include "sys/bitops.h"
 #include "debug.h"
 #include "hash.h"
 #include "rtld.h"
