@@ -237,7 +237,7 @@ static int psd_blowFuses(uint32_t fuse)
 {
 	int err = hidOK;
 
-	uint32_t *base = mmap(NULL, _PAGE_SIZE, PROT_WRITE | PROT_READ, MAP_DEVICE, OID_PHYSMEM, OTP_BASE_ADDR);
+	uint32_t *base = mmap(NULL, _PAGE_SIZE, PROT_WRITE | PROT_READ, MAP_DEVICE | MAP_PHYSMEM | MAP_ANONYMOUS, -1, OTP_BASE_ADDR);
 
 	printf("PSD: Blowing fuses.\n");
 

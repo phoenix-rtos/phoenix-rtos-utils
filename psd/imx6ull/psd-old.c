@@ -373,7 +373,7 @@ int receive_content(mod_t *mod)
 
 	mod->size = command.data_count;
 	/* Allocate memory for module - not portable */
-	mod->data = mmap(NULL, (mod->size + 0xfff) & ~0xfff, PROT_WRITE | PROT_READ, MAP_UNCACHED, OID_NULL, 0);
+	mod->data = mmap(NULL, (mod->size + 0xfff) & ~0xfff, PROT_WRITE | PROT_READ, MAP_UNCACHED | MAP_ANONYMOUS, -1, 0);
 
 	/* Read modules */
 	uint32_t read_data = 0;
