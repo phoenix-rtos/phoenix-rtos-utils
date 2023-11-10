@@ -365,6 +365,10 @@ static int psh_completepath(char *dir, char *base, char ***files)
 		}
 	} while (0);
 
+	if (stream != NULL) {
+		closedir(stream);
+	}
+
 	if (err < 0) {
 		for (i = 0; i < nfiles; i++)
 			free((*files)[i]);
