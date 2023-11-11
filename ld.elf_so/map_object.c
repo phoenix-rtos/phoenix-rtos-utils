@@ -74,6 +74,8 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 	caddr_t		 mapbase = MAP_FAILED;
 	size_t		 mapsize = 0;
 	int		 mapflags;
+	Elf_Addr	 alignment_overmap;
+	Elf_Addr	 front_alignment_overmap;
 	Elf_Addr	 base_alignment;
 	Elf_Addr	 base_vaddr;
 	Elf_Addr	 base_vlimit;
@@ -319,10 +321,10 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 	 */
 	mapflags = MAP_PRIVATE | MAP_ANON;
 	if (base_alignment > _rtld_pagesz) {
-		unsigned int log2 = 0;
-		for (; base_alignment > 1; base_alignment >>= 1)
-			log2++;
-		mapflags |= MAP_ALIGNED(log2);
+		/* Map more space than will later on be unmapped to make sure object is aligned. */
+		alignment_overmap += base_alignment - _rtld_pagesz;
+	} else {
+		alignment_overmap = 0;
 	}
 
 	base_addr = NULL;
@@ -333,11 +335,31 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 	}
 #endif
 	mapsize = base_vlimit - base_vaddr;
-	mapbase = mmap(base_addr, mapsize, PROT_NONE, mapflags, -1, 0);
+	mapbase = mmap(base_addr, mapsize + alignment_overmap, PROT_NONE, mapflags, -1, 0);
 	if (mapbase == MAP_FAILED) {
 		_rtld_error("mmap of entire address space failed: %s",
 		    xstrerror(errno));
 		goto error;
+	}
+
+	/* Unmap additional space. */
+	if (alignment_overmap != 0) {
+		front_alignment_overmap = (base_alignment - (((Elf_Addr)mapbase) & (base_alignment - 1))) & (base_alignment - 1);
+		if (front_alignment_overmap != 0) {
+			if (munmap(mapbase, front_alignment_overmap < 0)) {
+				_rtld_error("munmap failed: %s",
+					xstrerror(errno));
+				goto error;
+			}
+			mapbase += front_alignment_overmap;
+		}
+		if (alignment_overmap > front_alignment_overmap) {
+			if (munmap((void *)(mapbase + mapsize), alignment_overmap - front_alignment_overmap)) {
+				_rtld_error("munmap failed: %s",
+					xstrerror(errno));
+				goto error;
+			}
+		}
 	}
 #ifdef RTLD_LOADER
 	if (!obj->isdynamic && mapbase != base_addr) {
