@@ -52,8 +52,6 @@ static Search_Path **_rtld_append_path(Search_Path **, Search_Path **,
 static char *exstrdup(const char *, const char *);
 static const char *getstr(const char **, const char *, const char *);
 static const char *getcstr(const char **, const char *, const char *);
-static const char *getword(const char **, const char *, const char *);
-static int matchstr(const char *, const char *, const char *);
 
 static const char WS[] = " \t\n";
 
@@ -115,34 +113,6 @@ getcstr(const char **p, const char *ep, const char *delim)
 done:
 	*p = q;
 	return (cp);
-}
-
-static const char *
-getword(const char **p, const char *ep, const char *delim)
-{
-
-	(void)getcstr(p, ep, delim);
-
-	/*
-	 * Now, we're looking non-delim, or end of string.
-	 */
-
-	return (getstr(p, ep, delim));
-}
-
-/*
- * Match `bp' against NUL terminated string pointed by `p'.
- */
-static int
-matchstr(const char *p, const char *bp, const char *ep)
-{
-	int c;
-
-	while (bp < ep)
-		if ((c = *p++) == 0 || c != *bp++)
-			return (0);
-
-	return (*p == 0);
 }
 
 static Search_Path *
@@ -248,7 +218,7 @@ _rtld_process_hints(const char *execname, Search_Path **path_p, const char *fnam
 
 		sz = (ssize_t) st.st_size;
 
-		buf = mmap(0, sz, PROT_READ, MAP_SHARED|MAP_FILE, fd, 0);
+		buf = mmap(0, sz, PROT_READ, MAP_SHARED, fd, 0);
 		if (buf == MAP_FAILED) {
 			xwarn("mmap: %s", fname);
 			(void)close(fd);

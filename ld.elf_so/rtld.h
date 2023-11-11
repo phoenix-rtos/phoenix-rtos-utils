@@ -48,6 +48,11 @@
 #include "rtldenv.h"
 #include "link.h"
 
+#define __dso_public	__attribute__((__visibility__("default")))
+
+/* FIXME: added in orded for the program to compile without deeper reflection */
+#define _RTLD_SOURCE
+
 #if defined(_RTLD_SOURCE)
 
 #if defined(__ARM_EABI__) && !defined(__ARM_DWARF_EH__)
@@ -84,6 +89,10 @@ typedef struct Struct_Elf_Hash {
 	unsigned long gnu;
 } Elf_Hash;
 #endif /* _RTLD_SOURCE */
+
+
+#define	__predict_true(exp)		__builtin_expect((exp) != 0, 1)
+#define	__predict_false(exp)	__builtin_expect((exp) != 0, 0)
 
 /*
  * C++ has mandated the use of the following keywords for its new boolean
@@ -221,7 +230,16 @@ typedef struct Struct_Obj_Entry {
 			sysv_hash:1,	/* SysV Hash available */
 			gnu_hash:1;	/* GNU Hash available */
 
-	struct link_map linkmap;	/* for the debugger */
+	struct link_map {
+	caddr_t		 l_addr;	/* Base Address of library */
+#ifdef __mips__
+	caddr_t		 l_offs;	/* Load Offset of library */
+#endif
+	const char	*l_name;	/* Absolute Path to Library */
+	void		*l_ld;		/* Pointer to .dynamic in memory */
+	struct link_map	*l_next;	/* linked list of mapped libs */
+	struct link_map *l_prev;
+	} linkmap;	/* for the debugger */
 
 	/* These items are computed by map_object() or by digest_phdr(). */
 	const char     *interp;	/* Pathname of the interpreter, if any */
@@ -366,7 +384,7 @@ __dso_public int dlinfo(void *, int, void *);
 __dso_public int dl_iterate_phdr(int (*)(struct dl_phdr_info *, size_t, void *),
     void *);
 
-__dso_public void *_dlauxinfo(void) __pure;
+__dso_public void *_dlauxinfo(void) __attribute__((pure));
 __dso_public void __dl_cxa_refcount(void *addr, ssize_t delta);
 
 __dso_public pid_t __locked_fork(int *);
@@ -380,10 +398,10 @@ __dso_public _Unwind_Ptr __gnu_Unwind_Find_exidx(_Unwind_Ptr, int *);
 #endif
 
 /* These aren't exported */
-void _rtld_error(const char *, ...) __printflike(1,2);
+void _rtld_error(const char *, ...) __attribute__ ((format(printf, 1, 2)));
 void _rtld_die(void) __attribute__((noreturn));
 void *_rtld_objmain_sym(const char *);
-__dso_public void _rtld_debug_state(void) __noinline;
+__dso_public void _rtld_debug_state(void) __attribute__((noinline));
 void _rtld_linkmap_add(Obj_Entry *);
 void _rtld_linkmap_delete(Obj_Entry *);
 void _rtld_objlist_push_head(Objlist *, Obj_Entry *);
@@ -414,8 +432,7 @@ int _rtld_preload(const char *);
 #define	OBJ_ERR	(Obj_Entry *)(-1)
 /* path.c */
 void _rtld_add_paths(const char *, Search_Path **, const char *);
-void _rtld_process_hints(const char *, Search_Path **, Library_Xform **,
-    const char *);
+void _rtld_process_hints(const char *, Search_Path **, const char *);
 
 /* reloc.c */
 int _rtld_do_copy_relocations(const Obj_Entry *);
@@ -453,7 +470,7 @@ void _rtld_object_add_name(Obj_Entry *, const char *);
 int _rtld_object_match_name(const Obj_Entry *, const char *);
 int _rtld_verify_object_versions(Obj_Entry *);
 
-static __inline const Ver_Entry *
+static inline const Ver_Entry *
 _rtld_fetch_ventry(const Obj_Entry *obj, unsigned long symnum)
 {
 	Elf_Half vernum;

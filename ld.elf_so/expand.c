@@ -58,19 +58,11 @@ static const struct {
 	ADD(PLATFORM)	/* uname -p */
 };
 
-static int mib[3][2] = {
-	{ CTL_KERN, KERN_OSTYPE },
-	{ CTL_KERN, KERN_OSRELEASE },
-	{ CTL_HW, HW_MACHINE_ARCH },
-};
-
 static size_t
 expand(char *buf, const char *execname, size_t what, size_t bl)
 {
 	const char *p, *ep;
 	char *bp = buf;
-	size_t len;
-	char name[32];
 
 	switch (what) {
 	case 0:	/* HWCAP XXX: Not yet */
@@ -87,8 +79,8 @@ expand(char *buf, const char *execname, size_t what, size_t bl)
 	case 3:	/* OSNAME */
 	case 4:	/* OSREL */
 	case 5:	/* PLATFORM */
-		/* FIXME */
-		xerr("expand of OSNAME, OSREL, PLATFORM is not yet supported");
+		/* FIXME: Create header <sys/utsname> */
+		xerr(1, "expand of OSNAME, OSREL, PLATFORM is not yet supported");
 		return 0;
 	default:
 		return 0;

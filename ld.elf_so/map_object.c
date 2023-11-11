@@ -42,6 +42,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/mman.h>
+#include <sys/minmax.h>
 
 #include "debug.h"
 #include "rtld.h"
@@ -121,7 +122,7 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 		obj->ino = sb->st_ino;
 	}
 
-	ehdr = mmap(NULL, _rtld_pagesz, PROT_READ, MAP_FILE | MAP_SHARED, fd,
+	ehdr = mmap(NULL, _rtld_pagesz, PROT_READ, MAP_SHARED, fd,
 	    (off_t)0);
 	obj->ehdr = ehdr;
 	if (ehdr == MAP_FAILED) {
@@ -209,7 +210,7 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 				goto error;
 			}
 			if ((segs[nsegs]->p_flags & PF_X) == PF_X) {
-				text_end = MAX(text_end,
+				text_end = max(text_end,
 				    round_up(segs[nsegs]->p_vaddr +
 				    segs[nsegs]->p_memsz));
 			}
@@ -546,8 +547,9 @@ convert_prot(int elfflags)
 }
 
 static int
-convert_flags(int elfflags __unused)
+convert_flags(int elfflags)
 {
+	(void)elfflags;
 	int flags = MAP_PRIVATE; /* All mappings are private */
 
 #ifdef MAP_NOCORE

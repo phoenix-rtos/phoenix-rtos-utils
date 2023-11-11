@@ -50,6 +50,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/mman.h>
+#include <sys/minmax.h>
 #include <dirent.h>
 
 #include "bitops.h"
@@ -213,7 +214,7 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 
 				obj->buckets_gnu = (const uint32_t *)(hashtab + 4 + bloom_size32);
 
-				nmw_power2 = powerof2(nmaskwords);
+				nmw_power2 = ((((nmaskwords) - 1) & (nmaskwords)) == 0);
 
 				/* Validity check */
 				if (!nmw_power2 || !nbuckets || !obj->buckets_gnu)
@@ -507,7 +508,7 @@ _rtld_digest_phdr(const Elf_Phdr *phdr, int phnum, caddr_t entry)
 				obj->mapsize = size;
 				first_seg = false;
 			} else {		/* Last load segment */
-				obj->mapsize = MAX(obj->mapsize, size);
+				obj->mapsize = max(obj->mapsize, size);
 			}
 			dbg(("headers: %s %p phsize %" PRImemsz,
 			    "PT_LOAD", (void *)(uintptr_t)vaddr,

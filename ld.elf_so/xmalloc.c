@@ -75,7 +75,7 @@
  * This is designed for use in a virtual memory environment.
  */
 
-#include <sys/cdefs.h>]
+#include <sys/cdefs.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -413,14 +413,14 @@ mstats(char *s)
 static int
 morepages(int n)
 {
-	int	fd = -1;
+	int fd = -1;
 	int	offset;
 
-#ifdef NEED_DEV_ZERO
-	fd = open("/dev/zero", O_RDWR, 0);
-	if (fd == -1)
-		xerr(1, "/dev/zero");
-#endif
+	#ifdef NEED_DEV_ZERO
+		fd = open("/dev/zero", O_RDWR, 0);
+		if (fd == -1)
+			xerr(1, "/dev/zero");
+	#endif
 
 	if (PAGEPOOL_SIZE > pagesz) {
 		caddr_t	addr = (caddr_t)
@@ -440,9 +440,10 @@ morepages(int n)
 	pagepool_end = pagepool_start + n * pagesz;
 	pagepool_start += offset;
 
-#ifdef NEED_DEV_ZERO
-	close(fd);
-#endif
+	#ifdef NEED_DEV_ZERO
+		close(fd);
+	#endif
+
 	return n;
 }
 

@@ -52,7 +52,7 @@
 #include <sys/mman.h>
 #include <dirent.h>
 
-#include "sys/bitops.h"
+#include "bitops.h"
 #include "debug.h"
 #include "hash.h"
 #include "rtld.h"

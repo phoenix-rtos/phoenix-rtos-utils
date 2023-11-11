@@ -80,19 +80,19 @@ store_ptr(void *where, Elf_Addr val)
 		(void)memcpy(where, &val, sizeof(val));
 }
 
-static __inline void
+static inline void
 fdc(void *addr)
 {
 	__asm volatile("fdc %%r0(%%sr0, %0)" : : "r" (addr));
 }
 
-static __inline void
+static inline void
 fic(void *addr)
 {
 	__asm volatile("fic %%r0(%%sr0,%0)" : : "r" (addr));
 }
 
-static __inline void
+static inline void
 sync(void)
 {
 	__asm volatile("sync" : : : "memory");

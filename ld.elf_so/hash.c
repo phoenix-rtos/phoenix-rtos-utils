@@ -43,6 +43,7 @@
 #include <stdint.h>
 
 #include "hash.h"
+#include "rtld.h"
 
 /*
  * SysV hash function for symbol table lookup.  It is a slightly optimized
@@ -54,7 +55,7 @@ _rtld_sysv_hash(const char *name)
 	const unsigned char *p = (const unsigned char *) name;
 	Elf32_Word h = 0;
 
-	while (*p != '\0') {
+	while (__predict_true(*p != '\0')) {
 		h = (h << 4) + *p++;
 		h ^= (h >> 24) & 0xf0;
 	}

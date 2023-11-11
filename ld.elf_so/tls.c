@@ -28,6 +28,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#if 0
+
 #include <sys/cdefs.h>
 
 #include <sys/param.h>
@@ -323,3 +325,5 @@ __tls_get_addr(void *arg_)
 #endif
 
 #endif /* __HAVE_TLS_VARIANT_I || __HAVE_TLS_VARIANT_II */
+
+#endif

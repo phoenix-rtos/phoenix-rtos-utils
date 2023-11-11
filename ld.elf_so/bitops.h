@@ -37,7 +37,7 @@
  * Find First Set functions
  */
 #ifndef ffs32
-static __inline int __attribute__((unused))
+static inline int __attribute__((unused))
 ffs32(uint32_t _n)
 {
 	int _v;
@@ -71,7 +71,7 @@ ffs32(uint32_t _n)
 #endif
 
 #ifndef ffs64
-static __inline int __attribute__((unused))
+static inline int __attribute__((unused))
 ffs64(uint64_t _n)
 {
 	int _v;
@@ -112,7 +112,7 @@ ffs64(uint64_t _n)
  * Find Last Set functions
  */
 #ifndef fls32
-static __inline int __attribute__((unused))
+static inline int __attribute__((unused))
 fls32(uint32_t _n)
 {
 	int _v;
@@ -146,7 +146,7 @@ fls32(uint32_t _n)
 #endif
 
 #ifndef fls64
-static __inline int __attribute__((unused))
+static inline int __attribute__((unused))
 fls64(uint64_t _n)
 {
 	int _v;
@@ -261,7 +261,7 @@ fls64(uint64_t _n)
 	((sizeof(_n) > 4 ? fls64(_n) : fls32(_n)) - 1) \
 )
 
-static __inline void
+static inline void
 fast_divide32_prepare(uint32_t _div, uint32_t * __restrict _m,
     uint8_t *__restrict _s1, uint8_t *__restrict _s2)
 {
@@ -276,7 +276,7 @@ fast_divide32_prepare(uint32_t _div, uint32_t * __restrict _m,
 }
 
 /* ARGSUSED */
-static __inline uint32_t
+static inline uint32_t
 fast_divide32(uint32_t _v, uint32_t _div __attribute__((unused)), uint32_t _m, uint8_t _s1,
     uint8_t _s2)
 {
@@ -286,7 +286,7 @@ fast_divide32(uint32_t _v, uint32_t _div __attribute__((unused)), uint32_t _m, u
 	return (_t + ((_v - _t) >> _s1)) >> _s2;
 }
 
-static __inline uint32_t
+static inline uint32_t
 fast_remainder32(uint32_t _v, uint32_t _div, uint32_t _m, uint8_t _s1,
     uint8_t _s2)
 {

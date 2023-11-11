@@ -154,7 +154,6 @@ _rtld_load_object(const char *filepath, int flags)
 
 	if (obj == NULL) { /* First use of this object, so we must map it in */
 		obj = _rtld_map_object(filepath, fd, &sb);
-		(void)close(fd);
 		if (obj == NULL)
 			return NULL;
 		_rtld_digest_dynamic(filepath, obj);
@@ -205,8 +204,6 @@ _rtld_load_by_name(const char *name, Obj_Entry *obj, Needed_Entry **needed,
     int flags)
 {
 	Obj_Entry *o;
-	size_t j;
-	ssize_t i;
 
 	dbg(("load by name %s", name));
 	for (o = _rtld_objlist->next; o != NULL; o = o->next)

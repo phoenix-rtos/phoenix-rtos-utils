@@ -41,7 +41,7 @@
 #include <sys/cdefs.h>
 
 #include <sys/param.h>
-#include <sys/atomic.h>
+#include <stdint.h>
 #include <sys/mman.h>
 #include <err.h>
 #include <errno.h>
@@ -65,13 +65,6 @@
 #if !defined(lint)
 #include "sysident.h"
 #endif
-
-/*
- * Hidden function from common/lib/libc/atomic - nop on machines
- * with enough atomic ops. Need to explicitly call it early.
- * libc has the same symbol and will initialize itself, but not our copy.
- */
-void __libc_atomic_init(void);
 
 /*
  * Function declarations.
@@ -406,8 +399,6 @@ _rtld_init(caddr_t mapbase, caddr_t relocbase, const char *execname)
 	ehdr = (Elf_Ehdr *)mapbase;
 	_rtld_objself.phdr = (Elf_Phdr *)((char *)mapbase + ehdr->e_phoff);
 	_rtld_objself.phsize = ehdr->e_phnum * sizeof(_rtld_objself.phdr[0]);
-
-	__libc_atomic_init();
 }
 
 /*
@@ -654,6 +645,7 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 		int             fd = pAUX_execfd->a_v;
 		const char *obj_name = argv[0] ? argv[0] : "main program";
 		dbg(("loading main program"));
+		/* FIXME: change input fd to oid */
 		_rtld_objmain = _rtld_map_object(obj_name, fd, NULL);
 		close(fd);
 		if (_rtld_objmain == NULL)
@@ -1690,7 +1682,7 @@ _rtld_shared_enter(void)
 		 */
 		if ((cur & RTLD_EXCLUSIVE_MASK) == 0) {
 			/* Yes, so increment use counter */
-			if (atomic_cas_uint(&_rtld_mutex, cur, cur + 1) != cur)
+			if (!__atomic_compare_exchange_n(&_rtld_mutex, &cur, cur + 1, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
 				continue;
 			membar_acquire();
 			return;
@@ -1706,7 +1698,7 @@ _rtld_shared_enter(void)
 			_rtld_error("%s: dead lock detected", __func__);
 			_rtld_die();
 		}
-		waiter = atomic_swap_uint(&_rtld_waiter_shared, self);
+		waiter = __atomic_exchange_n(&_rtld_waiter_shared, self,__ATOMIC_SEQ_CST);
 		/*
 		 * Check for race against _rtld_exclusive_exit before sleeping.
 		 */
@@ -1716,7 +1708,7 @@ _rtld_shared_enter(void)
 			_lwp_park(CLOCK_REALTIME, 0, NULL, 0,
 			    __UNVOLATILE(&_rtld_mutex), NULL);
 		/* Try to remove us from the waiter list. */
-		atomic_cas_uint(&_rtld_waiter_shared, self, 0);
+		__atomic_compare_exchange_n(&_rtld_waiter_shared, &self, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
 		if (waiter)
 			_lwp_unpark(waiter, __UNVOLATILE(&_rtld_mutex));
 	}
@@ -1739,7 +1731,7 @@ _rtld_shared_exit(void)
 	 * LWP on the shared lock.
 	 */
 	membar_release();
-	if (atomic_dec_uint_nv(&_rtld_mutex))
+	if (__atomic_sub_fetch(&_rtld_mutex, 1, __ATOMIC_SEQ_CST))
 		return;
 	membar_sync();
 	if ((waiter = _rtld_waiter_exclusive) != 0)
@@ -1753,17 +1745,18 @@ _rtld_exclusive_enter(sigset_t *mask)
 	unsigned int locked_value = (unsigned int)self | RTLD_EXCLUSIVE_MASK;
 	unsigned int cur;
 	sigset_t blockmask;
+	unsigned int zero = 0;
 
 	sigfillset(&blockmask);
 	sigdelset(&blockmask, SIGTRAP);	/* Allow the debugger */
 	sigprocmask(SIG_BLOCK, &blockmask, mask);
 
 	for (;;) {
-		if (atomic_cas_uint(&_rtld_mutex, 0, locked_value) == 0) {
+		if (__atomic_compare_exchange_n(&_rtld_mutex, &zero, locked_value, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
 			membar_acquire();
 			break;
 		}
-		waiter = atomic_swap_uint(&_rtld_waiter_exclusive, self);
+		waiter = __atomic_exchange_n(&_rtld_waiter_exclusive, self, __ATOMIC_SEQ_CST);
 		membar_sync();
 		cur = _rtld_mutex;
 		if (cur == locked_value) {
@@ -1773,7 +1766,7 @@ _rtld_exclusive_enter(sigset_t *mask)
 		if (cur)
 			_lwp_park(CLOCK_REALTIME, 0, NULL, 0,
 			    __UNVOLATILE(&_rtld_mutex), NULL);
-		atomic_cas_uint(&_rtld_waiter_exclusive, self, 0);
+		__atomic_compare_exchange_n(&_rtld_waiter_exclusive, &self, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
 		if (waiter)
 			_lwp_unpark(waiter, __UNVOLATILE(&_rtld_mutex));
 	}
