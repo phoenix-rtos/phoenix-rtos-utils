@@ -1,9 +1,10 @@
 #
-# Makefile for Phoenix-RTOS 3 device drivers
+# Makefile for Phoenix-RTOS 3 utils
 #
 # ia32-qemu tool set
 #
-# Copyright 2019 Phoenix Systems
+# Copyright 2019, 2023 Phoenix Systems
 #
 
-DEFAULT_COMPONENTS := psh
+# DEFAULT_COMPONENTS := psh
+DEFAULT_COMPONENTS := ld.elf_so psh
