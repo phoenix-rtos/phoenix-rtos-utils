@@ -38,6 +38,9 @@
  * John Polstra <jdp@polstra.com>.
  */
 
+#include <sys/threads.h>
+#include <sys/types.h>
+
 #include <sys/cdefs.h>
 
 #include <sys/param.h>
@@ -46,7 +49,6 @@
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <lwp.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -65,6 +67,11 @@
 #if !defined(lint)
 #include "sysident.h"
 #endif
+
+#define _C_LABEL_STRING(x)	x
+#define	__strong_alias(alias,sym)	       				\
+    __asm(".global " _C_LABEL_STRING(#alias) "\n"			\
+	    _C_LABEL_STRING(#alias) " = " _C_LABEL_STRING(#sym));
 
 /*
  * Function declarations.
@@ -399,6 +406,8 @@ _rtld_init(caddr_t mapbase, caddr_t relocbase, const char *execname)
 	ehdr = (Elf_Ehdr *)mapbase;
 	_rtld_objself.phdr = (Elf_Phdr *)((char *)mapbase + ehdr->e_phoff);
 	_rtld_objself.phsize = ehdr->e_phnum * sizeof(_rtld_objself.phdr[0]);
+
+	assert(mutexInit(&_rtld_mutex) == 0);
 }
 
 /*
@@ -1664,127 +1673,37 @@ _rtld_objlist_remove(Objlist *list, Obj_Entry *obj)
 	}
 }
 
-#define	RTLD_EXCLUSIVE_MASK	0x80000000U
-static volatile unsigned int _rtld_mutex;
-static volatile unsigned int _rtld_waiter_exclusive;
-static volatile unsigned int _rtld_waiter_shared;
+/* FIXME: convert to RWMutex */
+static handle_t _rtld_mutex;
 
 void
 _rtld_shared_enter(void)
 {
-	unsigned int cur;
-	lwpid_t waiter, self = 0;
-
-	for (;;) {
-		cur = _rtld_mutex;
-		/*
-		 * First check if we are currently not exclusively locked.
-		 */
-		if ((cur & RTLD_EXCLUSIVE_MASK) == 0) {
-			/* Yes, so increment use counter */
-			if (!__atomic_compare_exchange_n(&_rtld_mutex, &cur, cur + 1, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
-				continue;
-			membar_acquire();
-			return;
-		}
-		/*
-		 * Someone has an exclusive lock.  Puts us on the waiter list.
-		 */
-		if (!self)
-			self = _lwp_self();
-		if (cur == (self | RTLD_EXCLUSIVE_MASK)) {
-			if (_rtld_mutex_may_recurse)
-				return;
-			_rtld_error("%s: dead lock detected", __func__);
-			_rtld_die();
-		}
-		waiter = __atomic_exchange_n(&_rtld_waiter_shared, self,__ATOMIC_SEQ_CST);
-		/*
-		 * Check for race against _rtld_exclusive_exit before sleeping.
-		 */
-		membar_sync();
-		if ((_rtld_mutex & RTLD_EXCLUSIVE_MASK) ||
-		    _rtld_waiter_exclusive)
-			_lwp_park(CLOCK_REALTIME, 0, NULL, 0,
-			    __UNVOLATILE(&_rtld_mutex), NULL);
-		/* Try to remove us from the waiter list. */
-		__atomic_compare_exchange_n(&_rtld_waiter_shared, &self, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
-		if (waiter)
-			_lwp_unpark(waiter, __UNVOLATILE(&_rtld_mutex));
-	}
+	mutexLock(_rtld_mutex);
 }
 
 void
 _rtld_shared_exit(void)
 {
-	lwpid_t waiter;
-
-	/*
-	 * Shared lock taken after an exclusive lock.
-	 * Just assume this is a partial recursion.
-	 */
-	if (_rtld_mutex & RTLD_EXCLUSIVE_MASK)
-		return;
-
-	/*
-	 * Wakeup LWPs waiting for an exclusive lock if this is the last
-	 * LWP on the shared lock.
-	 */
-	membar_release();
-	if (__atomic_sub_fetch(&_rtld_mutex, 1, __ATOMIC_SEQ_CST))
-		return;
-	membar_sync();
-	if ((waiter = _rtld_waiter_exclusive) != 0)
-		_lwp_unpark(waiter, __UNVOLATILE(&_rtld_mutex));
+	mutexUnlock(_rtld_mutex);
 }
 
 void
 _rtld_exclusive_enter(sigset_t *mask)
 {
-	lwpid_t waiter, self = _lwp_self();
-	unsigned int locked_value = (unsigned int)self | RTLD_EXCLUSIVE_MASK;
-	unsigned int cur;
 	sigset_t blockmask;
-	unsigned int zero = 0;
 
 	sigfillset(&blockmask);
 	sigdelset(&blockmask, SIGTRAP);	/* Allow the debugger */
 	sigprocmask(SIG_BLOCK, &blockmask, mask);
 
-	for (;;) {
-		if (__atomic_compare_exchange_n(&_rtld_mutex, &zero, locked_value, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
-			membar_acquire();
-			break;
-		}
-		waiter = __atomic_exchange_n(&_rtld_waiter_exclusive, self, __ATOMIC_SEQ_CST);
-		membar_sync();
-		cur = _rtld_mutex;
-		if (cur == locked_value) {
-			_rtld_error("%s: dead lock detected", __func__);
-			_rtld_die();
-		}
-		if (cur)
-			_lwp_park(CLOCK_REALTIME, 0, NULL, 0,
-			    __UNVOLATILE(&_rtld_mutex), NULL);
-		__atomic_compare_exchange_n(&_rtld_waiter_exclusive, &self, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
-		if (waiter)
-			_lwp_unpark(waiter, __UNVOLATILE(&_rtld_mutex));
-	}
+	mutexLock(_rtld_mutex);
 }
 
 void
 _rtld_exclusive_exit(sigset_t *mask)
-{
-	lwpid_t waiter;
-
-	membar_release();
-	_rtld_mutex = 0;
-	membar_sync();
-	if ((waiter = _rtld_waiter_exclusive) != 0)
-		_lwp_unpark(waiter, __UNVOLATILE(&_rtld_mutex));
-
-	if ((waiter = _rtld_waiter_shared) != 0)
-		_lwp_unpark(waiter, __UNVOLATILE(&_rtld_mutex));
+{	
+	mutexUnlock(_rtld_mutex);
 
 	sigprocmask(SIG_SETMASK, mask, NULL);
 }

@@ -72,6 +72,10 @@ extern size_t _rtld_pagesz;
 #define NEW(type)	((type *) xmalloc(sizeof(type)))
 #define CNEW(type)	((type *) xcalloc(sizeof(type)))
 
+
+#define __UNCONST(_a_) ((void *)(unsigned long)(const void *)(_a_))
+
+
 /*
  * Fill in a DoneList with an allocation large enough to hold all of
  * the currently-loaded objects. Keep this in a macro since it calls
