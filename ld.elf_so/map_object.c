@@ -330,7 +330,7 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 	base_addr = NULL;
 #ifdef RTLD_LOADER
 	if (!obj->isdynamic) {
-		mapflags |= MAP_TRYFIXED;
+		mapflags |= MAP_FIXED;
 		base_addr = (void *)(uintptr_t)base_vaddr;
 	}
 #endif

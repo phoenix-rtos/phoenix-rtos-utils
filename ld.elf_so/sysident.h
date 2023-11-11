@@ -56,11 +56,15 @@
  * NetBSD binary, or some other OS's.
  */
 
+/* FIXME: change data to phoenix or remove */
+#if 0
+
 /* XXX: NetBSD 1.5 compatibility only! */
 #if __NetBSD_Version__ < 105010000
 #define	ELF_NOTE_TYPE_NETBSD_TAG	1
 #endif
-
+dl_iterate_phdr
+#define __STRING(x)	#x
 #define	__S(x)	__STRING(x)
 __asm(
 	".pushsection\t\".note.netbsd.ident\", \"a\"\n"
@@ -103,4 +107,6 @@ __asm(
 
 	"\t.popsection\n"
 );
+#endif
+
 #endif

@@ -87,6 +87,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 
+#include "bitops.h"
 #include "rtld.h"
 
 /*
@@ -201,7 +202,11 @@ imalloc(size_t nbytes)
 			bucket++;
 		}
 		pagebucket = bucket;
-		pageshift = ffs(pagesz) - 1;
+		if(sizeof(size_t) == 4) {
+			pageshift = ffs32(pagesz) - 1;
+		} else {
+			pageshift = ffs64(pagesz) - 1;
+		}
 	}
 	/*
 	 * Convert amount of memory requested into closest block size

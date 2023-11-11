@@ -50,9 +50,6 @@
 
 #define __dso_public	__attribute__((__visibility__("default")))
 
-/* FIXME: added in orded for the program to compile without deeper reflection */
-#define _RTLD_SOURCE
-
 #if defined(_RTLD_SOURCE)
 
 #if defined(__ARM_EABI__) && !defined(__ARM_DWARF_EH__)
@@ -141,6 +138,48 @@ typedef struct Struct_Ver_Entry {
 #define RTLD_MAX_ENTRY 10
 #define RTLD_MAX_LIBRARY 4
 #define RTLD_MAX_CTL 2
+#define R_DEBUG_VERSION	1 /* SVR4 Protocol version */
+
+typedef struct link_map {
+	caddr_t		 l_addr;	/* Base Address of library */
+#ifdef __mips__
+	caddr_t		 l_offs;	/* Load Offset of library */
+#endif
+	const char	*l_name;	/* Absolute Path to Library */
+	void		*l_ld;		/* Pointer to .dynamic in memory */
+	struct link_map	*l_next;	/* linked list of mapped libs */
+	struct link_map *l_prev;
+} Link_map;
+
+/*
+ * Debug rendezvous struct. Pointer to this is set up in the
+ * target code pointed by the DT_DEBUG tag. If it is
+ * defined.
+ */
+struct r_debug {
+	int r_version;			/* protocol version */
+	struct link_map *r_map;		/* list of loaded images */
+
+	/*
+	 * This is the address of a function internal to the run-time linker,
+	 * that will always be called when the linker begins to map in a
+	 * library or unmap it, and again when the mapping change is complete.
+	 * The debugger can set a breakpoint at this address if it wants to
+	 * notice shared object mapping changes.
+	 */
+	void (*r_brk)(void);		/* pointer to break point */
+	enum {
+		/*
+		 * This state value describes the mapping change taking place
+		 * when the `r_brk' address is called.
+		 */
+		RT_CONSISTENT,		/* things are stable */
+		RT_ADD,			/* adding a shared library */
+		RT_DELETE		/* removing a shared library */
+	} r_state;
+	void *r_ldbase;			/* base address of RTLD */
+};
+
 
 /*
  * Shared object descriptor.
@@ -234,16 +273,7 @@ typedef struct Struct_Obj_Entry {
 			sysv_hash:1,	/* SysV Hash available */
 			gnu_hash:1;	/* GNU Hash available */
 
-	struct link_map {
-	caddr_t		 l_addr;	/* Base Address of library */
-#ifdef __mips__
-	caddr_t		 l_offs;	/* Load Offset of library */
-#endif
-	const char	*l_name;	/* Absolute Path to Library */
-	void		*l_ld;		/* Pointer to .dynamic in memory */
-	struct link_map	*l_next;	/* linked list of mapped libs */
-	struct link_map *l_prev;
-	} linkmap;	/* for the debugger */
+	Link_map linkmap;	/* for the debugger */
 
 	/* These items are computed by map_object() or by digest_phdr(). */
 	const char     *interp;	/* Pathname of the interpreter, if any */
@@ -516,6 +546,7 @@ Obj_Entry *_rtld_obj_new(void);
 
 #ifdef RTLD_LOADER
 /* function descriptors */
+/* NOTE: only for HPPA architecture */
 #ifdef __HAVE_FUNCTION_DESCRIPTORS
 Elf_Addr _rtld_function_descriptor_alloc(const Obj_Entry *,
     const Elf_Sym *, Elf_Addr);

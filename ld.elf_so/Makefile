@@ -23,6 +23,13 @@ NAME := ld.elf_so
 LOCAL_SRCS := compat.c debug.c diagassert.c expand.c hash.c headers.c load.c map_object.c paths.c reloc.c rtld.c search.c symbol.c symver.c tls.c xmalloc.c xprintf.c
 LIBS := libphoenix
 
+LOCAL_CFLAGS += -D_PATH_RTLD=\"/bin/${NAME}\"
+
+LOCAL_CFLAGS+=	-DRTLD_LOADER
+LOCAL_CFLAGS+=	-D_RTLD_SOURCE
+LOCAL_CFLAGS+=	-DHAVE_INITFINI_ARRAY
+# LOCAL_CFLAGS+=	-DGNU_RELRO
+
 # .if ${LDELFSO_MACHINE_ARCH} == "i386" || ${LDELFSO_MACHINE_ARCH} == "x86_64"
 # COPTS+=		-mno-3dnow -mno-mmx -mno-sse -mno-sse2 -mno-sse3
 # .endif

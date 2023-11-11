@@ -138,7 +138,9 @@ static void _rtld_objlist_clear(Objlist *);
 static void _rtld_unload_object(sigset_t *, Obj_Entry *, bool);
 static void _rtld_unref_dag(Obj_Entry *);
 static Obj_Entry *_rtld_obj_from_addr(const void *);
+#if 0
 static void _rtld_fill_dl_phdr_info(const Obj_Entry *, struct dl_phdr_info *);
+#endif
 
 static inline void
 _rtld_call_initfini_function(fptr_t func, sigset_t *mask)
@@ -1399,7 +1401,7 @@ dladdr(const void *addr, Dl_info *info)
 		info->dli_saddr = (void *)_rtld_function_descriptor_alloc(obj,
 		    best_def, 0);
 #else
-	__USE(best_def);
+	(void)(best_def);
 #endif /* __HAVE_FUNCTION_DESCRIPTORS */
 
 	lookup_mutex_exit();
@@ -1454,6 +1456,9 @@ dlinfo(void *handle, int req, void *v)
 	return 0;
 }
 
+/* NOTE: disabled as not needed currently, and struct dl_phdr_info is currently a dummy in libphoenix. */
+/* 		 Once struct is filled with necessary fields this lbock can be reenbled. */
+#if 0
 static void
 _rtld_fill_dl_phdr_info(const Obj_Entry *obj, struct dl_phdr_info *phdr_info)
 {
@@ -1505,6 +1510,7 @@ dl_iterate_phdr(int (*callback)(struct dl_phdr_info *, size_t, void *), void *pa
 	_rtld_shared_exit();
 	return error;
 }
+#endif
 
 void
 __dl_cxa_refcount(void *addr, ssize_t delta)
@@ -1587,7 +1593,7 @@ _rtld_debug_state(void)
 #endif
 
 	/* Prevent optimizer from removing calls to this function */
-	__insn_barrier();
+	__asm __volatile("":::"memory");
 }
 
 void
