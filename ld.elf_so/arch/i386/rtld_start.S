@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <machine/asm.h>
+; #include <machine/asm.h>
 
 	.text
 	.align	4

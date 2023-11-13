@@ -3,10 +3,13 @@
 #include <sys/cdefs.h>
 
 #include <sys/types.h>
-#include <sys/ucontext.h>
+#include <limits.h>
 
-#include "debug.h"
-#include "rtld.h"
+/* FIXME: TLS support
+ * #include <sys/ucontext.h> */
+
+#include "../../debug.h"
+#include "../../rtld.h"
 
 void _rtld_bind_start(void);
 void _rtld_relocate_nonplt_self(Elf_Dyn *, Elf_Addr);
@@ -146,6 +149,8 @@ _rtld_relocate_nonplt_objects(Obj_Entry *obj)
 			rdbg(("COPY (avoid in main)"));
 			break;
 
+/* FIXME: TLS support */
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
 		case R_TYPE(TLS_TPOFF):
 			if (!defobj->tls_static &&
 			    _rtld_tls_offset_allocate(__UNCONST(defobj)))
@@ -185,6 +190,7 @@ _rtld_relocate_nonplt_objects(Obj_Entry *obj)
 			    obj->path, (void *)*where));
 
 			break;
+#endif
 
 		default:
 			rdbg(("sym = %lu, type = %lu, offset = %p, "
@@ -302,6 +308,8 @@ _rtld_relocate_plt_objects(const Obj_Entry *obj)
  */
 #define	DTV_MAX_INDEX(dtv)	((size_t)((dtv)[-1]))
 
+/* FIXME: TLS support */
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
 __dso_public __attribute__((__regparm__(1))) void *
 ___tls_get_addr(void *arg_)
 {
@@ -317,3 +325,4 @@ ___tls_get_addr(void *arg_)
 
 	return _rtld_tls_get_addr(tcb, idx, offset);
 }
+#endif
