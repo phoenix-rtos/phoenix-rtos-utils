@@ -39,8 +39,9 @@ const psh_appentry_t *psh_applist_first(void)
 
 const psh_appentry_t *psh_applist_next(const psh_appentry_t *current)
 {
-	if (current == NULL)
+	if (current == NULL) {
 		return NULL;
+	}
 	return current->next;
 }
 
@@ -51,16 +52,18 @@ void psh_registerapp(psh_appentry_t *newapp)
 
 	/* find position */
 	newapp->next = psh_common.pshapplist;
-	while (newapp->next != NULL && strcmp(newapp->next->name, newapp->name) < 0) {
+	while ((newapp->next != NULL) && (strcmp(newapp->next->name, newapp->name) < 0)) {
 		prevapp = newapp->next;
 		newapp->next = prevapp->next;
 	}
 
 	/* insert */
-	if (prevapp == NULL)
+	if (prevapp == NULL) {
 		psh_common.pshapplist = newapp;
-	else
+	}
+	else {
 		prevapp->next = newapp;
+	}
 
 	return;
 }
@@ -70,8 +73,9 @@ const psh_appentry_t *psh_findapp(char *appname)
 {
 	const psh_appentry_t *app;
 	for (app = psh_common.pshapplist; app != NULL; app = app->next) {
-		if (strcmp(appname, app->name) == 0)
+		if (strcmp(appname, app->name) == 0) {
 			break;
+		}
 	}
 	return app;
 }
@@ -154,8 +158,9 @@ int main(int argc, char **argv)
 	keepidle(1);
 
 	/* Wait for root filesystem */
-	while (lookup("/", NULL, &oid) < 0)
+	while (lookup("/", NULL, &oid) < 0) {
 		usleep(10000);
+	}
 
 	/* Check if its first shell */
 	psh_common.tcpid = tcgetpgrp(STDIN_FILENO);
@@ -163,12 +168,17 @@ int main(int argc, char **argv)
 	ispshlogin = (strcmp(base, "pshlogin") == 0);
 	do {
 		/* login prompt */
-		if (ispshlogin && (app = psh_findapp("auth")) != NULL)
-			while (app->run(0, NULL) != 0)
-				;
+		if (ispshlogin != 0) {
+			app = psh_findapp("auth");
+			if (app != NULL) {
+				while (app->run(0, NULL) != 0)
+					;
+			}
+		}
 
 		/* Run app */
-		if ((app = psh_findapp(base)) != NULL) {
+		app = psh_findapp(base);
+		if (app != NULL) {
 			err = app->run(argc, argv);
 			psh_common.exitStatus = err;
 		}
@@ -179,7 +189,7 @@ int main(int argc, char **argv)
 			break;
 		}
 
-	} while (psh_common.tcpid == -1 && ispshlogin);
+	} while ((psh_common.tcpid == -1) && (ispshlogin != 0));
 
 	free(psh_common.ttydev);
 
