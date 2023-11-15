@@ -19,9 +19,9 @@ LOCAL_CFLAGS += -DPSH_SYSEXECWL='"$(PSH_SYSEXECWL)"'
 LOCAL_LDFLAGS := -z stack-size=4096 -z noexecstack
 
 # TODO: search for dirs?
-PSH_ALLCOMMANDS := bind cat cd cp date dd df dmesg echo edit exec hm kill ln ls \
-mem mkdir mount nc nslookup ntpclient perf ping pm printenv ps pwd reboot rm rmdir \
-runfile sync sysexec top touch tty umount uptime wget
+PSH_ALLCOMMANDS := bind cat cd cp date dd df dmesg echo edit exec hm ifconfig kill \
+ln ls mem mkdir mount nc nslookup ntpclient perf ping pm printenv ps pwd reboot rm \
+rmdir runfile sync sysexec top touch tty umount uptime wget
 PSH_COMMANDS ?= $(PSH_ALLCOMMANDS)
 PSH_INTERNAL_APPLETS := pshapp help $(filter $(PSH_ALLCOMMANDS), $(PSH_COMMANDS))
 
