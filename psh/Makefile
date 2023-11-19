@@ -1,7 +1,7 @@
 #
 # Makefile for Phoenix-RTOS psh (Phoenix SHell)
 #
-# Copyright 2018, 2019, 2020, 2021 Phoenix Systems
+# Copyright 2018-2023 Phoenix Systems
 #
 
 NAME := psh
@@ -20,8 +20,8 @@ LOCAL_LDFLAGS := -z stack-size=4096 -z noexecstack
 
 # TODO: search for dirs?
 PSH_ALLCOMMANDS := bind cat cd cp date dd df dmesg echo edit exec hm kill ln ls \
-mem mkdir mount nc nslookup ntpclient perf ping pm ps pwd reboot rm rmdir runfile \
-sync sysexec top touch tty umount uptime wget
+mem mkdir mount nc nslookup ntpclient perf ping pm printenv ps pwd reboot rm rmdir \
+runfile sync sysexec top touch tty umount uptime wget
 PSH_COMMANDS ?= $(PSH_ALLCOMMANDS)
 PSH_INTERNAL_APPLETS := pshapp help $(filter $(PSH_ALLCOMMANDS), $(PSH_COMMANDS))
 
