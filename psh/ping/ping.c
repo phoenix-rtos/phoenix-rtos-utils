@@ -3,8 +3,8 @@
  *
  * ping - ICMP request / response
  *
- * Copyright 2021 Phoenix Systems
- * Author: Maciej Purski
+ * Copyright 2021, 2023 Phoenix Systems
+ * Author: Maciej Purski, Gerard Swiderski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -12,19 +12,15 @@
  */
 
 #include <errno.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <sys/select.h>
-#include <netinet/ip_icmp.h>
 #include <sys/time.h>
-#include <errno.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <netinet/ip_icmp.h>
+#include <netdb.h>
 
 #include "../psh.h"
 
@@ -231,8 +227,43 @@ static int ping_echoreply(int fd, uint8_t *req, uint8_t *resp)
 }
 
 
+static int ping_resolveAddress(int af, const char *src, void *dst)
+{
+	struct addrinfo hints = { 0 };
+	struct addrinfo *result, *rp;
+
+	hints.ai_family = af;
+	hints.ai_socktype = SOCK_RAW;
+
+	if (getaddrinfo(src, NULL, &hints, &result) != 0) {
+		return -1;
+	}
+
+	for (rp = result; rp != NULL; rp = rp->ai_next) {
+		if (rp->ai_family != af) {
+			continue;
+		}
+
+		if (rp->ai_family == AF_INET) {
+			memcpy(dst, &((struct sockaddr_in *)rp->ai_addr)->sin_addr, sizeof(struct in_addr));
+			break;
+		}
+
+		if (rp->ai_family == AF_INET6) {
+			memcpy(dst, &((struct sockaddr_in6 *)rp->ai_addr)->sin6_addr, sizeof(struct in6_addr));
+			break;
+		}
+	}
+
+	freeaddrinfo(result);
+
+	return (rp == NULL) ? -1 : 0;
+}
+
+
 int psh_ping(int argc, char **argv)
 {
+	char addrstr[INET_ADDRSTRLEN];
 	uint8_t *resp, *req;
 	int fd, c, ret = 0;
 	char *end;
@@ -297,8 +328,13 @@ int psh_ping(int argc, char **argv)
 		return 2;
 	}
 
-	if (inet_pton(ping_common.af, argv[optind], &ping_common.raddr.sin_addr) != 1) {
-		fprintf(stderr, "ping: Invalid IP address!\n");
+	if (ping_resolveAddress(ping_common.af, argv[optind], &ping_common.raddr.sin_addr) != 0) {
+		fprintf(stderr, "ping: cannot resolve address: %s\n", argv[optind]);
+		return 2;
+	}
+
+	if (inet_ntop(ping_common.af, &ping_common.raddr.sin_addr, addrstr, sizeof(addrstr)) == NULL) {
+		fprintf(stderr, "ping: Invalid address\n");
 		return 2;
 	}
 
@@ -312,6 +348,9 @@ int psh_ping(int argc, char **argv)
 		free(req);
 		return 2;
 	}
+
+	printf("PING %s (%.*s): %d data bytes\n",
+		argv[optind], (int)sizeof(addrstr), addrstr, ping_common.reqsz);
 
 	if ((fd = ping_sockconf()) <= 0) {
 		free(req);
