@@ -26,6 +26,7 @@
 
 #define IFCONFIG_VERBOSE 1
 #define IFCONFIG_ALL     2
+#define IFCONFIG_HELP    4
 
 enum operation {operation_setFlag, operation_unsetFlag, operation_toggleFlag};
 
@@ -379,23 +380,24 @@ static int psh_ifconfigArp(struct ifreq *ioctlInterface, int sd, int argc, char 
 static const struct {
 	const char *name;
 	int (*handler)(struct ifreq *ioctlInterface, int sd, int argc, char **argv, int *opt);
+	const char *helpDescription;
 } psh_ifconfigArguments[] = {
-	{ .name = "up", .handler = psh_ifconfigUpHandler },
-	{ .name = "down", .handler = psh_ifconfigDownHandler },
-	{ .name = "netmask", .handler = psh_ifconfigNetmask },
-	{ .name = "broadcast", .handler = psh_ifconfigBroadcast },
-	{ .name = "-broadcast", .handler = psh_ifconfigBroadcast },
-	{ .name = "mtu", .handler = psh_ifconfigMTU },
-	{ .name = "dstaddr", .handler = psh_ifconfigPointToPoint },
-	{ .name = "pointopoint", .handler = psh_ifconfigPointToPoint },
-	{ .name = "-pointopoint", .handler = psh_ifconfigPointToPoint },
-	{ .name = "multicast", .handler = psh_ifconfigMulticast },
-	{ .name = "allmulti", .handler = psh_ifconfigAllmulti },
-	{ .name = "-allmulti", .handler = psh_ifconfigAllmulti },
-	{ .name = "promisc", .handler = psh_ifconfigPromisc },
-	{ .name = "-promisc", .handler = psh_ifconfigPromisc },
-	{ .name = "arp", .handler = psh_ifconfigArp },
-	{ .name = "-arp", .handler = psh_ifconfigArp },
+	{ .name = "up", .handler = psh_ifconfigUpHandler, .helpDescription = "up: Activate the interface, undefined behavior when used together with \"down\"" },
+	{ .name = "down", .handler = psh_ifconfigDownHandler, .helpDescription = "down: Shut down the interface, undefined behavior when used together with \"up\"" },
+	{ .name = "netmask", .handler = psh_ifconfigNetmask, .helpDescription = "netmask <address>: Set IP mask to <address>" },
+	{ .name = "broadcast", .handler = psh_ifconfigBroadcast, .helpDescription = "[-]broadcast <address>: Set IP broadcast address to <address>" },
+	{ .name = "-broadcast", .handler = psh_ifconfigBroadcast, .helpDescription = NULL },
+	{ .name = "mtu", .handler = psh_ifconfigMTU, .helpDescription = "mtu <N>: Set MTU to <N>" },
+	{ .name = "dstaddr", .handler = psh_ifconfigPointToPoint, .helpDescription = "dstaddr <address>: Set IP address for point-to-point to <address>" },
+	{ .name = "pointopoint", .handler = psh_ifconfigPointToPoint, .helpDescription = "[-]pointopoint <address>: Set IP address for point-to-point to <address>" },
+	{ .name = "-pointopoint", .handler = psh_ifconfigPointToPoint, .helpDescription = NULL },
+	{ .name = "multicast", .handler = psh_ifconfigMulticast, .helpDescription = "multicast: Toggle multicast flag" },
+	{ .name = "allmulti", .handler = psh_ifconfigAllmulti, .helpDescription = "[-]allmulti: Toggle allmulti flag" },
+	{ .name = "-allmulti", .handler = psh_ifconfigAllmulti, .helpDescription = NULL },
+	{ .name = "promisc", .handler = psh_ifconfigPromisc, .helpDescription = "[-]promisc: Toggle promisc flag" },
+	{ .name = "-promisc", .handler = psh_ifconfigPromisc, .helpDescription = NULL },
+	{ .name = "arp", .handler = psh_ifconfigArp, .helpDescription = "[-]arp: Toggle arp flag" },
+	{ .name = "-arp", .handler = psh_ifconfigArp, .helpDescription = NULL },
 };
 
 
@@ -444,19 +446,36 @@ static inline int psh_ifconfigHandleArguments(const char *interfaceName, int arg
 }
 
 
+static inline void psh_ifconfigPrintHelp(void)
+{
+	size_t i;
+	printf("Usage: ifconfig [-a] [-h] [interface]\n"
+		   "       ifconfig <interface> [inet] <options> | <address> ...\n");
+	printf("Available options:\n");
+	for (i = 0; i < sizeof(psh_ifconfigArguments) / sizeof(*psh_ifconfigArguments); ++i) {
+		if (psh_ifconfigArguments[i].helpDescription != NULL) {
+			printf("       %s\n", psh_ifconfigArguments[i].helpDescription);
+		}
+	}
+}
+
+
 static int psh_ifconfig(int argc, char **argv)
 {
 	const char *interfaceName = NULL;
 	unsigned int flags = 0;
 	int opt, ret, sd;
 
-	while ((opt = getopt(argc, argv, "va")) != -1) {
+	while ((opt = getopt(argc, argv, "vah")) != -1) {
 		switch (opt) {
 			case 'v':
 				flags |= IFCONFIG_VERBOSE;
 				break;
 			case 'a':
 				flags |= IFCONFIG_ALL;
+				break;
+			case 'h':
+				flags |= IFCONFIG_HELP;
 				break;
 			default:
 				break;
@@ -466,6 +485,10 @@ static int psh_ifconfig(int argc, char **argv)
 	if (opt < argc) {
 		interfaceName = argv[opt];
 		opt += 1;
+	}
+	if ((flags & IFCONFIG_HELP) != 0) {
+		psh_ifconfigPrintHelp();
+		return EXIT_SUCCESS;
 	}
 
 	sd = socket(AF_INET, SOCK_DGRAM, 0);
