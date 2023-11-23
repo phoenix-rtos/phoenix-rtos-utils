@@ -20,6 +20,7 @@
 #include <inttypes.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <net/if_arp.h>
 #include <ifaddrs.h>
 
 #include "../psh.h"
@@ -79,96 +80,127 @@ static inline const char *psh_ifconfigPrintFlag(unsigned int flag)
 
 static inline int psh_ifconfigPrintInterface(const struct ifaddrs *interface, int sd)
 {
-	unsigned int flags, i;
-	struct in_addr addr, broadcast, mask;
+	static const char errMsg[] = "unavailable";
+	const char *msg;
+	unsigned int interfaceFlags, i;
 	int ret;
 	struct ifreq ioctlInterface;
 
 	(void)strncpy(ioctlInterface.ifr_name, interface->ifa_name, IFNAMSIZ - 1);
+	printf("%-10s", interface->ifa_name);
+	ioctlInterface.ifr_name[IFNAMSIZ - 1] = '\0';
+
 	/* Get interface flags */
 	ret = ioctl(sd, SIOCGIFFLAGS, &ioctlInterface);
 	if (ret < 0) {
+		/* Being unable to obtain flags is a critical error */
 		perror("ioctl(SIOCGIFFLAGS)");
 		return ret;
 	}
-	flags = ioctlInterface.ifr_flags;
+	interfaceFlags = ioctlInterface.ifr_flags;
+
+	printf("Link encap:");
+	switch (interfaceFlags & (IFF_LOOPBACK | IFF_POINTOPOINT)) {
+		case IFF_LOOPBACK:
+			printf("Local Loopback");
+			break;
+		case IFF_POINTOPOINT:
+			printf("Point to Point");
+			break;
+		case 0:
+			/* Get interface hardware address */
+			(void)memset(&ioctlInterface.ifr_hwaddr, 0, sizeof(struct sockaddr));
+			if (ioctl(sd, SIOCGIFHWADDR, &ioctlInterface) < 0) {
+				printf("%s", errMsg);
+			}
+			else {
+				if (ioctlInterface.ifr_hwaddr.sa_family == ARPHRD_ETHER) {
+					printf("Ethernet HWAddr");
+					for (ret = 0; ret < 6; ++ret) {
+						printf(":%02hhx", ioctlInterface.ifr_hwaddr.sa_data[ret]);
+					}
+				}
+				else {
+					printf("Unimplemented");
+				}
+			}
+			break;
+		default:
+			printf("Unimplemented");
+			break;
+	}
+	printf("\n%10s", "");
 
 	/* Get interface IP address */
-	ret = ioctl(sd, SIOCGIFADDR, &ioctlInterface);
-	if (ret < 0) {
-		perror("ioctl(SIOCGIFADDR)");
-		return ret;
+	if (ioctl(sd, SIOCGIFADDR, &ioctlInterface) < 0) {
+		msg = errMsg;
 	}
-	addr = ((struct sockaddr_in *)&ioctlInterface.ifr_addr)->sin_addr;
+	else {
+		msg = inet_ntoa(((struct sockaddr_in *)&ioctlInterface.ifr_addr)->sin_addr);
+	}
+	printf("%s:%s ", ((interfaceFlags & IFF_POINTOPOINT) == 0) ? "inet addr" : "local", msg);
+	if ((interfaceFlags & IFF_POINTOPOINT) != 0) {
+		if (ioctl(sd, SIOCGIFDSTADDR, &ioctlInterface) < 0) {
+			msg = errMsg;
+		}
+		else {
+			msg = inet_ntoa(((struct sockaddr_in *)&ioctlInterface.ifr_dstaddr)->sin_addr);
+		}
+		printf("remote:%s ", msg);
+	}
 
-	/* Get interface broadcast IP address */
-	ret = ioctl(sd, SIOCGIFBRDADDR, &ioctlInterface);
-	if (ret < 0) {
-		perror("ioctl(SIOCGIFBRDADDR)");
-		return ret;
+	if ((interfaceFlags & IFF_POINTOPOINT) == 0) {
+		/* Get interface broadcast IP address */
+		if (ioctl(sd, SIOCGIFBRDADDR, &ioctlInterface) < 0) {
+			msg = errMsg;
+		}
+		else {
+			msg = inet_ntoa(((struct sockaddr_in *)&ioctlInterface.ifr_addr)->sin_addr);
+		}
+		printf("Broadcast:%s ", msg);
 	}
-	broadcast = ((struct sockaddr_in *)&ioctlInterface.ifr_addr)->sin_addr;
 
 	/* Get interface IP mask */
-	ret = ioctl(sd, SIOCGIFNETMASK, &ioctlInterface);
-	if (ret < 0) {
-		perror("ioctl(SIOCGIFNETMASK)");
-		return ret;
+	if (ioctl(sd, SIOCGIFNETMASK, &ioctlInterface) < 0) {
+		msg = errMsg;
 	}
-	mask = ((struct sockaddr_in *)&ioctlInterface.ifr_addr)->sin_addr;
-
-	printf("%-10s", interface->ifa_name);
-
-	if ((flags & IFF_LOOPBACK) == 0) {
-		/* Get interface hardware address */
-		(void)memset(&ioctlInterface.ifr_hwaddr, 0, sizeof(struct sockaddr));
-		ret = ioctl(sd, SIOCGIFHWADDR, &ioctlInterface);
-		if (ret < 0) {
-			perror("ioctl(SIOCGIFHWADDR)");
-			return ret;
-		}
-		printf("HWAddr");
-		for (ret = 0; ret < 6; ++ret) {
-			printf(":%02hhx", ioctlInterface.ifr_hwaddr.sa_data[ret]);
-		}
-		printf("\n%10s", "");
+	else {
+		msg = inet_ntoa(((struct sockaddr_in *)&ioctlInterface.ifr_addr)->sin_addr);
 	}
+	printf("Mask:%s\n", msg);
 
-	printf("inet addr:%s ", inet_ntoa(addr));
-	printf("Broadcast:%s ", inet_ntoa(broadcast));
-	printf("Mask:%s\n", inet_ntoa(mask));
-	if (flags != 0) {
+	if (interfaceFlags != 0) {
 		printf("%10s", "");
-		for (i = 1; i <= flags; i <<= 1) {
-			if ((flags & i) != 0) {
+		for (i = 1; i <= interfaceFlags; i <<= 1) {
+			if ((interfaceFlags & i) != 0) {
 				printf("%s ", psh_ifconfigPrintFlag(i));
 			}
 		}
 	}
 
 	/* Get MTU */
-	ret = ioctl(sd, SIOCGIFMTU, &ioctlInterface);
-	if (ret < 0) {
-		perror("ioctl(SIOCGIFMTU)");
-		return ret;
+	if (ioctl(sd, SIOCGIFMTU, &ioctlInterface) < 0) {
+		printf("MTU:%s", errMsg);
 	}
-	printf("MTU:%d", ioctlInterface.ifr_mtu);
+	else {
+		printf("MTU:%d", ioctlInterface.ifr_mtu);
+	}
 	/* Get metric */
-	ret = ioctl(sd, SIOCGIFMETRIC, &ioctlInterface);
-	if (ret < 0) {
-		perror("ioctl(SIOCGIFMETRIC)");
-		return ret;
+	if (ioctl(sd, SIOCGIFMETRIC, &ioctlInterface) < 0) {
+		printf(" Metric:%s", errMsg);
 	}
-	printf(" Metric:%d", (ioctlInterface.ifr_metric != 0) ? ioctlInterface.ifr_metric : 1);
+	else {
+		printf(" Metric:%d", (ioctlInterface.ifr_metric != 0) ? ioctlInterface.ifr_metric : 1);
+	}
 	puts("\n");
-	return ret;
+	return 0;
 }
 
 
 static inline int psh_ifconfigDisplay(unsigned int flags, const char *interfaceName, int sd)
 {
 	struct ifaddrs *interface;
-	int ret;
+	int ret, found = 0;
 
 	ret = getifaddrs(&interface);
 	if (ret != 0) {
@@ -178,6 +210,7 @@ static inline int psh_ifconfigDisplay(unsigned int flags, const char *interfaceN
 
 	for (; interface != NULL; interface = interface->ifa_next) {
 		if ((interfaceName == NULL) || (strcmp(interfaceName, interface->ifa_name) == 0)) {
+			found = 1;
 			if (((flags & IFCONFIG_ALL) != 0) || (((interface->ifa_flags & IFF_UP) != 0)) || (interfaceName != NULL)) {
 				ret = psh_ifconfigPrintInterface(interface, sd);
 				if (ret < 0) {
@@ -187,6 +220,9 @@ static inline int psh_ifconfigDisplay(unsigned int flags, const char *interfaceN
 		}
 	}
 	freeifaddrs(interface);
+	if (found == 0) {
+		ret = -EIO;
+	}
 	return ret;
 }
 
@@ -408,8 +444,10 @@ static inline int psh_ifconfigHandleArguments(const char *interfaceName, int arg
 	struct ifreq ioctlInterface;
 	const char *argumentName;
 
+	ret = 0;
 	for (; opt < argc; opt++) {
 		(void)strncpy(ioctlInterface.ifr_name, interfaceName, IFNAMSIZ - 1);
+		ioctlInterface.ifr_name[IFNAMSIZ - 1] = '\0';
 		(void)memset(&ioctlInterface.ifr_ifru, 0, sizeof(ioctlInterface.ifr_ifru));
 		argumentName = argv[opt];
 		ret = 1;
@@ -423,6 +461,7 @@ static inline int psh_ifconfigHandleArguments(const char *interfaceName, int arg
 		}
 		if (found == 0) {
 			(void)strncpy(ioctlInterface.ifr_name, interfaceName, IFNAMSIZ - 1);
+			ioctlInterface.ifr_name[IFNAMSIZ - 1] = '\0';
 			(void)memset(&ioctlInterface.ifr_ifru, 0, sizeof(ioctlInterface.ifr_ifru));
 			/* Is this an IP address? */
 			((struct sockaddr_in *)&ioctlInterface.ifr_netmask)->sin_family = AF_INET;
