@@ -1074,9 +1074,9 @@ static int psh_streamRestore(struct psh_redir *redir)
 	return err;
 }
 
-
 static int psh_runscript(char *path)
 {
+	const char *scriptCmds[] = { "export", "unset" };
 	char **argv = NULL, *line = NULL;
 	int i, err, argc = 0;
 	size_t n = 0;
@@ -1101,12 +1101,14 @@ static int psh_runscript(char *path)
 	n = 0;
 
 	for (i = 2; (ret = getline(&line, &n, stream)) > 0; i++) {
-		if (line[0] == 'X' || line[0] == 'W' || line[0] == 'T') {
-			if (line[ret - 1] == '\n')
-				line[ret - 1] = '\0';
+		if (line[ret - 1] == '\n') {
+			line[ret - 1] = '\0';
+		}
 
+		if (line[0] == 'X' || line[0] == 'W' || line[0] == 'T') {
 			do {
-				if ((err = psh_parsecmd(line + 1, &argc, &argv)) < 0) {
+				err = psh_parsecmd(line + 1, &argc, &argv);
+				if (err < 0) {
 					fprintf(stderr, "psh: failed to parse line %d\n", i);
 					break;
 				}
@@ -1116,12 +1118,13 @@ static int psh_runscript(char *path)
 					err = psh_ttyopen(argv[0]);
 					break;
 				}
-				if ((pid = vfork()) < 0) {
+				pid = vfork();
+				if (pid < 0) {
 					fprintf(stderr, "psh: vfork failed in line %d\n", i);
 					err = pid;
 					break;
 				}
-				else if (!pid) {
+				else if (pid == 0) {
 					execv(argv[0], argv);
 					fprintf(stderr, "psh: exec failed in line %d\n", i);
 					_psh_exit(EXIT_FAILURE);
@@ -1136,9 +1139,38 @@ static int psh_runscript(char *path)
 			free(argv);
 			argv = NULL;
 		}
+		else {
+			for (size_t j = 0; j < sizeof(scriptCmds) / sizeof(scriptCmds[0]); j++) {
+				size_t len = strlen(scriptCmds[j]);
 
-		if (err < 0)
+				if ((line[len] != '\0') && (isspace(line[len]) == 0) && (strncmp(line, scriptCmds[j], len) != 0)) {
+					continue;
+				}
+
+				err = psh_parsecmd(line, &argc, &argv);
+				if (err < 0) {
+					fprintf(stderr, "psh: failed to parse line %d\n", i);
+					break;
+				}
+
+				const psh_appentry_t *app = psh_findapp(argv[0]);
+				if (app != NULL) {
+					(void)app->run(argc, argv);
+				}
+				else {
+					fprintf(stderr, "psh: %s not found\n", argv[0]);
+				}
+
+				free(argv);
+				argv = NULL;
+
+				break;
+			}
+		}
+
+		if (err < 0) {
 			break;
+		}
 
 		free(line);
 		line = NULL;
@@ -1466,7 +1498,7 @@ static int psh_run(int exitable, const char *console)
 				cnt++;
 			}
 
-			if ((cnt < 3) && (*tmp == '/')) {
+			if (((cnt < 3) && (*tmp == '/')) || (isalnum(argv[0][0]) != 0)) {
 				app = psh_findapp("/");
 			}
 		}
