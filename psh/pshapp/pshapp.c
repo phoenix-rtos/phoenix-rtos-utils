@@ -1112,7 +1112,11 @@ static int psh_runscript(char *path)
 			continue;
 		}
 
-		if ((line[0] == 'X') || (line[0] == 'W') || (line[0] == 'T')) {
+		/* Skip comment lines */
+		if (line[0] == '#') {
+			continue;
+		}
+		else if ((line[0] == 'X') || (line[0] == 'W') || (line[0] == 'T')) {
 			do {
 				err = psh_parsecmd(&line[1], &argc, &argv);
 				if (err < 0) {
