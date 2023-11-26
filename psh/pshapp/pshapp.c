@@ -1080,7 +1080,6 @@ static int psh_runscript(char *path)
 	char **argv = NULL, *line = NULL;
 	int i, err, argc = 0;
 	size_t n = 0;
-	ssize_t ret;
 	FILE *stream;
 	pid_t pid;
 
@@ -1097,16 +1096,23 @@ static int psh_runscript(char *path)
 		return -EINVAL;
 	}
 
-	free(line);
-	line = NULL;
-	n = 0;
-
-	for (i = 2; (ret = getline(&line, &n, stream)) > 0; i++) {
-		if (line[ret - 1] == '\n') {
-			line[ret - 1] = '\0';
+	for (i = 2;; i++) {
+		ssize_t lineLen = getline(&line, &n, stream);
+		if (lineLen <= 0) {
+			break;
 		}
 
-		if (line[0] == 'X' || line[0] == 'W' || line[0] == 'T') {
+		if (line[lineLen - 1] == '\n') {
+			lineLen--;
+			line[lineLen] = '\0';
+		}
+
+		/* Skip empty lines */
+		if (lineLen == 0) {
+			continue;
+		}
+
+		if ((line[0] == 'X') || (line[0] == 'W') || (line[0] == 'T')) {
 			do {
 				err = psh_parsecmd(&line[1], &argc, &argv);
 				if (err < 0) {
@@ -1146,6 +1152,9 @@ static int psh_runscript(char *path)
 		else {
 			for (size_t j = 0; j < sizeof(scriptCmds) / sizeof(scriptCmds[0]); j++) {
 				size_t len = strlen(scriptCmds[j]);
+				if (len > (size_t)lineLen) {
+					continue;
+				}
 
 				if ((line[len] != '\0') && (isspace(line[len]) == 0) && (strncmp(line, scriptCmds[j], len) != 0)) {
 					continue;
@@ -1175,10 +1184,6 @@ static int psh_runscript(char *path)
 		if (err < 0) {
 			break;
 		}
-
-		free(line);
-		line = NULL;
-		n = 0;
 	}
 
 	free(line);
