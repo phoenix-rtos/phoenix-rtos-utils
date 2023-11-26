@@ -1076,7 +1076,7 @@ static int psh_streamRestore(struct psh_redir *redir)
 
 static int psh_runscript(char *path)
 {
-	const char *scriptCmds[] = { "export", "unset" };
+	static const char *scriptCmds[] = { "export", "unset" };
 	char **argv = NULL, *line = NULL;
 	int i, err, argc = 0;
 	size_t n = 0;
@@ -1084,7 +1084,8 @@ static int psh_runscript(char *path)
 	FILE *stream;
 	pid_t pid;
 
-	if ((stream = fopen(path, "r")) == NULL) {
+	stream = fopen(path, "r");
+	if (stream == NULL) {
 		fprintf(stderr, "psh: failed to open file %s\n", path);
 		return -EINVAL;
 	}
@@ -1107,7 +1108,7 @@ static int psh_runscript(char *path)
 
 		if (line[0] == 'X' || line[0] == 'W' || line[0] == 'T') {
 			do {
-				err = psh_parsecmd(line + 1, &argc, &argv);
+				err = psh_parsecmd(&line[1], &argc, &argv);
 				if (err < 0) {
 					fprintf(stderr, "psh: failed to parse line %d\n", i);
 					break;
@@ -1130,9 +1131,12 @@ static int psh_runscript(char *path)
 					_psh_exit(EXIT_FAILURE);
 				}
 
-				if ((line[0] == 'W') && ((err = waitpid(pid, NULL, 0)) < 0)) {
-					fprintf(stderr, "psh: waitpid failed in line %d\n", i);
-					break;
+				if (line[0] == 'W') {
+					err = waitpid(pid, NULL, 0);
+					if (err < 0) {
+						fprintf(stderr, "psh: waitpid failed in line %d\n", i);
+						break;
+					}
 				}
 			} while (0);
 
