@@ -1078,7 +1078,7 @@ static int psh_runscript(char *path)
 {
 	static const char *scriptCmds[] = { "export", "unset" };
 	char **argv = NULL, *line = NULL;
-	int i, err, argc = 0;
+	int i, err = 0, argc = 0;
 	size_t n = 0;
 	FILE *stream;
 	pid_t pid;
@@ -1089,14 +1089,7 @@ static int psh_runscript(char *path)
 		return -EINVAL;
 	}
 
-	if ((getline(&line, &n, stream) < sizeof(SCRIPT_MAGIC)) || strncmp(line, SCRIPT_MAGIC, sizeof(SCRIPT_MAGIC) - 1)) {
-		fprintf(stderr, "psh: %s is not a psh script\n", path);
-		free(line);
-		fclose(stream);
-		return -EINVAL;
-	}
-
-	for (i = 2;; i++) {
+	for (i = 1;; i++) {
 		ssize_t lineLen = getline(&line, &n, stream);
 		if (lineLen <= 0) {
 			break;
@@ -1105,6 +1098,13 @@ static int psh_runscript(char *path)
 		if (line[lineLen - 1] == '\n') {
 			lineLen--;
 			line[lineLen] = '\0';
+		}
+
+		/* Check script magic */
+		if ((i == 1) && (strcmp(line, SCRIPT_MAGIC) != 0)) {
+			fprintf(stderr, "psh: %s is not a psh script\n", path);
+			err = -EINVAL;
+			break;
 		}
 
 		/* Skip empty lines */
@@ -1193,7 +1193,7 @@ static int psh_runscript(char *path)
 	free(line);
 	fclose(stream);
 
-	return 0;
+	return err;
 }
 
 
