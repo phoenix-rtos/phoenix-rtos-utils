@@ -419,6 +419,15 @@ static int psh_ifconfigArp(struct ifreq *ioctlInterface, int sd, int argc, char 
 }
 
 
+static int psh_ifconfigDynamic(struct ifreq *ioctlInterface, int sd, int argc, char **argv, int *opt)
+{
+	(void)argc;
+	(void)argv;
+	(void)opt;
+	return psh_ifconfigChangeFlag(ioctlInterface, sd, IFF_DYNAMIC, operation_toggleFlag);
+}
+
+
 static const struct {
 	const char *name;
 	int (*handler)(struct ifreq *ioctlInterface, int sd, int argc, char **argv, int *opt);
@@ -440,6 +449,8 @@ static const struct {
 	{ .name = "-promisc", .handler = psh_ifconfigPromisc, .helpDescription = NULL },
 	{ .name = "arp", .handler = psh_ifconfigArp, .helpDescription = "[-]arp: Toggle arp flag" },
 	{ .name = "-arp", .handler = psh_ifconfigArp, .helpDescription = NULL },
+	{ .name = "dynamic", .handler = psh_ifconfigDynamic, .helpDescription = "[-]dynamic: Toggle activation of DHCP client" },
+	{ .name = "-dynamic", .handler = psh_ifconfigDynamic, .helpDescription = NULL },
 };
 
 
