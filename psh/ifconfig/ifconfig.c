@@ -29,7 +29,13 @@
 #define IFCONFIG_ALL     2
 #define IFCONFIG_HELP    4
 
-enum operation {operation_setFlag, operation_unsetFlag, operation_toggleFlag};
+
+/* clang-format off */
+
+enum operation { operation_setFlag, operation_unsetFlag, operation_toggleFlag };
+
+/* clang-format on */
+
 
 static void psh_ifconfigInfo(void)
 {
@@ -97,7 +103,7 @@ static inline int psh_ifconfigPrintInterface(const struct ifaddrs *interface, in
 		perror("ioctl(SIOCGIFFLAGS)");
 		return ret;
 	}
-	interfaceFlags = ioctlInterface.ifr_flags;
+	interfaceFlags = (unsigned short)ioctlInterface.ifr_flags; /* ifr_flags is signed short */
 
 	printf("Link encap:");
 	switch (interfaceFlags & (IFF_LOOPBACK | IFF_POINTOPOINT)) {
@@ -169,11 +175,11 @@ static inline int psh_ifconfigPrintInterface(const struct ifaddrs *interface, in
 	}
 	printf("Mask:%s\n", msg);
 
-	if (interfaceFlags != 0) {
+	if (interfaceFlags != 0u) {
 		printf("%10s", "");
-		for (i = 1; i <= interfaceFlags; i <<= 1) {
-			if ((interfaceFlags & i) != 0) {
-				printf("%s ", psh_ifconfigPrintFlag(i));
+		for (i = 0u; i < sizeof(ioctlInterface.ifr_flags) * 8u; ++i) {
+			if ((interfaceFlags & (1u << i)) != 0u) {
+				printf("%s ", psh_ifconfigPrintFlag(1u << i));
 			}
 		}
 	}
