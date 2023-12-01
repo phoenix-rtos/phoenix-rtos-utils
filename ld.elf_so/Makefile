@@ -4,37 +4,45 @@
 # Copyright 2023 Phoenix Systems
 #
 
+#	$NetBSD: Makefile,v 1.148 2023/10/07 12:15:53 rin Exp $
+
+#
+# NOTE: when changing ld.so, ensure that ldd still compiles.
+#
+
 LOCAL_DIR:=$(call my-dir)
 
 NAME := ld.elf_so
 LOCAL_SRCS := compat.c debug.c diagassert.c expand.c hash.c headers.c load.c map_object.c paths.c reloc.c rtld.c search.c symbol.c symver.c tls.c xmalloc.c xprintf.c
-LIBS := libphoenix
+LIBS :=
 
-LOCAL_CFLAGS += -D_PATH_RTLD=\"/bin/${NAME}\"
+LOCAL_INSTALL_PATH := $(DEFAULT_INSTALL_PATH_SO)
 
-LOCAL_CFLAGS+= -DRTLD_LOADER
-LOCAL_CFLAGS+= -D_RTLD_SOURCE
-LOCAL_CFLAGS+= -DHAVE_INITFINI_ARRAY
+LOCAL_CFLAGS += -D_PATH_RTLD=\"$(LOCAL_INSTALL_PATH)/${NAME}\"
+LOCAL_CFLAGS += -DRTLD_LOADER
+LOCAL_CFLAGS += -D_RTLD_SOURCE
+LOCAL_CFLAGS += -DHAVE_INITFINI_ARRAY
 # TODO: investigate further
 # LOCAL_CFLAGS+=	-DGNU_RELRO
 
 ifeq ($(TARGET_SUFF), ia32)
-	COPTS:= -mno-3dnow -mno-mmx -mno-sse -mno-sse2 -mno-sse3
+	LOCAL_CFLAGS += -mno-3dnow -mno-mmx -mno-sse -mno-sse2 -mno-sse3
 endif
 
-COPTS+= -fvisibility=hidden -fomit-frame-pointer
+LOCAL_CFLAGS += -fvisibility=hidden -fomit-frame-pointer
 
 # rtld.c and symbol.c use alloca, so disable SSP warnings.
-COPTS.rtld.c+=   -Wno-stack-protector
-COPTS.symbol.c+= -Wno-stack-protector
+CFLAGS.$(LOCAL_DIR)rtld.c   += -Wno-stack-protector
+CFLAGS.$(LOCAL_DIR)symbol.c += -Wno-stack-protector
 
-LOCAL_LDFLAGS+= -symbolic -shared
-# FIXME
-# LOCAL_LDFLAGS+= -nostartfiles -nodefaultlibs -lgcc
-LOCAL_LDFLAGS+= -Wl,-static
-LOCAL_LDFLAGS+= -Wl,--warn-shared-textrel
-LOCAL_LDFLAGS+= -Wl,--no-undefined
-LOCAL_LDFLAGS+=	-Wl,--version-script=${LOCAL_DIR}/symbols.map
+LOCAL_LDFLAGS += -symbolic -shared
+LOCAL_LDFLAGS += -nostartfiles -nodefaultlibs
+LOCAL_LDFLAGS += $(LDFLAGS_PREFIX)-static
+LOCAL_LDFLAGS += $(LDFLAGS_PREFIX)--warn-shared-textrel
+LOCAL_LDFLAGS += $(LDFLAGS_PREFIX)--no-undefined
+LOCAL_LDFLAGS += $(LDFLAGS_PREFIX)--version-script=${LOCAL_DIR}/symbols.map
+
+LOCAL_LDLIBS := -lphoenix -lgcc
 
 ifeq (${TARGET_SUFF},ia32)
 	include $(addprefix ${LOCAL_DIR}, arch/i386/Makefile.inc)
@@ -46,8 +54,9 @@ else
 	$(error Unsupported architecture ${TARGET_SUFF})
 endif
 
-LANGUAGE_EXTENSIONS_OLD:=${LANGUAGE_EXTENSIONS}
-LANGUAGE_EXTENSIONS+= %.S
-include $(binary.mk)
-LANGUAGE_EXTENSIONS:=${LANGUAGE_EXTENSIONS_OLD}
+LANGUAGE_EXTENSIONS_OLD := ${LANGUAGE_EXTENSIONS}
+LANGUAGE_EXTENSIONS += %.S
 
+include $(binary.mk)
+
+LANGUAGE_EXTENSIONS := ${LANGUAGE_EXTENSIONS_OLD}

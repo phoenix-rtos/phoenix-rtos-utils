@@ -345,8 +345,8 @@ irealloc(void *cp, size_t nbytes)
 	if (op->ov_magic != MAGIC) {
 		static const char *err_str =
 		    "memory corruption or double free in realloc\n";
-		extern char *__progname;
-	        write(STDERR_FILENO, __progname, strlen(__progname));
+		extern char *argv_progname;
+	        write(STDERR_FILENO, argv_progname, strlen(argv_progname));
 		write(STDERR_FILENO, err_str, strlen(err_str));
 		abort();
 	}

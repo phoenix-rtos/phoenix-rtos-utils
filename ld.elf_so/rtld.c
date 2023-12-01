@@ -112,7 +112,7 @@ static void    *auxinfo;
 /*
  * Global declarations normally provided by crt0.
  */
-char           *__progname;
+char           *argv_progname;
 char          **environ;
 
 static volatile bool _rtld_mutex_may_recurse;
@@ -570,7 +570,7 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	_rtld_pagesz = (int)pAUX_pagesz->a_v;
 	_rtld_init((caddr_t)pAUX_base->a_v, (caddr_t)relocbase, execname);
 
-	__progname = _rtld_objself.path;
+	argv_progname = _rtld_objself.path;
 	environ = env;
 
 	_rtld_trust = ((pAUX_euid ? (uid_t)pAUX_euid->a_v : geteuid()) ==
@@ -760,10 +760,10 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 #endif
 
 	/*
-	 * Set the __progname,  environ and, __mainprog_obj before
+	 * Set the argv_progname,  environ and, __mainprog_obj before
 	 * calling anything that might use them.
 	 */
-	real___progname = _rtld_objmain_sym("__progname");
+	real___progname = _rtld_objmain_sym("argv_progname");
 	if (real___progname) {
 		if (argv[0] != NULL) {
 			if ((*real___progname = strrchr(argv[0], '/')) == NULL)
@@ -1549,22 +1549,6 @@ __dl_cxa_refcount(void *addr, ssize_t delta)
 	}
 
 	_rtld_exclusive_exit(&mask);
-}
-
-pid_t __fork(void);
-
-__dso_public pid_t
-__locked_fork(int *my_errno)
-{
-	pid_t result;
-
-	_rtld_shared_enter();
-	result = __fork();
-	if (result == -1)
-		*my_errno = errno;
-	_rtld_shared_exit();
-
-	return result;
 }
 
 /*
