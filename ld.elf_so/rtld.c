@@ -802,7 +802,8 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	 */
 
 	((void **) osp)[0] = _rtld_exit;
-	((void **) osp)[1] = __UNCONST(_rtld_compat_obj);
+	/* FIXME: NETBSD returns this but it seems to be useless. Do not return it till invesitgated. */
+	/* ((void **) osp)[1] = __UNCONST(_rtld_compat_obj); */
 	return (Elf_Addr) _rtld_objmain->entry;
 }
 

@@ -25,6 +25,7 @@ LOCAL_CFLAGS += -DHAVE_INITFINI_ARRAY
 # TODO: investigate further
 # LOCAL_CFLAGS+=	-DGNU_RELRO
 
+# TODO: devise if ti should be removed from here
 ifeq ($(TARGET_SUFF), ia32)
 	LOCAL_CFLAGS += -mno-3dnow -mno-mmx -mno-sse -mno-sse2 -mno-sse3
 endif
@@ -32,6 +33,8 @@ endif
 LOCAL_CFLAGS += -fvisibility=hidden -fomit-frame-pointer
 
 # rtld.c and symbol.c use alloca, so disable SSP warnings.
+# FIXME add support for file specific CFLAGS
+# now it works as stack-protecktor is not used by default.
 CFLAGS.$(LOCAL_DIR)rtld.c   += -Wno-stack-protector
 CFLAGS.$(LOCAL_DIR)symbol.c += -Wno-stack-protector
 
