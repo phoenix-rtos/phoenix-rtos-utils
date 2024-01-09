@@ -64,7 +64,8 @@
 
 /* Special key codes */
 /* clang-format off */
-enum { kUp = 1, kDown, kRight, kLeft, kDelete, kHome, kEnd };
+enum { kUp = 1, kDown, kRight, kLeft, kDelete, kHome, kEnd, kCtrlRight, kCtrlLeft, kCtrlUp,
+	kCtrlDown, kAltRight, kAltLeft, kAltUp, kAltDown, kAltD };
 /* clang-format on */
 
 
@@ -83,6 +84,8 @@ typedef struct {
 
 typedef struct {
 	psh_hist_t *cmdhist;
+	char clipboard[CMDSZ];
+	int clipboardLen;
 	unsigned char newline;
 } pshapp_common_t;
 
@@ -480,44 +483,102 @@ static int psh_cmpname(const void *n1, const void *n2)
 
 static int psh_keyCode(const char *buff, int *pEsc)
 {
-	int n, esc = *pEsc;
+	size_t n;
+	int esc = *pEsc;
+
+	/* ESC sequences ( ^[ ) */
+	static const struct {
+		char escChar;
+		int keyCode;
+	} escKeys[] = {
+		{ 'f', kAltRight },
+		{ 'b', kAltLeft },
+		{ 'd', kAltD },
+	};
+
+	/* CSI / SS3 sequences ( ^[[ / ^[O ) */
 	static const struct {
 		const char *escSeq;
 		int keyCode;
-	} keys[] = {
+	} csiKeys[] = {
 		{ "A", kUp },
 		{ "B", kDown },
 		{ "C", kRight },
 		{ "D", kLeft },
 		{ "F", kEnd },
 		{ "H", kHome },
+		{ "1;5C", kCtrlRight },
+		{ "1;5D", kCtrlLeft },
+		{ "1;5A", kCtrlUp },
+		{ "1;5B", kCtrlDown },
 		{ "1~", kHome },
 		{ "3~", kDelete },
 		{ "4~", kEnd },
 		{ "7~", kHome },
-		{ "8~", kEnd }
+		{ "8~", kEnd },
+		{ "1;3C", kAltRight },
+		{ "1;3D", kAltLeft },
+		{ "1;3A", kAltUp },
+		{ "1;3B", kAltDown },
 	};
 
-	if (esc < 4)
+	if (esc < 3) {
 		return -EAGAIN;
+	}
 
-	if (buff[0] == '^' && buff[1] == '[' && (buff[2] == '[' || buff[2] == 'O')) {
+	if ((buff[0] == '^') && (buff[1] == '[') && (buff[2] != '[') && (buff[2] != 'O')) {
+		for (n = 0U; n < (sizeof(escKeys) / sizeof(escKeys[0])); ++n) {
+			if (buff[2] == escKeys[n].escChar) {
+				return escKeys[n].keyCode;
+			}
+		}
+
+		return -EINVAL;
+	}
+
+	if (esc < 4) {
+		return -EAGAIN;
+	}
+
+	if ((buff[0] == '^') && (buff[1] == '[') && ((buff[2] == '[') || (buff[2] == 'O'))) {
 		buff += 3;
 		esc -= 3;
 
-		for (n = 0; n < sizeof(keys) / sizeof(keys[0]); ++n) {
-			if (strncmp(buff, keys[n].escSeq, esc) != 0)
+		for (n = 0U; n < (sizeof(csiKeys) / sizeof(csiKeys[0])); ++n) {
+			if (strncmp(buff, csiKeys[n].escSeq, esc) != 0) {
 				continue;
+			}
 
-			if (esc != strlen(keys[n].escSeq))
+			if (esc != strlen(csiKeys[n].escSeq)) {
 				return -EAGAIN;
+			}
 
 			*pEsc = 0;
-			return keys[n].keyCode;
+			return csiKeys[n].keyCode;
 		}
 	}
 
 	return -EINVAL;
+}
+
+
+static int psh_skipword(const char *str, int n, int (*iswordchr)(int))
+{
+	const char *cur = str;
+	const char *end = str + n;
+	int step = (n < 0) ? -1 : 1;
+
+	/* If starting on a delimiter, skip it along with the contiguous delimiters */
+	while ((cur != end) && (iswordchr(*cur) == 0)) {
+		cur += step;
+	}
+
+	/* Find the end of the word */
+	while ((cur != end) && (iswordchr(*cur) != 0)) {
+		cur += step;
+	}
+
+	return (n < 0) ? (str - cur) : (cur - str);
 }
 
 
@@ -553,8 +614,24 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 			/* Cancel escape code processing */
 			esc = 0;
 
+			/* SOH => jump to start of the line */
+			if (c == '\001') {
+				if (n > 0) {
+					psh_movecursor(n + sizeof(PROMPT) - 1, -n);
+					m += n;
+					n = 0;
+				}
+			}
+			/* STX => move backward by a char */
+			else if (c == '\002') {
+				if (n > 0) {
+					psh_movecursor(n + sizeof(PROMPT) - 1, -1);
+					n--;
+					m++;
+				}
+			}
 			/* ETX => cancel command */
-			if (c == '\003') {
+			else if (c == '\003') {
 				printf("^C");
 				if (m > 2)
 					psh_movecursor(n + sizeof(PROMPT) + 1, m - 2);
@@ -579,6 +656,22 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 					free(*cmd);
 					*cmd = NULL;
 					break;
+				}
+			}
+			/* ENQ => jump to end of the line */
+			else if (c == '\005') {
+				if (m > 0) {
+					psh_movecursor(n + sizeof(PROMPT) - 1, m);
+					n += m;
+					m = 0;
+				}
+			}
+			/* ACK => move forward by a char */
+			else if (c == '\006') {
+				if (m > 0) {
+					psh_movecursor(n + sizeof(PROMPT) - 1, 1);
+					n++;
+					m--;
 				}
 			}
 			/* BS => remove last character */
@@ -674,6 +767,19 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 				if (err < 0)
 					break;
 			}
+			/* VT => cut text between cursor and end of line */
+			else if (c == '\013') {
+				if (m > 0) {
+					if (hp != cmdhist->he) {
+						psh_histentcmd(cmd, cmdhist->entries + hp);
+						hp = cmdhist->he;
+					}
+					memcpy(pshapp_common.clipboard, *cmd + n, m);
+					pshapp_common.clipboardLen = m;
+					(void)psh_write(STDOUT_FILENO, CSI_CLEAR0, sizeof(CSI_CLEAR0) - 1u);
+					m = 0;
+				}
+			}
 			/* FF => clear screen */
 			else if (c == '\014') {
 				(void)psh_write(STDOUT_FILENO, CSI_HOME CSI_CLEAR0, sizeof(CSI_HOME CSI_CLEAR0) - 1u);
@@ -705,6 +811,65 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 				psh_movecursor(n + sizeof(PROMPT) - 1, m);
 				(void)psh_write(STDOUT_FILENO, "\r\n", 2);
 				break;
+			}
+			/* NAK => cut text between beginning of line and cursor */
+			else if (c == '\025') {
+				if (n > 0) {
+					if (hp != cmdhist->he) {
+						psh_histentcmd(cmd, cmdhist->entries + hp);
+						hp = cmdhist->he;
+					}
+
+					memcpy(pshapp_common.clipboard, *cmd, n);
+					pshapp_common.clipboardLen = n;
+					memmove(*cmd, *cmd + n, m);
+					psh_movecursor(n + sizeof(PROMPT) - 1, -n);
+					n = 0;
+					(void)psh_write(STDOUT_FILENO, *cmd, m);
+					(void)psh_write(STDOUT_FILENO, CSI_CLEAR0, sizeof(CSI_CLEAR0) - 1u);
+					psh_movecursor(m + sizeof(PROMPT) - 1, -m);
+				}
+			}
+			/* ETB => cut previous word */
+			else if (c == '\027') {
+				if (n > 0) {
+					if (hp != cmdhist->he) {
+						psh_histentcmd(cmd, cmdhist->entries + hp);
+						hp = cmdhist->he;
+					}
+
+					i = psh_skipword(*cmd + n - 1, -n, isgraph);
+
+					if (i > 0) {
+						n -= i;
+						memcpy(pshapp_common.clipboard, *cmd + n, i);
+						pshapp_common.clipboardLen = i;
+						memmove(*cmd + n, *cmd + n + i, m);
+						psh_movecursor(n + i + sizeof(PROMPT) - 1, -i);
+						(void)psh_write(STDOUT_FILENO, *cmd + n, m);
+						(void)psh_write(STDOUT_FILENO, CSI_CLEAR0, sizeof(CSI_CLEAR0) - 1u);
+						psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
+					}
+				}
+			}
+			/* EM => paste */
+			else if (c == '\031') {
+				i = pshapp_common.clipboardLen;
+				if (n + m + i > CMDSZ) {
+					i = CMDSZ - n - m;
+				}
+
+				if (i > 0) {
+					if (hp != cmdhist->he) {
+						psh_histentcmd(cmd, cmdhist->entries + hp);
+						hp = cmdhist->he;
+					}
+					memmove(*cmd + n + i, *cmd + n, m);
+					memcpy(*cmd + n, pshapp_common.clipboard, i);
+					(void)psh_write(STDOUT_FILENO, *cmd + n, i + m);
+					n += i;
+					psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
+				}
 			}
 			else {
 				pshapp_common.newline = 0;
@@ -810,6 +975,50 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 					(void)psh_write(STDOUT_FILENO, CSI_CLEAR0, sizeof(CSI_CLEAR0) - 1u);
 					(void)psh_write(STDOUT_FILENO, *cmd + n, m);
 					psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
+				}
+			}
+			else if (k == kCtrlLeft || k == kAltLeft) {
+				if (n > 0) {
+					if (hp != cmdhist->he) {
+						psh_histentcmd(cmd, cmdhist->entries + hp);
+						hp = cmdhist->he;
+					}
+					i = psh_skipword(*cmd + n - 1, -n, isalnum);
+					psh_movecursor(n + sizeof(PROMPT) - 1, -i);
+					n -= i;
+					m += i;
+				}
+			}
+			else if (k == kCtrlRight || k == kAltRight) {
+				if (m > 0) {
+					if (hp != cmdhist->he) {
+						psh_histentcmd(cmd, cmdhist->entries + hp);
+						hp = cmdhist->he;
+					}
+					i = psh_skipword(*cmd + n, m, isalnum);
+					psh_movecursor(n + sizeof(PROMPT) - 1, i);
+					n += i;
+					m -= i;
+				}
+			}
+			else if (k == kAltD) {
+				if (m > 0) {
+					if (hp != cmdhist->he) {
+						psh_histentcmd(cmd, cmdhist->entries + hp);
+						hp = cmdhist->he;
+					}
+
+					i = psh_skipword(*cmd + n, m, isalnum);
+
+					if (i > 0) {
+						m -= i;
+						memcpy(pshapp_common.clipboard, *cmd + n, i);
+						pshapp_common.clipboardLen = i;
+						memmove(*cmd + n, *cmd + n + i, m);
+						(void)psh_write(STDOUT_FILENO, *cmd + n, m);
+						(void)psh_write(STDOUT_FILENO, CSI_CLEAR0, sizeof(CSI_CLEAR0) - 1u);
+						psh_movecursor(n + m + sizeof(PROMPT) - 1, -m);
+					}
 				}
 			}
 		}
