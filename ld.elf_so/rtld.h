@@ -40,10 +40,11 @@
 #include <stddef.h>
 #include <sys/param.h>
 #include <sys/types.h>
-#include <sys/exec_elf.h>
 #if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
 #include <sys/tls.h>
 #endif
+
+#include "exec_elf.h"
 #include "queue.h"
 #include "rtldenv.h"
 #include "link.h"

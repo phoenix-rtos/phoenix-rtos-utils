@@ -61,9 +61,9 @@
 #include <sys/cdefs.h>
 
 #include <sys/param.h>
-#include <sys/exec_elf.h>
 #include <string.h>
 
+#include "exec_elf.h"
 #include "debug.h"
 #include "rtld.h"
 
