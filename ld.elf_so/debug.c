@@ -43,13 +43,13 @@
 #include "rtldenv.h"
 
 #ifdef DEBUG
-int debug = 0;
+int debugFlag = 0;
 
 void
 debug_printf(const char *format, ...)
 {
 
-	if (debug) {
+	if (debugFlag) {
 		va_list ap;
 
 		va_start(ap, format);

@@ -34,7 +34,6 @@
 #ifndef RTLD_H
 #define RTLD_H
 
-#include <dlfcn.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -44,6 +43,7 @@
 #include <sys/tls.h>
 #endif
 
+#include "dlfcn.h"
 #include "exec_elf.h"
 #include "queue.h"
 #include "rtldenv.h"

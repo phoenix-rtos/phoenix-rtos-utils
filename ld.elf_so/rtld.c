@@ -58,7 +58,7 @@
 
 #include <ctype.h>
 
-#include <dlfcn.h>
+#include "dlfcn.h"
 
 #include "debug.h"
 #include "hash.h"
@@ -114,6 +114,9 @@ static void    *auxinfo;
  */
 char           *argv_progname;
 char          **environ;
+
+/* FIXME: convert to RWMutex */
+static handle_t _rtld_mutex;
 
 static volatile bool _rtld_mutex_may_recurse;
 
@@ -352,6 +355,7 @@ static void
 _rtld_init(caddr_t mapbase, caddr_t relocbase, const char *execname)
 {
 	const Elf_Ehdr *ehdr;
+	int res;
 
 	/* Conjure up an Obj_Entry structure for the dynamic linker. */
 	_rtld_objself.path = __UNCONST(_rtld_path);
@@ -409,7 +413,9 @@ _rtld_init(caddr_t mapbase, caddr_t relocbase, const char *execname)
 	_rtld_objself.phdr = (Elf_Phdr *)((char *)mapbase + ehdr->e_phoff);
 	_rtld_objself.phsize = ehdr->e_phnum * sizeof(_rtld_objself.phdr[0]);
 
-	assert(mutexInit(&_rtld_mutex) == 0);
+	res = mutexCreate(&_rtld_mutex);
+	(void)res; /* Avoid unused warning if asserts are off. */
+	assert(res == 0);
 }
 
 /*
@@ -436,6 +442,9 @@ _dlauxinfo(void)
 	return auxinfo;
 }
 
+extern int _libc_init(void);
+
+/* TODO: update stack description to phoenix */
 /*
  * Main entry point for dynamic linking.  The argument is the stack
  * pointer.  The stack is expected to be laid out as described in the
@@ -460,12 +469,11 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	char          **env, **oenvp;
 	const AuxInfo  *auxp;
 	Obj_Entry      *obj;
-	Elf_Addr       *const osp = sp;
 	bool            bind_now = 0;
 	const char     *ld_bind_now, *ld_preload, *ld_library_path;
 	const char    **argv;
 	const char     *execname;
-	long		argc;
+	Elf_Addr       *cleanup;
 	const char **real___progname;
 	const Obj_Entry **real___mainprog_obj;
 	char ***real_environ;
@@ -486,7 +494,7 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	/* Find the auxiliary vector on the stack. */
 	/* first Elf_Word reserved to address of exit routine */
 #if defined(RTLD_DEBUG)
-	debug = 1;
+	debugFlag = 1;
 	dbg(("sp = %p, argc = %ld, argv = %p <%s> relocbase %p", sp,
 	    (long)sp[2], &sp[3], (char *) sp[3], (void *)relocbase));
 #ifndef __x86_64__
@@ -494,18 +502,16 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	    &_DYNAMIC));
 #endif
 #endif
-
-	sp += 2;		/* skip over return argument space */
-	argv = (const char **) &sp[1];
-	argc = *(long *)sp;
-	sp += 2 + argc;		/* Skip over argc, arguments, and NULL
-				 * terminator */
-	env = (char **) sp;
-	while (*sp++ != 0) {	/* Skip over environment, and NULL terminator */
-#if defined(RTLD_DEBUG)
-		dbg(("env[%d] = %p %s", i++, (void *)sp[-1], (char *)sp[-1]));
-#endif
+	cleanup = sp;
+	argv = (const char **)sp[2];
+	env = (char **)sp[3];
+	assert(argv != NULL);
+	sp = (env == NULL) ? (void *)argv : (void *)env;
+	/* Skip over environment (if not existent, then argv)*/
+	while (*sp != 0) {
+		sp++;
 	}
+	sp++; /* Skip over NULL terminator */
 	auxinfo = (AuxInfo *) sp;
 
 	pAUX_base = pAUX_entry = pAUX_execfd = NULL;
@@ -524,9 +530,6 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 		case AT_ENTRY:
 			pAUX_entry = auxp;
 			break;
-		case AT_EXECFD:
-			pAUX_execfd = auxp;
-			break;
 		case AT_PHDR:
 			pAUX_phdr = auxp;
 			break;
@@ -536,6 +539,11 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 		case AT_PHNUM:
 			pAUX_phnum = auxp;
 			break;
+#ifdef AT_EXECFD
+		case AT_EXECFD:
+			pAUX_execfd = auxp;
+			break;
+#endif
 #ifdef AT_EUID
 		case AT_EUID:
 			pAUX_euid = auxp;
@@ -570,6 +578,9 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	_rtld_pagesz = (int)pAUX_pagesz->a_v;
 	_rtld_init((caddr_t)pAUX_base->a_v, (caddr_t)relocbase, execname);
 
+	/* Init staticly linked libc. */
+	_libc_init();
+
 	argv_progname = _rtld_objself.path;
 	environ = env;
 
@@ -588,7 +599,7 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	 * Inline avoid using normal getenv/unsetenv here as the libc
 	 * code is quite a bit more complicated.
 	 */
-	for (oenvp = env; *env != NULL; ++env) {
+	for (oenvp = env; (env != NULL) && (*env != NULL); ++env) {
 		static const char bind_var[] = "LD_BIND_NOW=";
 		static const char debug_var[] =  "LD_DEBUG=";
 		static const char path_var[] = "LD_LIBRARY_PATH=";
@@ -628,17 +639,20 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 		}
 #undef LEN
 	}
-	*oenvp++ = NULL;
+	if (oenvp != NULL) {
+		*oenvp++ = NULL;
+	}
 
 	if (ld_bind_now != NULL && *ld_bind_now != '\0')
 		bind_now = true;
 	if (_rtld_trust) {
 #ifdef DEBUG
 #ifdef RTLD_DEBUG
-		debug = 0;
+		/* FIXME */
+		/* debugFlag = 0; */
 #endif
 		if (ld_debug != NULL && *ld_debug != '\0')
-			debug = 1;
+			debugFlag = 1;
 #endif
 		_rtld_add_paths(execname, &_rtld_paths, ld_library_path);
 	} else {
@@ -801,9 +815,10 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	 * of stack.
 	 */
 
-	((void **) osp)[0] = _rtld_exit;
+	*cleanup = (Elf_Addr)_rtld_exit;
 	/* FIXME: Remove with whole compat.c after deeper investigation. */
 	/* ((void **) osp)[1] = __UNCONST(_rtld_compat_obj); */
+
 	return (Elf_Addr) _rtld_objmain->entry;
 }
 
@@ -1663,9 +1678,6 @@ _rtld_objlist_remove(Objlist *list, Obj_Entry *obj)
 		xfree(elm);
 	}
 }
-
-/* FIXME: convert to RWMutex */
-static handle_t _rtld_mutex;
 
 void
 _rtld_shared_enter(void)

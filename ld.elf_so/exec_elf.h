@@ -938,6 +938,10 @@ typedef struct {
 	Elf64_Xword	a_v;		/* 64-bit id */
 } Aux64Info;
 
+#if 1
+/* Use phoenix definitions. */
+#include <phoenix/auxv.h>
+#else
 /* a_type */
 #define AT_NULL		0	/* Marks end of array */
 #define AT_IGNORE	1	/* No meaning, a_un is undefined */
@@ -978,6 +982,7 @@ typedef struct {
 #define AT_SUN_EMUL_EXECFD 2013 /* coff file descriptor */
 	/* Executable's fully resolved name */
 #define AT_SUN_EXECNAME 2014
+#endif
 
 /*
  * The header for GNU-style hash sections.
