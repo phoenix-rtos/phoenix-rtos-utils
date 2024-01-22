@@ -18,6 +18,7 @@
 #include <dirent.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <limits.h> /* PATH_MAX */
 
 #include "../psh.h"
 
@@ -32,11 +33,9 @@
 #endif
 
 
-#define PATH_MAX 512  // FIXME: shouldn't be here
-
 static struct {
 	char *symbolic;
-	char path[PATH_MAX + 1];
+	char *path;
 	struct stat st;
 	int rflag, errors;
 	mode_t octal, u_mask;
@@ -241,23 +240,30 @@ static int do_chmod(char *name)
 
 		if (name != common.path) {
 			strncpy(common.path, name, PATH_MAX);
+			common.path[PATH_MAX - 1] = '\0';
 		}
 
-		/* FIXME: use realloc for common.path, check if we fit into common.path, etc. */
 		namp = common.path + strlen(common.path);
-		*namp++ = '/';
+		if ((namp - common.path) < PATH_MAX - 1) {
+			*namp++ = '/';
+		}
+		else {
+			closedir(dirp);
+			fprintf(stderr, "chmod: MAX_PATH length exceeded\n");
+			return EXIT_FAILURE;
+		}
 
 		entp = readdir(dirp);
 		while (entp != NULL) {
 			if (entp->d_name[0] != '.' || (entp->d_name[1] && (entp->d_name[1] != '.' || entp->d_name[2]))) {
-				strcpy(namp, entp->d_name); /* FIXME: strcpy */
+				strncpy(namp, entp->d_name, PATH_MAX - (namp - common.path) - 1);
+				namp[PATH_MAX - (namp - common.path)] = '\0';
 				common.errors |= do_chmod(common.path);
 			}
 
 			entp = readdir(dirp);
 		}
 		closedir(dirp);
-		*(--namp) = '\0';
 	}
 
 	return (common.errors != 0) ? EXIT_FAILURE : EXIT_SUCCESS;
@@ -294,7 +300,7 @@ static int psh_chmod(int argc, char **argv)
 	if (isdigit(*common.symbolic)) {
 		common.octal = 0;
 		for (; isdigit(*common.symbolic); common.symbolic++) {
-			common.octal = (common.octal << 3) | (*common.symbolic & 07);
+			common.octal = (common.octal << 3) | (*common.symbolic & 7);
 		}
 
 		if (*common.symbolic) {
@@ -308,15 +314,24 @@ static int psh_chmod(int argc, char **argv)
 		common.u_mask = umask(0);
 	}
 
+	common.path = calloc(1, PATH_MAX);
+	if (common.path == NULL) {
+		return EXIT_FAILURE;
+	}
+
 	while (argc-- > 0) {
 		ret = do_chmod(*argv++);
 		if (ret < 0) {
-			return EXIT_FAILURE;
+			exitCode = EXIT_FAILURE;
+			break;
 		}
 		else if (ret == EXIT_FAILURE) {
 			exitCode = EXIT_FAILURE;
+			/* no break, continue */
 		}
 	}
+
+	free(common.path);
 
 	return exitCode;
 }
