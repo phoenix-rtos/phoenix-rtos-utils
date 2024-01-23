@@ -37,8 +37,10 @@ static struct {
 	char *symbolic;
 	char *path;
 	struct stat st;
-	int rflag, errors;
-	mode_t octal, u_mask;
+	int rflag;
+	int errors;
+	mode_t octal;
+	mode_t u_mask;
 } common;
 
 
@@ -57,7 +59,10 @@ static int psh_chmod_help(void)
 
 static int parsemode(char *symbolic, mode_t *pNewmode, mode_t oldmode)
 {
-	mode_t who, mask, newmode, tmpmask;
+	mode_t who;
+	mode_t mask;
+	mode_t newmode;
+	mode_t tmpmask;
 	char action;
 
 	newmode = (oldmode & ALL_MODES);
@@ -66,24 +71,22 @@ static int parsemode(char *symbolic, mode_t *pNewmode, mode_t oldmode)
 	while (*symbolic != '\0') {
 		who = 0;
 		for (; *symbolic != '\0'; symbolic++) {
-			if (*symbolic == 'a') {
+			char c = *symbolic;
+			if (c == 'a') {
 				who |= ALL_MODES;
-				continue;
 			}
-			else if (*symbolic == 'u') {
+			else if (c == 'u') {
 				who |= USR_MODES;
-				continue;
 			}
-			else if (*symbolic == 'g') {
+			else if (c == 'g') {
 				who |= GRP_MODES;
-				continue;
 			}
-			else if (*symbolic == 'o') {
+			else if (c == 'o') {
 				who |= S_IRWXO;
-				continue;
 			}
-
-			break;
+			else {
+				break;
+			}
 		}
 
 		if ((*symbolic == '\0') || (*symbolic == ',')) {
@@ -96,79 +99,72 @@ static int parsemode(char *symbolic, mode_t *pNewmode, mode_t oldmode)
 			}
 
 			switch (*symbolic) {
-				default: return psh_chmod_help();
 				case '+': /* fall-through */
 				case '-': /* fall-through */
 				case '=': action = *symbolic++; break;
+				default: return psh_chmod_help();
 			}
 
 			mask = 0;
 
 			for (; *symbolic != '\0'; symbolic++) {
-				if (*symbolic == 'u') {
+				char c = *symbolic;
+				if (c == 'u') {
 					tmpmask = newmode & S_IRWXU;
 					mask |= tmpmask | (tmpmask << 3) | (tmpmask << 6);
-					symbolic++;
 					break;
 				}
-				else if (*symbolic == 'g') {
+				else if (c == 'g') {
 					tmpmask = newmode & S_IRWXG;
 					mask |= tmpmask | (tmpmask >> 3) | (tmpmask << 3);
-					symbolic++;
 					break;
 				}
-				else if (*symbolic == 'o') {
+				else if (c == 'o') {
 					tmpmask = newmode & S_IRWXO;
 					mask |= tmpmask | (tmpmask >> 3) | (tmpmask >> 6);
-					symbolic++;
 					break;
 				}
-				else if (*symbolic == 'r') {
+				else if (c == 'r') {
 					mask |= S_IRUSR | S_IRGRP | S_IROTH;
-					continue;
 				}
-				else if (*symbolic == 'w') {
+				else if (c == 'w') {
 					mask |= S_IWUSR | S_IWGRP | S_IWOTH;
-					continue;
 				}
-				else if (*symbolic == 'x') {
+				else if (c == 'x') {
 					mask |= EXE_MODES;
-					continue;
 				}
-				else if (*symbolic == 's') {
+				else if (c == 's') {
 					mask |= S_ISUID | S_ISGID;
-					continue;
 				}
-				else if (*symbolic == 'X') {
+				else if (c == 'X') {
 					if (S_ISDIR(oldmode) || (oldmode & EXE_MODES)) {
 						mask |= EXE_MODES;
 					}
-					continue;
 				}
-
 #ifdef S_ISVTX
-				else if (*symbolic == 't') {
+				else if (c == 't') {
 					mask |= S_ISVTX;
 					who |= S_ISVTX;
-					continue;
 				}
 #endif
-
-				break;
+				else {
+					break;
+				}
 			}
 
 			switch (action) {
 				case '=':
-					if (who) {
+					if (who != (mode_t)0) {
 						newmode &= ~who;
+						newmode |= who & mask;
 					}
 					else {
-						newmode = 0;
+						newmode = mask & (~common.u_mask);
 					}
-					/* fall-through */
+					break;
 
 				case '+':
-					if (who) {
+					if (who != (mode_t)0) {
 						newmode |= who & mask;
 					}
 					else {
@@ -177,12 +173,15 @@ static int parsemode(char *symbolic, mode_t *pNewmode, mode_t oldmode)
 					break;
 
 				case '-':
-					if (who) {
+					if (who != (mode_t)0) {
 						newmode &= ~(who & mask);
 					}
 					else {
 						newmode &= ~mask | common.u_mask;
 					}
+					break;
+
+				default:
 					break;
 			}
 		}
@@ -205,7 +204,7 @@ static int do_chmod(char *name)
 	struct dirent *entp;
 	char *namp;
 
-	if (lstat(name, &common.st)) {
+	if (lstat(name, &common.st) != 0) {
 		perror(name);
 		return EXIT_FAILURE;
 	}
@@ -216,6 +215,7 @@ static int do_chmod(char *name)
 
 	if (common.symbolic != NULL) {
 		if (parsemode(common.symbolic, &mode, common.st.st_mode) == EXIT_FAILURE) {
+			fprintf(stderr, "chmod: wrong MODE set\n");
 			return -1;
 		}
 	}
@@ -223,7 +223,7 @@ static int do_chmod(char *name)
 		mode = common.octal;
 	}
 
-	if (chmod(name, mode)) {
+	if (chmod(name, mode) != 0) {
 		perror(name);
 		common.errors = 1;
 	}
@@ -244,7 +244,7 @@ static int do_chmod(char *name)
 		}
 
 		namp = common.path + strlen(common.path);
-		if ((namp - common.path) < PATH_MAX - 1) {
+		if ((namp - common.path) < (PATH_MAX - 1)) {
 			*namp++ = '/';
 		}
 		else {
@@ -255,7 +255,8 @@ static int do_chmod(char *name)
 
 		entp = readdir(dirp);
 		while (entp != NULL) {
-			if (entp->d_name[0] != '.' || (entp->d_name[1] && (entp->d_name[1] != '.' || entp->d_name[2]))) {
+			/* skip . and .. */
+			if ((entp->d_name[0] != '.') || ((entp->d_name[1] != '\0') && ((entp->d_name[1] != '.') || (entp->d_name[2] != '\0')))) {
 				strncpy(namp, entp->d_name, PATH_MAX - (namp - common.path) - 1);
 				namp[PATH_MAX - (namp - common.path)] = '\0';
 				common.errors |= do_chmod(common.path);
@@ -272,7 +273,8 @@ static int do_chmod(char *name)
 
 static int psh_chmod(int argc, char **argv)
 {
-	int ret, exitCode = EXIT_SUCCESS;
+	int ret;
+	int exitCode = EXIT_SUCCESS;
 
 	argc--;
 	argv++;
@@ -297,13 +299,13 @@ static int psh_chmod(int argc, char **argv)
 		return psh_chmod_help();
 	}
 
-	if (isdigit(*common.symbolic)) {
+	if (isdigit(*common.symbolic) != 0) {
 		common.octal = 0;
 		for (; isdigit(*common.symbolic); common.symbolic++) {
 			common.octal = (common.octal << 3) | (*common.symbolic & 7);
 		}
 
-		if (*common.symbolic) {
+		if (*common.symbolic != '\0') {
 			return psh_chmod_help();
 		}
 
@@ -325,7 +327,7 @@ static int psh_chmod(int argc, char **argv)
 			exitCode = EXIT_FAILURE;
 			break;
 		}
-		else if (ret == EXIT_FAILURE) {
+		if (ret == EXIT_FAILURE) {
 			exitCode = EXIT_FAILURE;
 			/* no break, continue */
 		}
@@ -337,7 +339,7 @@ static int psh_chmod(int argc, char **argv)
 }
 
 
-void __attribute__((constructor)) chmod_registerapp(void)
+static void __attribute__((constructor)) chmod_registerapp(void)
 {
 	static psh_appentry_t app = { .name = "chmod", .run = psh_chmod, .info = psh_chmod_info };
 	psh_registerapp(&app);
