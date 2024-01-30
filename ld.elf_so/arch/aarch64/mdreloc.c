@@ -58,7 +58,7 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
+#include "include/NetBSD/cdefs.h"
 #ifndef lint
 __RCSID("$NetBSD: mdreloc.c,v 1.19 2024/07/22 23:10:35 riastradh Exp $");
 #endif /* not lint */

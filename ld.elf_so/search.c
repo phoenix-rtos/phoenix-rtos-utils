@@ -36,7 +36,7 @@
  * John Polstra <jdp@polstra.com>.
  */
 
-#include <sys/cdefs.h>
+#include "include/NetBSD/cdefs.h"
 #ifndef lint
 __RCSID("$NetBSD: search.c,v 1.27 2020/04/22 23:54:32 joerg Exp $");
 #endif /* not lint */

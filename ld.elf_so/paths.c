@@ -28,7 +28,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
+#include "include/NetBSD/cdefs.h"
 #ifndef lint
 __RCSID("$NetBSD: paths.c,v 1.42 2016/01/24 01:56:04 christos Exp $");
 #endif /* not lint */
