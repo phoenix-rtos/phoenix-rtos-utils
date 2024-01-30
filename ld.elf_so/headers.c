@@ -38,7 +38,7 @@
  * John Polstra <jdp@polstra.com>.
  */
 
-#include <sys/cdefs.h>
+#include "include/NetBSD/cdefs.h"
 #ifndef lint
 __RCSID("$NetBSD: headers.c,v 1.72 2024/08/03 21:59:57 riastradh Exp $");
 #endif /* not lint */
@@ -53,7 +53,7 @@ __RCSID("$NetBSD: headers.c,v 1.72 2024/08/03 21:59:57 riastradh Exp $");
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/mman.h>
-#include <sys/bitops.h>
+#include "include/NetBSD/bitops.h"
 #include <dirent.h>
 
 #include "debug.h"

@@ -41,7 +41,7 @@
  *	https://refspecs.linuxfoundation.org/ELF/ppc64/PPC-elf64abi-1.9.pdf
  */
 
-#include <sys/cdefs.h>
+#include "include/NetBSD/cdefs.h"
 #ifndef lint
 __RCSID("$NetBSD: ppc_reloc.c,v 1.65 2024/08/03 21:59:58 riastradh Exp $");
 #endif /* not lint */

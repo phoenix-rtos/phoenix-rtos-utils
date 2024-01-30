@@ -73,11 +73,19 @@
 #define __has_extension		__has_feature /* Compat with pre-3.0 Clang */
 #endif
 
+#ifdef phoenix
+
+#include "cdefs_elf.h"
+
+#else
+
 #include <machine/cdefs.h>
 #ifdef __ELF__
 #include <sys/cdefs_elf.h>
 #else
 #include <sys/cdefs_aout.h>
+#endif
+
 #endif
 
 #ifdef __GNUC__
