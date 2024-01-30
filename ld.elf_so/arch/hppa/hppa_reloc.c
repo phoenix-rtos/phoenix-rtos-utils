@@ -46,14 +46,14 @@
  *	https://web.archive.org/web/20240722131647/http://www.parisc-linux.org/documentation/tls/hppa-tls-implementation.pdf
  */
 
-#include <sys/cdefs.h>
+#include "include/NetBSD/cdefs.h"
 #ifndef lint
 __RCSID("$NetBSD: hppa_reloc.c,v 1.53 2024/07/29 13:16:19 skrll Exp $");
 #endif /* not lint */
 
 #include <stdlib.h>
 #include <sys/types.h>
-#include <sys/queue.h>
+#include "include/NetBSD/queue.h"
 
 #include <string.h>
 

@@ -50,7 +50,15 @@
 #if HAVE_NBTOOL_CONFIG_H
 #include <nbinclude/machine/elf_machdep.h>
 #else
-#include <machine/elf_machdep.h>
+#if defined(__i386__) || defined(__x86_64__)
+#include "arch/i386/elf_machdep.h"
+#elif defined(__arm__)
+#include "arch/arm/elf_machdep.h"
+#elif defined(__riscv)
+#include "arch/riscv/elf_machdep.h"
+#elif defined(__sparc__)
+#include "arch/sparc/elf_machdep.h"
+#endif
 #endif
 
 typedef uint8_t		Elf_Byte;
@@ -848,6 +856,16 @@ typedef struct {
 #define	DF_1_STUB	0x04000000	/* Stub */
 #define	DF_1_PIE	0x08000000	/* Position Independent Executable */
 
+
+#ifdef phoenix
+
+#include <phoenix/auxv.h>
+
+typedef struct auxInfo Aux32Info;
+typedef struct auxInfo Aux64Info;
+
+#else
+
 /*
  * Auxiliary Vectors
  */
@@ -901,6 +919,8 @@ typedef struct {
 #define AT_SUN_EMUL_EXECFD 2013 /* coff file descriptor */
 	/* Executable's fully resolved name */
 #define AT_SUN_EXECNAME 2014
+
+#endif
 
 /*
  * The header for GNU-style hash sections.

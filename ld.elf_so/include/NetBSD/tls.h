@@ -32,7 +32,9 @@
 #define _SYS_TLS_H_
 
 #include <sys/cdefs.h>
+#ifndef phoenix
 #include <machine/types.h>
+#endif
 
 #if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
 

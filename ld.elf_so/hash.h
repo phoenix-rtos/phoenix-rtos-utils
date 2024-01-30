@@ -34,7 +34,7 @@
 #ifndef	RTLD_HASH_H
 #define	RTLD_HASH_H
 
-#include <sys/exec_elf.h>
+#include "include/NetBSD/exec_elf.h"
 
 Elf32_Word _rtld_sysv_hash(const char *);
 Elf32_Word _rtld_gnu_hash(const char *);

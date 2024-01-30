@@ -35,7 +35,7 @@
  * Support for printing debugging messages.
  */
 
-#include <sys/cdefs.h>
+#include "include/NetBSD/cdefs.h"
 #ifndef lint
 __RCSID("$NetBSD: debug.c,v 1.6 2004/10/22 05:39:56 skrll Exp $");
 #endif /* not lint */

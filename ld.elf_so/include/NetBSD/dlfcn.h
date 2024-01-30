@@ -32,9 +32,21 @@
 #ifndef _DLFCN_H_
 #define _DLFCN_H_
 
+#ifdef phoenix
+
+#include "cdefs.h"
+#include <sys/types.h>
+
+/* Enable needed fragments. */
+#define _NETBSD_SOURCE
+
+#else
+
 #include <sys/featuretest.h>
-#include <sys/cdefs.h>
+#include <sys/cdefs.h">
 #include <machine/ansi.h>
+
+#endif
 
 #ifdef	_BSD_SSIZE_T_
 typedef	_BSD_SSIZE_T_	ssize_t;

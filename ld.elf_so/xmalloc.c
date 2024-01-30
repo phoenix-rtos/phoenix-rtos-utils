@@ -75,7 +75,7 @@
  * This is designed for use in a virtual memory environment.
  */
 
-#include <sys/cdefs.h>
+#include "include/NetBSD/cdefs.h"
 #ifndef lint
 __RCSID("$NetBSD: xmalloc.c,v 1.12 2013/01/24 17:57:29 christos Exp $");
 #endif /* not lint */

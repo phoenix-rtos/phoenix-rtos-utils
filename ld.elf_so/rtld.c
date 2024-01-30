@@ -38,7 +38,7 @@
  * John Polstra <jdp@polstra.com>.
  */
 
-#include <sys/cdefs.h>
+#include "include/NetBSD/cdefs.h"
 #ifndef lint
 __RCSID("$NetBSD: rtld.c,v 1.217 2024/01/19 19:21:34 christos Exp $");
 #endif /* not lint */
@@ -59,7 +59,7 @@ __RCSID("$NetBSD: rtld.c,v 1.217 2024/01/19 19:21:34 christos Exp $");
 
 #include <ctype.h>
 
-#include <dlfcn.h>
+#include "include/NetBSD/dlfcn.h"
 
 #include "debug.h"
 #include "hash.h"
@@ -555,7 +555,7 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 #endif
 #ifdef AT_SUN_EXECNAME
 		case AT_SUN_EXECNAME:
-			execname = (const char *)(const void *)auxp->a_v;
+			execname = (const char *)(const void *)(uintptr_t)auxp->a_v;
 			break;
 #endif
 		case AT_PAGESZ:
@@ -570,8 +570,8 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 		_rtld_die();
 	}
 	assert(pAUX_pagesz != NULL);
-	_rtld_pagesz = (int)pAUX_pagesz->a_v;
-	_rtld_init((caddr_t)pAUX_base->a_v, (caddr_t)relocbase, execname);
+	_rtld_pagesz = (size_t)pAUX_pagesz->a_v;
+	_rtld_init((caddr_t)(uintptr_t)pAUX_base->a_v, (caddr_t)relocbase, execname);
 
 	__progname = _rtld_objself.path;
 	environ = env;
@@ -657,7 +657,7 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
          * already loaded.
          */
 	if (pAUX_execfd != NULL) {	/* Load the main program. */
-		int             fd = pAUX_execfd->a_v;
+		int             fd = (int)pAUX_execfd->a_v;
 		const char *obj_name = argv[0] ? argv[0] : "main program";
 		dbg(("loading main program"));
 		_rtld_objmain = _rtld_map_object(obj_name, fd, NULL);
@@ -671,13 +671,13 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 
 		dbg(("processing main program's program header"));
 		assert(pAUX_phdr != NULL);
-		phdr = (const Elf_Phdr *) pAUX_phdr->a_v;
+		phdr = (const Elf_Phdr *)(uintptr_t)pAUX_phdr->a_v;
 		assert(pAUX_phnum != NULL);
 		phnum = pAUX_phnum->a_v;
 		assert(pAUX_phent != NULL);
 		assert(pAUX_phent->a_v == sizeof(Elf_Phdr));
 		assert(pAUX_entry != NULL);
-		entry = (caddr_t) pAUX_entry->a_v;
+		entry = (caddr_t)(uintptr_t)pAUX_entry->a_v;
 		_rtld_objmain = _rtld_digest_phdr(phdr, phnum, entry);
 		_rtld_objmain->path = xstrdup(argv[0] ? argv[0] :
 		    "main program");

@@ -38,7 +38,7 @@
  * John Polstra <jdp@polstra.com>.
  */
 
-#include <sys/cdefs.h>
+#include "include/NetBSD/cdefs.h"
 #ifndef lint
 __RCSID("$NetBSD: hash.c,v 1.1 2023/07/30 09:20:14 riastradh Exp $");
 #endif /* not lint */

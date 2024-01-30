@@ -4,7 +4,7 @@
 #define	_LINK_ELF_H_
 
 #include <sys/types.h>
-#include <sys/exec_elf.h>
+#include "exec_elf.h"
 
 #define R_DEBUG_VERSION	1 /* SVR4 Protocol version */
 

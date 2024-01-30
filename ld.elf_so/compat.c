@@ -37,7 +37,7 @@
  * make either routine happy without polluting the rest of rtld.
  */
 
-#include <sys/cdefs.h>
+#include "include/NetBSD/cdefs.h"
 __RCSID("$NetBSD: compat.c,v 1.1 2018/10/17 23:36:58 joerg Exp $");
 
 #include "rtld.h"
