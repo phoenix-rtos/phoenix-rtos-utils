@@ -44,7 +44,7 @@
  *	https://web.archive.org/web/20150818210955/http://techpubs.sgi.com/library/manuals/4000/007-4658-001/pdf/007-4658-001.pdf
  */
 
-#include <sys/cdefs.h>
+#include "include/NetBSD/cdefs.h"
 #ifndef lint
 __RCSID("$NetBSD: mips_reloc.c,v 1.77 2024/08/06 20:26:45 riastradh Exp $");
 #endif /* not lint */

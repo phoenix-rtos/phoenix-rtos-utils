@@ -31,7 +31,11 @@
 #ifndef _SYS_BITOPS_H_
 #define _SYS_BITOPS_H_
 
+#ifdef phoenix
+#include <stdint.h>
+#else
 #include <sys/stdint.h>
+#endif
 
 /*
  * Find First Set functions

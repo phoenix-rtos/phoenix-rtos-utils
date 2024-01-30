@@ -28,7 +28,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
+#include "include/NetBSD/cdefs.h"
 __RCSID("$NetBSD: tls.c,v 1.22 2024/07/23 22:00:00 riastradh Exp $");
 
 /*

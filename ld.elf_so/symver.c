@@ -58,11 +58,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
+#include "include/NetBSD/cdefs.h"
 __RCSID("$NetBSD: symver.c,v 1.4 2013/05/09 15:38:14 christos Exp $");
 
 #include <sys/param.h>
-#include <sys/exec_elf.h>
+#include "include/NetBSD/exec_elf.h"
 #include <string.h>
 
 #include "debug.h"
