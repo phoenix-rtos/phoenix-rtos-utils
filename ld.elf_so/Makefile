@@ -1,195 +1,72 @@
-#	$NetBSD: Makefile,v 1.149 2024/01/19 19:21:34 christos Exp $
+#
+# Makefile for Phoenix-RTOS ld.elf_so
+#
+# Copyright 2023-2024 Phoenix Systems
+#
+
 #
 # NOTE: when changing ld.so, ensure that ldd still compiles.
 #
-NOLIBCSANITIZER=# defined
-NOSANITIZER=	# defined
-WARNS?=4
 
-LDELFSO_MACHINE_ARCH?= ${MACHINE_ARCH}
+# FIXME: temporary workaround until support on all platforms is added
+ifeq ($(TARGET_SUFF), ia32)
 
-# This needs to be before bsd.init.mk
-.if defined(BSD_MK_COMPAT_FILE)
-.include <${BSD_MK_COMPAT_FILE}>
-.endif
+LOCAL_DIR:=$(call my-dir)
 
-# We are not building this with PIE
-PIE_CFLAGS=
-PIE_LDFLAGS=
-.include <bsd.init.mk>			# for MKPIC definition
-.include <bsd.shlib.mk>			# for SHLINKINSTALLDIR definition
+NAME := ld.elf_so
+LOCAL_SRCS := debug.c expand.c hash.c headers.c load.c map_object.c paths.c reloc.c rtld.c search.c symbol.c symver.c tls.c xmalloc.c xprintf.c
+LIBS :=
 
-.if defined(LDELFSO_MACHINE_CPU) && !empty(LDELFSO_MACHINE_CPU) && \
-    exists(${.CURDIR}/arch/${LDELFSO_MACHINE_CPU})
-ARCHSUBDIR=	${LDELFSO_MACHINE_CPU}
-.else
-ARCHSUBDIR=	${MACHINE_CPU}
-.endif
-M=		${.CURDIR}/arch/${ARCHSUBDIR}
+LOCAL_INSTALL_PATH := /usr/libexec
 
-.if ((${MACHINE_CPU} == "aarch64") ||					\
-     (${LDELFSO_MACHINE_ARCH} == "alpha") ||				\
-     (${MACHINE_CPU} == "arm") ||					\
-     (${LDELFSO_MACHINE_ARCH} == "coldfire") ||				\
-     (${LDELFSO_MACHINE_ARCH} == "hppa") ||				\
-     (${LDELFSO_MACHINE_ARCH} == "i386") ||				\
-     (${LDELFSO_MACHINE_ARCH} == "m68k") ||				\
-     (${MACHINE_CPU} == "mips") ||					\
-     (${MACHINE_CPU} == "or1k") ||					\
-     (${MACHINE_CPU} == "powerpc") ||					\
-     (${MACHINE_CPU} == "riscv") ||					\
-     (${MACHINE_CPU} == "sh3") ||					\
-     (${LDELFSO_MACHINE_ARCH} == "sparc") ||				\
-     (${LDELFSO_MACHINE_ARCH} == "sparc64") ||				\
-     (${LDELFSO_MACHINE_ARCH} == "x86_64") ||				\
-     (${LDELFSO_MACHINE_ARCH} == "vax")) &&				\
-    ${MKPIC} != "no"
+LOCAL_CFLAGS += -D_PATH_RTLD=\"$(LOCAL_INSTALL_PATH)/$(NAME)\"
+LOCAL_CFLAGS += -DRTLD_LOADER
+LOCAL_CFLAGS += -D_RTLD_SOURCE
+LOCAL_CFLAGS += -DHAVE_INITFINI_ARRAY
+LOCAL_CFLAGS += -DGNU_RELRO
+LOCAL_CFLAGS += -DRTLD_DEFAULT_LIBRARY_PATH=\"$(DEFAULT_INSTALL_PATH_SO)\"
 
-LDFLAGS+=	${${ACTIVE_CC} == "clang":? -Wl,-Bsymbolic : -symbolic} \
-		-shared -nostartfiles -nodefaultlibs
-LDFLAGS+=	-Wl,-static
-LDFLAGS+=	-Wl,--warn-shared-textrel
-LDFLAGS+=	-Wl,--no-undefined
-LDFLAGS+=	-Wl,-Map=${.TARGET}.map
+# Debug flags
+# LOCAL_CFLAGS += -DDEBUG
+# LOCAL_CFLAGS += -DRTLD_DEBUG
+# LOCAL_CFLAGS += -DRTLD_DEBUG_RELOC
 
-COPTS+=		-fvisibility=hidden
+# TODO: devise if it should be removed from here
+ifeq ($(TARGET_SUFF), ia32)
+	LOCAL_CFLAGS += -mno-3dnow -mno-mmx -mno-sse -mno-sse2 -mno-sse3
+endif
 
-# Adds SRCS, CPPFLAGS, LDFLAGS, etc.  Must go first so MD startup source
-# is first.
-.if exists($M/Makefile.inc)
-.include "$M/Makefile.inc"
-.endif
-
-# Support compat ld.elf_so.
-.if defined(MLIBDIR)
-PROG=		ld.elf_so-${MLIBDIR}
-CPPFLAGS+=	-DRTLD_ARCH_SUBDIR=\"${MLIBDIR}\"
-.	if ${MLIBDIR} == "o32"
-.	endif
-.else
-PROG=		ld.elf_so
-.endif
-
-CLIBOBJ!=	cd ${NETBSDSRCDIR}/lib/libc && ${PRINTOBJDIR}
-
-SRCS+=		compat.c
-SRCS+=		debug.c
-SRCS+=		diagassert.c
-SRCS+=		expand.c
-SRCS+=		hash.c
-SRCS+=		headers.c
-SRCS+=		load.c
-SRCS+=		map_object.c
-SRCS+=		paths.c
-SRCS+=		reloc.c
-SRCS+=		rtld.c
-SRCS+=		search.c
-SRCS+=		symbol.c
-SRCS+=		symver.c
-SRCS+=		tls.c
-SRCS+=		xmalloc.c
-SRCS+=		xprintf.c
-
-.if ${USE_FORT} == "yes"
-.PATH.c: ${NETBSDSRCDIR}/lib/libc/misc
-SRCS+=		stack_protector.c
-.endif
-
-.PATH.c: ${NETBSDSRCDIR}/lib/libc/stdlib
-SRCS+=		exit.c
-
-errlist_concat.h: ${NETBSDSRCDIR}/lib/libc/gen/errlist.awk ${NETBSDSRCDIR}/sys/sys/errno.h
-	${TOOL_AWK} -v concat=1 -f ${.ALLSRC} > ${.TARGET}.tmp && \
-	mv -f ${.TARGET}.tmp ${.TARGET}
-
-xprintf.c: errlist_concat.h
-
-CLEANFILES+=	errlist_concat.h ${PROG}.map
-
-BINDIR=		${SHLINKINSTALLDIR}
-
-CPPFLAGS.tls.c+=	-std=gnu11
-CPPFLAGS+=	-DLIBDIR=\"${LIBDIR}\" -D_PATH_RTLD=\"${BINDIR}/${PROG}\"
-CPPFLAGS+=	-I${.CURDIR} -I. -D_KERNTYPES
-CPPFLAGS+=	-DRTLD_LOADER -D_LIBC_INTERNAL
-CPPFLAGS+=	-DGNU_RELRO
-CPPFLAGS+=	-D_RTLD_SOURCE
-CPPFLAGS+=	-DHAVE_INITFINI_ARRAY
-#CPPFLAGS+=	-DDEBUG
-#CPPFLAGS+=	-DRTLD_DEBUG
-#CPPFLAGS+=	-DRTLD_DEBUG_RELOC
-.if !empty(LDELFSO_MACHINE_ARCH:Mearm*)
-CPPFLAGS+=	-I${NETBSDSRCDIR}/lib/libexecinfo
-.endif
-#DBG=		-g
-COPTS+=		-O3
-
-.if ${MACHINE_CPU} != "m68k" && ${MACHINE_CPU} != "sh3" && ${MACHINE_ARCH} != "vax"
-COPTS+=		-fomit-frame-pointer
-.endif
-
-.if ${LDELFSO_MACHINE_ARCH} == "i386" || ${LDELFSO_MACHINE_ARCH} == "x86_64"
-COPTS+=		-mno-3dnow -mno-mmx -mno-sse -mno-sse2 -mno-sse3
-.endif
-
-
-.if ${SHLIBDIR} != ${LIBDIR}
-CPPFLAGS+=	-DRTLD_DEFAULT_LIBRARY_PATH=\"${SHLIBDIR}:${LIBDIR}\"
-.endif
+LOCAL_CFLAGS += -fvisibility=hidden -fomit-frame-pointer
 
 # rtld.c and symbol.c use alloca, so disable SSP warnings.
-COPTS.rtld.c+=	-Wno-stack-protector
-COPTS.symbol.c+=-Wno-stack-protector
+# FIXME add support for file specific CFLAGS, now it works as stack-protector is not used by default.
+CFLAGS.$(LOCAL_DIR)rtld.c   += -Wno-stack-protector
+CFLAGS.$(LOCAL_DIR)symbol.c += -Wno-stack-protector
 
-LDADD+=		-Wl,--version-script=${.CURDIR}/symbols.map
-LDADD+=		-L${CLIBOBJ} -L${DESTDIR}${LIBDIR}
-.if ${MKPICLIB} != "no"
-LDADD+=		-lc_pic
-.if ${MKPICINSTALL} != "no"
-DPADD+=		${LIBC_PIC}
-.endif
-DPADD+=		${CLIBOBJ}/libc_pic.a
-.else
-LDADD+=		-lc
-DPADD+=		${CLIBOBJ}/libc.a
-.endif
+LOCAL_LDFLAGS += -symbolic -shared
+LOCAL_LDFLAGS += -nostartfiles -nodefaultlibs
+LOCAL_LDFLAGS += $(LDFLAGS_PREFIX)-static
+LOCAL_LDFLAGS += -z text
+LOCAL_LDFLAGS += $(LDFLAGS_PREFIX)--no-undefined
+LOCAL_LDFLAGS += $(LDFLAGS_PREFIX)--version-script=$(LOCAL_DIR)/symbols.map
 
-.if ${MACHINE_CPU} == "hppa" || ${MACHINE_CPU} == "sh3"
-# for $$divU, $$remU etc. (millicode)
-LDADD+=		-lgcc
-DPADD+=		${LIBGCC}
-.endif
+LOCAL_LDLIBS := -lphoenix -lgcc
 
-STRIPFLAG=
+ifeq ($(TARGET_SUFF),ia32)
+	include $(addprefix $(LOCAL_DIR), arch/i386/Makefile.inc)
+else ifeq ($(TARGET_SUFF),armv7a)
+	include $(addprefix $(LOCAL_DIR), arch/arm/Makefile.inc)
+else ifeq ($(TARGET_SUFF),riscv64)
+	include $(addprefix $(LOCAL_DIR), arch/riscv64/Makefile.inc)
+else
+	$(error Unsupported architecture $(TARGET_SUFF))
+endif
 
-.PATH: $M
+LANGUAGE_EXTENSIONS_OLD := $(LANGUAGE_EXTENSIONS)
+LANGUAGE_EXTENSIONS += %.S
 
+include $(binary.mk)
 
-${PROG}: ${OBJS} ${DPADD}
-	${_MKMSG_LINK} ${PROG}
-	${CC} ${LDFLAGS} -o ${PROG} ${OBJS} ${LDADD}
-.if ${MKDEBUG} != "no"
-	(  ${OBJCOPY} --only-keep-debug ${.TARGET} ${.TARGET}.debug \
-	   && ${OBJCOPY} --strip-debug -p -R .gnu_debuglink \
-	   --add-gnu-debuglink=${.TARGET}.debug ${.TARGET} \
-	) || (rm -f ${.TARGET}.debug; false)
+LANGUAGE_EXTENSIONS := $(LANGUAGE_EXTENSIONS_OLD)
 
-_PROGDEBUG.${PROG} := ${PROG}.debug
-.endif
-
-
-.if ${SHLINKINSTALLDIR} != "/usr/libexec"
-SYMLINKS+=	${SHLINKINSTALLDIR}/${PROG} /usr/libexec/${PROG}
-.if ${MKDEBUG} != "no"
-SYMLINKS+=	${DEBUGDIR}${BINDIR}/${PROG}.debug \
-		${DEBUGDIR}/usr${BINDIR}/${PROG}.debug
-.endif
-.endif
-
-.include <bsd.prog.mk>
-.else
-
-MAN=		ld.elf_so.1
-
-.include <bsd.man.mk>
-.endif
+endif
