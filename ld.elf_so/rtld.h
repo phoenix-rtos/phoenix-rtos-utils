@@ -34,17 +34,17 @@
 #ifndef RTLD_H
 #define RTLD_H
 
-#include <dlfcn.h>
+#include "NetBSD/dlfcn.h"
 #include <signal.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <sys/param.h>
 #include <sys/types.h>
-#include <sys/queue.h>
-#include <sys/exec_elf.h>
+#include "NetBSD/queue.h"
+#include "NetBSD/exec_elf.h"
 #include <sys/tls.h>
 #include "rtldenv.h"
-#include "link.h"
+#include "NetBSD/link_elf.h"
 
 #if defined(_RTLD_SOURCE)
 

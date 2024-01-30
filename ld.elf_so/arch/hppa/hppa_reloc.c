@@ -29,14 +29,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
+#include "NetBSD/cdefs.h"
 #ifndef lint
 __RCSID("$NetBSD: hppa_reloc.c,v 1.50 2023/06/04 01:24:57 joerg Exp $");
 #endif /* not lint */
 
 #include <stdlib.h>
 #include <sys/types.h>
-#include <sys/queue.h>
+#include "NetBSD/queue.h"
 
 #include <string.h>
 
