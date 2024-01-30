@@ -38,7 +38,7 @@
  * John Polstra <jdp@polstra.com>.
  */
 
-#include <sys/cdefs.h>
+#include "NetBSD/cdefs.h"
 #ifndef lint
 __RCSID("$NetBSD: rtld.c,v 1.216 2023/10/03 09:48:18 martin Exp $");
 #endif /* not lint */
@@ -59,7 +59,7 @@ __RCSID("$NetBSD: rtld.c,v 1.216 2023/10/03 09:48:18 martin Exp $");
 
 #include <ctype.h>
 
-#include <dlfcn.h>
+#include "NetBSD/dlfcn.h"
 
 #include "debug.h"
 #include "hash.h"

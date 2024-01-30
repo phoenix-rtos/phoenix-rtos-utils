@@ -60,7 +60,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
+#include "NetBSD/cdefs.h"
 #ifndef lint
 __RCSID("$NetBSD: alpha_reloc.c,v 1.44 2023/06/04 01:24:57 joerg Exp $");
 #endif /* not lint */

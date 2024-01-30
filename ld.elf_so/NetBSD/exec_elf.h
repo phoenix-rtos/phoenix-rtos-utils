@@ -50,7 +50,9 @@
 #if HAVE_NBTOOL_CONFIG_H
 #include <nbinclude/machine/elf_machdep.h>
 #else
-#include <machine/elf_machdep.h>
+#if defined(__i386__) || defined(__x86_64__)
+#include "arch/i386/elf_machdep.h"
+#endif
 #endif
 
 typedef uint8_t		Elf_Byte;
@@ -861,6 +863,12 @@ typedef struct {
 	Elf64_Xword	a_v;		/* 64-bit id */
 } Aux64Info;
 
+#ifdef phoenix
+
+#include <phoenix/auxv.h>
+
+#else
+
 /* a_type */
 #define AT_NULL		0	/* Marks end of array */
 #define AT_IGNORE	1	/* No meaning, a_un is undefined */
@@ -901,6 +909,8 @@ typedef struct {
 #define AT_SUN_EMUL_EXECFD 2013 /* coff file descriptor */
 	/* Executable's fully resolved name */
 #define AT_SUN_EXECNAME 2014
+
+#endif
 
 /*
  * The header for GNU-style hash sections.
