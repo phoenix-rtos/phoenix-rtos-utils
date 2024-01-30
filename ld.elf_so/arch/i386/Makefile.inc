@@ -1,11 +1,17 @@
-#	$NetBSD: Makefile.inc,v 1.15 2018/04/03 21:10:27 joerg Exp $
+#
+# Makefile for Phoenix-RTOS ld.elf_so/arch
+#
+# Copyright 2024 Phoenix Systems
+#
 
-SRCS+=		rtld_start.S mdreloc.c
+LDSO_ARCH_DIR := $(call my-dir)
+LDSO_ARCH_PREFIX := $(LDSO_ARCH_DIR:$(LOCAL_DIR)%=%)
 
-# XXX Should not be in CPPFLAGS!
-CPPFLAGS+=	-fpic
+LOCAL_SRCS += $(addprefix $(LDSO_ARCH_PREFIX), rtld_start.S mdreloc.c)
 
-CPPFLAGS+=	-DELFSIZE=32
-CPPFLAGS+=	-DRTLD_COMMON_CALL_IFUNC_REL
+LOCAL_CFLAGS += $(TARGET_PIC_FLAG)
+LOCAL_CFLAGS += -DELFSIZE=32
+LOCAL_CFLAGS += -DRTLD_COMMON_CALL_IFUNC_REL
 
-LDFLAGS+=	-Wl,-e,.rtld_start
+LOCAL_LDFLAGS += $(LDFLAGS_PREFIX)-e,.rtld_start
+LOCAL_LDFLAGS += $(TARGET_PIC_FLAG)
