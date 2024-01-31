@@ -4,13 +4,6 @@
 # Copyright 2023-2024 Phoenix Systems
 #
 
-#
-# NOTE: when changing ld.so, ensure that ldd still compiles.
-#
-
-# FIXME: temporary workaround until support on all platforms is added
-ifeq ($(TARGET_SUFF), ia32)
-
 LOCAL_DIR:=$(call my-dir)
 
 NAME := ld.elf_so
@@ -54,12 +47,6 @@ LOCAL_LDLIBS := -lphoenix -lgcc
 
 ifeq ($(TARGET_SUFF),ia32)
 	include $(addprefix $(LOCAL_DIR), arch/i386/Makefile.inc)
-else ifeq ($(TARGET_SUFF),armv7a)
-	include $(addprefix $(LOCAL_DIR), arch/arm/Makefile.inc)
-else ifeq ($(TARGET_SUFF),riscv64)
-	include $(addprefix $(LOCAL_DIR), arch/riscv64/Makefile.inc)
-else
-	$(error Unsupported architecture $(TARGET_SUFF))
 endif
 
 LANGUAGE_EXTENSIONS_OLD := $(LANGUAGE_EXTENSIONS)
@@ -68,5 +55,3 @@ LANGUAGE_EXTENSIONS += %.S
 include $(binary.mk)
 
 LANGUAGE_EXTENSIONS := $(LANGUAGE_EXTENSIONS_OLD)
-
-endif

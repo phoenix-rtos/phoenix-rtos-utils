@@ -29,17 +29,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <machine/asm.h>
-
 	.text
 	.align	4
 	.globl	.rtld_start
 	.hidden	.rtld_start
 	.type	.rtld_start,@function
 .rtld_start:
-	subl	$8,%esp			# make room of obj_main and exit proc
-	pushl	%ebx			# save ps_strings
-
+	mov     %esp,%ebp
 	call	1f
 1:
 	popl	%edx
@@ -51,16 +47,12 @@
 	pushl	%ecx			# &_DYNAMIC
 	call	_rtld_relocate_nonplt_self
 
-	leal	12(%esp),%eax		# &cleanup
 	pushl	%ebx			# relocbase
-	pushl	%eax			# sp
+	pushl	%ebp			# sp
 	call	_rtld			# _rtld(sp, relocbase)
 
 	addl	$16,%esp		# pop args
 
-	popl	%ebx			# %ebx = ps_strings
-	popl	%edx			# %edx = cleanup
-	popl	%ecx			# %ecx = obj_main
 	jmp	*%eax
 
 	.align	4
