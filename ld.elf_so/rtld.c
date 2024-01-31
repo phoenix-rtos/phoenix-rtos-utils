@@ -442,17 +442,14 @@ _dlauxinfo(void)
 
 /*
  * Main entry point for dynamic linking.  The argument is the stack
- * pointer.  The stack is expected to be laid out as described in the
- * SVR4 ABI specification, Intel 386 Processor Supplement.  Specifically,
- * the stack pointer points to a word containing ARGC.  Following that
- * in the stack is a null-terminated sequence of pointers to argument
- * strings.  Then comes a null-terminated sequence of pointers to
- * environment strings.  Finally, there is a sequence of "auxiliary
- * vector" entries.
+ * pointer.  The stack is expected to be laid out as follows:
+ * stack pointer points to a word containing ARGC.  Following that
+ * in the stack is a pointer[argvp] to a null-terminated sequence of pointers to argument
+ * strings[argv].  Then comes a pointer[envp] to a null-terminated sequence of pointers to
+ * environment strings[env]. After env there is a sequence of "auxiliary vector" entries.
  *
  * This function returns the entry point for the main program, the dynamic
- * linker's exit procedure in sp[0], and a pointer to the main object in
- * sp[1].
+ * linker's exit procedure in sp[0].
  */
 Elf_Addr
 _rtld(Elf_Addr *sp, Elf_Addr relocbase)
@@ -469,7 +466,6 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	const char     *ld_bind_now, *ld_preload, *ld_library_path;
 	const char    **argv;
 	const char     *execname;
-	long		argc;
 	const char **real___progname;
 	const Obj_Entry **real___mainprog_obj;
 	char ***real_environ;
@@ -491,25 +487,27 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	/* first Elf_Word reserved to address of exit routine */
 #if defined(RTLD_DEBUG)
 	debugFlag = 1;
-	dbg(("sp = %p, argc = %ld, argv = %p <%s> relocbase %p", sp,
-	    (long)sp[2], &sp[3], (char *) sp[3], (void *)relocbase));
+	dbg(("sp = %p, argc = %ld, argv = %p <%s>, env = %p <%s>, relocbase %p", sp,
+	    (long)sp[1], (char **) sp[2], *(char **) sp[2], (char **) sp[3], *(char **) sp[3], (void *)relocbase));
 #ifndef __x86_64__
 	dbg(("got is at %p, dynamic is at %p", _GLOBAL_OFFSET_TABLE_,
 	    &_DYNAMIC));
 #endif
 #endif
 
-	sp += 2;		/* skip over return argument space */
-	argv = (const char **) &sp[1];
-	argc = *(long *)sp;
-	sp += 2 + argc;		/* Skip over argc, arguments, and NULL
-				 * terminator */
-	env = (char **) sp;
-	while (*sp++ != 0) {	/* Skip over environment, and NULL terminator */
+	argv = (const char **)sp[2];
+	env = (char **)sp[3];
+	assert(argv != NULL);
+	assert(env != NULL);
+	sp = (void *)env;
+	/* Skip over environment */
+	while (*sp != 0) {
+		sp++;
 #if defined(RTLD_DEBUG)
-		dbg(("env[%d] = %p %s", i++, (void *)sp[-1], (char *)sp[-1]));
+			dbg(("env[%d] = %p %s", i++, (void *)sp[-1], (char *)sp[-1]));
 #endif
 	}
+	sp++; /* Skip over NULL terminator */
 	auxinfo = (AuxInfo *) sp;
 
 	pAUX_base = pAUX_entry = pAUX_execfd = NULL;
@@ -528,9 +526,11 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 		case AT_ENTRY:
 			pAUX_entry = auxp;
 			break;
+#ifdef AT_EXECFD
 		case AT_EXECFD:
 			pAUX_execfd = auxp;
 			break;
+#endif
 		case AT_PHDR:
 			pAUX_phdr = auxp;
 			break;
