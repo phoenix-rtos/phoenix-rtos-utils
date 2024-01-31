@@ -45,6 +45,7 @@ __RCSID("$NetBSD: map_object.c,v 1.69 2024/08/03 21:59:57 riastradh Exp $");
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/mman.h>
+#include <sys/minmax.h>
 
 #include "debug.h"
 #include "rtld.h"
@@ -212,7 +213,7 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 				goto error;
 			}
 			if ((segs[nsegs]->p_flags & PF_X) == PF_X) {
-				text_end = MAX(text_end,
+				text_end = max(text_end,
 				    round_up(segs[nsegs]->p_vaddr +
 				    segs[nsegs]->p_memsz));
 			}
