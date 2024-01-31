@@ -362,8 +362,6 @@ __dso_public int dl_iterate_phdr(int (*)(struct dl_phdr_info *, size_t, void *),
 __dso_public void *_dlauxinfo(void) __pure;
 __dso_public void __dl_cxa_refcount(void *addr, ssize_t delta);
 
-__dso_public pid_t __locked_fork(int *);
-
 #if defined(__ARM_EABI__) && !defined(__ARM_DWARF_EH__)
 /*
  * This is used by libgcc to find the start and length of the exception table
