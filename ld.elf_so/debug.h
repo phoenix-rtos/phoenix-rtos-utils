@@ -43,7 +43,7 @@
 
 extern void debug_printf __P((const char *, ...))
     __attribute__((__format__(__printf__, 1, 2)));
-extern int debug;
+extern int debugFlag;
 
 # define dbg(a)		debug_printf a
 #else

@@ -82,6 +82,7 @@ __RCSID("$NetBSD: xmalloc.c,v 1.12 2013/01/24 17:57:29 christos Exp $");
 
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <errno.h>
 
@@ -171,6 +172,7 @@ botch(const char *s)
 #endif
 
 #define TRACE()	xprintf("TRACE %s:%d\n", __FILE__, __LINE__)
+
 
 static void *
 imalloc(size_t nbytes)
@@ -343,8 +345,8 @@ irealloc(void *cp, size_t nbytes)
 	if (op->ov_magic != MAGIC) {
 		static const char *err_str =
 		    "memory corruption or double free in realloc\n";
-		extern char *__progname;
-	        write(STDERR_FILENO, __progname, strlen(__progname));
+		extern char *argv_progname;
+	        write(STDERR_FILENO, argv_progname, strlen(argv_progname));
 		write(STDERR_FILENO, err_str, strlen(err_str));
 		abort();
 	}

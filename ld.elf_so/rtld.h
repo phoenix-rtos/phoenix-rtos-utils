@@ -337,7 +337,6 @@ extern Obj_Entry *_rtld_objlist;
 extern Obj_Entry **_rtld_objtail;
 extern u_int _rtld_objcount;
 extern u_int _rtld_objloads;
-extern const uintptr_t _rtld_compat_obj[];
 extern Obj_Entry *_rtld_objmain;
 extern Obj_Entry _rtld_objself;
 extern Search_Path *_rtld_paths;
@@ -504,7 +503,7 @@ Obj_Entry *_rtld_obj_new(void);
 
 #ifdef RTLD_LOADER
 /* function descriptors */
-#ifdef __HAVE_FUNCTION_DESCRIPTORS
+#ifdef __HAVE_FUNCTION_DESCRIPTORS /* NOTE: only for HPPA architecture */
 Elf_Addr _rtld_function_descriptor_alloc(const Obj_Entry *,
     const Elf_Sym *, Elf_Addr);
 const void *_rtld_function_descriptor_function(const void *);
