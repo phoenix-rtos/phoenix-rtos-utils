@@ -28,6 +28,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* FIXME: Support TLS in Phoenix */
+#if 0
+
 #include "NetBSD/cdefs.h"
 __RCSID("$NetBSD: tls.c,v 1.19 2023/06/07 13:50:04 joerg Exp $");
 
@@ -324,3 +327,5 @@ __tls_get_addr(void *arg_)
 #endif
 
 #endif /* __HAVE_TLS_VARIANT_I || __HAVE_TLS_VARIANT_II */
+
+#endif
