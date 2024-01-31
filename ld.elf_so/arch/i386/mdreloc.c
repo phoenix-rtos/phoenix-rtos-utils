@@ -8,8 +8,10 @@ __RCSID("$NetBSD: mdreloc.c,v 1.43 2023/06/04 20:02:29 martin Exp $");
 #include <sys/types.h>
 #include <sys/ucontext.h>
 
-#include "debug.h"
-#include "rtld.h"
+#include <limits.h>
+
+#include "../../debug.h"
+#include "../../rtld.h"
 
 void _rtld_bind_start(void);
 void _rtld_relocate_nonplt_self(Elf_Dyn *, Elf_Addr);

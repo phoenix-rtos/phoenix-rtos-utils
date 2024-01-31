@@ -172,6 +172,12 @@ botch(const char *s)
 
 #define TRACE()	xprintf("TRACE %s:%d\n", __FILE__, __LINE__)
 
+/* FIXME: remove once ffs is added to libphoenix. Use definition from NetBSD/bitops.h. */
+#ifndef ffs
+#include "NetBSD/bitops.h"
+#define ffs ffs32
+#endif
+
 static void *
 imalloc(size_t nbytes)
 {
@@ -343,8 +349,8 @@ irealloc(void *cp, size_t nbytes)
 	if (op->ov_magic != MAGIC) {
 		static const char *err_str =
 		    "memory corruption or double free in realloc\n";
-		extern char *__progname;
-	        write(STDERR_FILENO, __progname, strlen(__progname));
+		extern char *argv_progname;
+	        write(STDERR_FILENO, argv_progname, strlen(argv_progname));
 		write(STDERR_FILENO, err_str, strlen(err_str));
 		abort();
 	}
