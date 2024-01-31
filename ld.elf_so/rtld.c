@@ -43,13 +43,14 @@
 __RCSID("$NetBSD: rtld.c,v 1.217 2024/01/19 19:21:34 christos Exp $");
 #endif /* not lint */
 
+#include <sys/threads.h>
+#include <sys/types.h>
 #include <sys/param.h>
-#include <sys/atomic.h>
+#include <stdint.h>
 #include <sys/mman.h>
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <lwp.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,11 +68,10 @@ __RCSID("$NetBSD: rtld.c,v 1.217 2024/01/19 19:21:34 christos Exp $");
 
 
 /*
- * Hidden function from common/lib/libc/atomic - nop on machines
- * with enough atomic ops. Need to explicitly call it early.
- * libc has the same symbol and will initialize itself, but not our copy.
+ * Libphoenix initialization function. Need to explicitly call it early.
+ * Dynamic libc has the same symbol and will initialize itself, but not our copy (static).
  */
-void __libc_atomic_init(void);
+extern void _libc_init(void);
 
 /*
  * Function declarations.
@@ -116,7 +116,8 @@ static void    *auxinfo;
 char           *argv_progname;
 char          **environ;
 
-static volatile bool _rtld_mutex_may_recurse;
+/* FIXME: convert to RWMutex if implemented in libphoenix */
+static handle_t _rtld_mutex;
 
 #if defined(RTLD_DEBUG)
 #ifndef __sh__
@@ -351,6 +352,7 @@ static void
 _rtld_init(caddr_t mapbase, caddr_t relocbase, const char *execname)
 {
 	const Elf_Ehdr *ehdr;
+	__debugused int res;
 
 	/* Conjure up an Obj_Entry structure for the dynamic linker. */
 	_rtld_objself.path = __UNCONST(_rtld_path);
@@ -408,7 +410,10 @@ _rtld_init(caddr_t mapbase, caddr_t relocbase, const char *execname)
 	_rtld_objself.phdr = (Elf_Phdr *)((char *)mapbase + ehdr->e_phoff);
 	_rtld_objself.phsize = ehdr->e_phnum * sizeof(_rtld_objself.phdr[0]);
 
-	__libc_atomic_init();
+	_libc_init();
+
+	res = mutexCreate(&_rtld_mutex);
+	assert(res == 0);
 }
 
 /*
@@ -1545,20 +1550,6 @@ __dl_cxa_refcount(void *addr, ssize_t delta)
 	_rtld_exclusive_exit(&mask);
 }
 
-__dso_public pid_t
-__locked_fork(int *my_errno)
-{
-	pid_t result;
-
-	_rtld_shared_enter();
-	result = __fork();
-	if (result == -1)
-		*my_errno = errno;
-	_rtld_shared_exit();
-
-	return result;
-}
-
 /*
  * Error reporting function.  Use it like printf.  If formats the message
  * into a buffer, and sets things up so that the next call to dlerror()
@@ -1671,126 +1662,34 @@ _rtld_objlist_remove(Objlist *list, Obj_Entry *obj)
 	}
 }
 
-#define	RTLD_EXCLUSIVE_MASK	0x80000000U
-static volatile unsigned int _rtld_mutex;
-static volatile unsigned int _rtld_waiter_exclusive;
-static volatile unsigned int _rtld_waiter_shared;
-
 void
 _rtld_shared_enter(void)
 {
-	unsigned int cur;
-	lwpid_t waiter, self = 0;
-
-	for (;;) {
-		cur = _rtld_mutex;
-		/*
-		 * First check if we are currently not exclusively locked.
-		 */
-		if ((cur & RTLD_EXCLUSIVE_MASK) == 0) {
-			/* Yes, so increment use counter */
-			if (atomic_cas_uint(&_rtld_mutex, cur, cur + 1) != cur)
-				continue;
-			membar_acquire();
-			return;
-		}
-		/*
-		 * Someone has an exclusive lock.  Puts us on the waiter list.
-		 */
-		if (!self)
-			self = _lwp_self();
-		if (cur == (self | RTLD_EXCLUSIVE_MASK)) {
-			if (_rtld_mutex_may_recurse)
-				return;
-			_rtld_error("%s: dead lock detected", __func__);
-			_rtld_die();
-		}
-		waiter = atomic_swap_uint(&_rtld_waiter_shared, self);
-		/*
-		 * Check for race against _rtld_exclusive_exit before sleeping.
-		 */
-		membar_sync();
-		if ((_rtld_mutex & RTLD_EXCLUSIVE_MASK) ||
-		    _rtld_waiter_exclusive)
-			_lwp_park(CLOCK_REALTIME, 0, NULL, 0,
-			    __UNVOLATILE(&_rtld_mutex), NULL);
-		/* Try to remove us from the waiter list. */
-		atomic_cas_uint(&_rtld_waiter_shared, self, 0);
-		if (waiter)
-			_lwp_unpark(waiter, __UNVOLATILE(&_rtld_mutex));
-	}
+	mutexLock(_rtld_mutex);
 }
 
 void
 _rtld_shared_exit(void)
 {
-	lwpid_t waiter;
-
-	/*
-	 * Shared lock taken after an exclusive lock.
-	 * Just assume this is a partial recursion.
-	 */
-	if (_rtld_mutex & RTLD_EXCLUSIVE_MASK)
-		return;
-
-	/*
-	 * Wakeup LWPs waiting for an exclusive lock if this is the last
-	 * LWP on the shared lock.
-	 */
-	membar_release();
-	if (atomic_dec_uint_nv(&_rtld_mutex))
-		return;
-	membar_sync();
-	if ((waiter = _rtld_waiter_exclusive) != 0)
-		_lwp_unpark(waiter, __UNVOLATILE(&_rtld_mutex));
+	mutexUnlock(_rtld_mutex);
 }
 
 void
 _rtld_exclusive_enter(sigset_t *mask)
 {
-	lwpid_t waiter, self = _lwp_self();
-	unsigned int locked_value = (unsigned int)self | RTLD_EXCLUSIVE_MASK;
-	unsigned int cur;
 	sigset_t blockmask;
 
 	sigfillset(&blockmask);
-	sigdelset(&blockmask, SIGTRAP);	/* Allow the debugger */
+	sigdelset(&blockmask, SIGTRAP); /* Allow the debugger */
 	sigprocmask(SIG_BLOCK, &blockmask, mask);
 
-	for (;;) {
-		if (atomic_cas_uint(&_rtld_mutex, 0, locked_value) == 0) {
-			membar_acquire();
-			break;
-		}
-		waiter = atomic_swap_uint(&_rtld_waiter_exclusive, self);
-		membar_sync();
-		cur = _rtld_mutex;
-		if (cur == locked_value) {
-			_rtld_error("%s: dead lock detected", __func__);
-			_rtld_die();
-		}
-		if (cur)
-			_lwp_park(CLOCK_REALTIME, 0, NULL, 0,
-			    __UNVOLATILE(&_rtld_mutex), NULL);
-		atomic_cas_uint(&_rtld_waiter_exclusive, self, 0);
-		if (waiter)
-			_lwp_unpark(waiter, __UNVOLATILE(&_rtld_mutex));
-	}
+	mutexLock(_rtld_mutex);
 }
 
 void
 _rtld_exclusive_exit(sigset_t *mask)
 {
-	lwpid_t waiter;
-
-	membar_release();
-	_rtld_mutex = 0;
-	membar_sync();
-	if ((waiter = _rtld_waiter_exclusive) != 0)
-		_lwp_unpark(waiter, __UNVOLATILE(&_rtld_mutex));
-
-	if ((waiter = _rtld_waiter_shared) != 0)
-		_lwp_unpark(waiter, __UNVOLATILE(&_rtld_mutex));
+	mutexUnlock(_rtld_mutex);
 
 	sigprocmask(SIG_SETMASK, mask, NULL);
 }
