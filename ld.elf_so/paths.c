@@ -221,7 +221,7 @@ _rtld_process_hints(const char *execname, Search_Path **path_p, const char *fnam
 
 		sz = (ssize_t) st.st_size;
 
-		buf = mmap(0, sz, PROT_READ, MAP_SHARED|MAP_FILE, fd, 0);
+		buf = mmap(0, sz, PROT_READ, MAP_SHARED, fd, 0);
 		if (buf == MAP_FAILED) {
 			xwarn("mmap: %s", fname);
 			(void)close(fd);
