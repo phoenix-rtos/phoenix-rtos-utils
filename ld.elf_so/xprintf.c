@@ -245,18 +245,11 @@ xsnprintf(char *buf, size_t buflen, const char *fmt, ...)
 	va_end(ap);
 }
 
-#include "errlist_concat.h"
-
 const char *
 xstrerror(int error)
 {
 
-	if (error >= concat_nerr || error < 0) {
-		static char buf[128];
-		xsnprintf(buf, sizeof(buf), "Unknown error: %d", error);
-		return buf;
-	}
-	return concat_errlist + concat_offset[error];
+	return (const char*)strerror(error);
 }
 
 void

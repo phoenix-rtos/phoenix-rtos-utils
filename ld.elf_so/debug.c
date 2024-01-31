@@ -46,13 +46,13 @@ __RCSID("$NetBSD: debug.c,v 1.6 2004/10/22 05:39:56 skrll Exp $");
 #include "rtldenv.h"
 
 #ifdef DEBUG
-int debug = 0;
+int debugFlag = 0;
 
 void
 debug_printf(const char *format, ...)
 {
 
-	if (debug) {
+	if (debugFlag) {
 		va_list ap;
 
 		va_start(ap, format);
