@@ -117,7 +117,7 @@ _rtld_search_library_path(const char *name, size_t namelen,
 Obj_Entry *
 _rtld_load_library(const char *name, const Obj_Entry *refobj, int flags)
 {
-	extern char *__progname;
+	extern char *argv_progname;
 	char tmperror[512], *tmperrorp;
 	Search_Path *sp;
 	const char *pathname;
@@ -161,7 +161,7 @@ _rtld_load_library(const char *name, const Obj_Entry *refobj, int flags)
 			goto pathfound;
 
 	_rtld_error("%s: Shared object \"%s\" not found",
-	    refobj ? refobj->path : __progname, name);
+	    refobj ? refobj->path : argv_progname, name);
 	return NULL;
 
 pathfound:

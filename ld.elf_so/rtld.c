@@ -65,9 +65,6 @@ __RCSID("$NetBSD: rtld.c,v 1.217 2024/01/19 19:21:34 christos Exp $");
 #include "hash.h"
 #include "rtld.h"
 
-#if !defined(lint)
-#include "sysident.h"
-#endif
 
 /*
  * Hidden function from common/lib/libc/atomic - nop on machines
@@ -117,7 +114,7 @@ static void    *auxinfo;
 /*
  * Global declarations normally provided by crt0.
  */
-char           *__progname;
+char           *argv_progname;
 char          **environ;
 
 static volatile bool _rtld_mutex_may_recurse;
@@ -489,7 +486,7 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	/* Find the auxiliary vector on the stack. */
 	/* first Elf_Word reserved to address of exit routine */
 #if defined(RTLD_DEBUG)
-	debug = 1;
+	debugFlag = 1;
 	dbg(("sp = %p, argc = %ld, argv = %p <%s> relocbase %p", sp,
 	    (long)sp[2], &sp[3], (char *) sp[3], (void *)relocbase));
 #ifndef __x86_64__
@@ -573,7 +570,7 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	_rtld_pagesz = (size_t)pAUX_pagesz->a_v;
 	_rtld_init((caddr_t)(uintptr_t)pAUX_base->a_v, (caddr_t)relocbase, execname);
 
-	__progname = _rtld_objself.path;
+	argv_progname = _rtld_objself.path;
 	environ = env;
 
 	_rtld_trust = ((pAUX_euid ? (uid_t)pAUX_euid->a_v : geteuid()) ==
@@ -638,10 +635,10 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	if (_rtld_trust) {
 #ifdef DEBUG
 #ifdef RTLD_DEBUG
-		debug = 0;
+		debugFlag = 0;
 #endif
 		if (ld_debug != NULL && *ld_debug != '\0')
-			debug = 1;
+			debugFlag = 1;
 #endif
 		_rtld_add_paths(execname, &_rtld_paths, ld_library_path);
 	} else {
@@ -763,10 +760,10 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 #endif
 
 	/*
-	 * Set the __progname,  environ and, __mainprog_obj before
+	 * Set the argv_progname,  environ and, __mainprog_obj before
 	 * calling anything that might use them.
 	 */
-	real___progname = _rtld_objmain_sym("__progname");
+	real___progname = _rtld_objmain_sym("argv_progname");
 	if (real___progname) {
 		if (argv[0] != NULL) {
 			if ((*real___progname = strrchr(argv[0], '/')) == NULL)
@@ -805,7 +802,6 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	 */
 
 	((void **) osp)[0] = _rtld_exit;
-	((void **) osp)[1] = __UNCONST(_rtld_compat_obj);
 	return (Elf_Addr) _rtld_objmain->entry;
 }
 

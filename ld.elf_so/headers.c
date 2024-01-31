@@ -53,11 +53,16 @@ __RCSID("$NetBSD: headers.c,v 1.72 2024/08/03 21:59:57 riastradh Exp $");
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/mman.h>
+#include <sys/minmax.h>
 #include "include/NetBSD/bitops.h"
 #include <dirent.h>
 
 #include "debug.h"
 #include "rtld.h"
+
+
+#define powerof2(x) ((((x) - 1) & (x)) == 0)
+
 
 /*
  * Process a shared object's DYNAMIC section, and save the important
@@ -510,7 +515,7 @@ _rtld_digest_phdr(const Elf_Phdr *phdr, int phnum, caddr_t entry)
 				obj->mapsize = size;
 				first_seg = false;
 			} else {		/* Last load segment */
-				obj->mapsize = MAX(obj->mapsize, size);
+				obj->mapsize = max(obj->mapsize, size);
 			}
 			dbg(("headers: %s %p phsize %" PRImemsz,
 			    "PT_LOAD", (void *)(uintptr_t)vaddr,
