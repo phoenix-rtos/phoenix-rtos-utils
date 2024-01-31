@@ -6,7 +6,13 @@ __RCSID("$NetBSD: mdreloc.c,v 1.44 2024/08/03 21:59:58 riastradh Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
+
+/* FIXME: Support TLS in Phoenix */
+#if 0
+/* NOTE: This header is probably not needed to be added Phoenix.
+ *       Leave until some more consideration is given to the TLS support. */
 #include <sys/ucontext.h>
+#endif
 
 #include <limits.h>
 
@@ -151,6 +157,8 @@ _rtld_relocate_nonplt_objects(Obj_Entry *obj)
 			rdbg(("COPY (avoid in main)"));
 			break;
 
+/* FIXME: Support TLS in Phoenix */
+#if 0
 		case R_TYPE(TLS_TPOFF):
 			if (!defobj->tls_static &&
 			    _rtld_tls_offset_allocate(__UNCONST(defobj)))
@@ -190,6 +198,7 @@ _rtld_relocate_nonplt_objects(Obj_Entry *obj)
 			    obj->path, (void *)*where));
 
 			break;
+#endif
 
 		default:
 			rdbg(("sym = %lu, type = %lu, offset = %p, "
@@ -301,6 +310,8 @@ _rtld_relocate_plt_objects(const Obj_Entry *obj)
 	return err;
 }
 
+/* FIXME: Support TLS in Phoenix */
+#if 0
 /*
  * i386 specific GNU variant of __tls_get_addr using register based
  * argument passing.
@@ -322,3 +333,4 @@ ___tls_get_addr(void *arg_)
 
 	return _rtld_tls_get_addr(tcb, idx, offset);
 }
+#endif

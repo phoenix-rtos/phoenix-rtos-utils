@@ -42,7 +42,11 @@
 #include <sys/types.h>
 #include "NetBSD/queue.h"
 #include "NetBSD/exec_elf.h"
+/* FIXME: Support TLS in Phoenix */
+#if 0
+/* NOTE: This import is probably not needed in phoenix. */
 #include <sys/tls.h>
+#endif
 #include "rtldenv.h"
 #include "NetBSD/link_elf.h"
 
