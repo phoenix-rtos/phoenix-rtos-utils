@@ -35,7 +35,6 @@ __RCSID("$NetBSD: expand.c,v 1.7 2023/01/04 01:37:00 christos Exp $");
 
 #include <ctype.h>
 #include <string.h>
-#include <sys/sysctl.h>
 
 #ifdef DEBUG_EXPAND
 #include <stdio.h>
@@ -62,19 +61,11 @@ static const struct {
 	ADD(PLATFORM)	/* uname -p */
 };
 
-static int mib[3][2] = {
-	{ CTL_KERN, KERN_OSTYPE },
-	{ CTL_KERN, KERN_OSRELEASE },
-	{ CTL_HW, HW_MACHINE_ARCH },
-};
-
 static size_t
 expand(char *buf, const char *execname, size_t what, size_t bl)
 {
 	const char *p, *ep;
 	char *bp = buf;
-	size_t len;
-	char name[32];
 
 	switch (what) {
 	case 0:	/* HWCAP XXX: Not yet */
@@ -91,13 +82,9 @@ expand(char *buf, const char *execname, size_t what, size_t bl)
 	case 3:	/* OSNAME */
 	case 4:	/* OSREL */
 	case 5:	/* PLATFORM */
-		len = sizeof(name);
-		if (sysctl(mib[what - 3], 2, name, &len, NULL, 0) == -1) {
-			xwarn("sysctl");
-			return 0;
-		}
-		ep = (p = name) + len - 1;
-		break;
+		/* FIXME: Create POSIX header <sys/utsname.h> */
+		xwarn("expand of OSNAME, OSREL, PLATFORM is not yet supported");
+		return 0;
 	default:
 		return 0;
 	}
