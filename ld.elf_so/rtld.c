@@ -108,7 +108,6 @@ size_t	_rtld_pagesz;	/* Page size, as provided by kernel */
 Search_Path    *_rtld_default_paths;
 Search_Path    *_rtld_paths;
 
-Library_Xform  *_rtld_xforms;
 static void    *auxinfo;
 
 /*
@@ -644,7 +643,7 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	} else {
 		execname = NULL;
 	}
-	_rtld_process_hints(execname, &_rtld_paths, &_rtld_xforms,
+	_rtld_process_hints(execname, &_rtld_paths,
 	    _PATH_LD_HINTS);
 	dbg(("dynamic linker is initialized, mapbase=%p, relocbase=%p",
 	     _rtld_objself.mapbase, _rtld_objself.relocbase));
