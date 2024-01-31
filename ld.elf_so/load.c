@@ -46,7 +46,6 @@ __RCSID("$NetBSD: load.c,v 1.49 2020/09/21 16:08:57 kamil Exp $");
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/mman.h>
-#include <sys/sysctl.h>
 #include <sys/stat.h>
 
 #include <err.h>
@@ -208,93 +207,15 @@ static bool
 _rtld_load_by_name(const char *name, Obj_Entry *obj, Needed_Entry **needed,
     int flags)
 {
-	Library_Xform *x = _rtld_xforms;
 	Obj_Entry *o;
-	size_t j;
-	ssize_t i;
-	bool got = false;
-	union {
-		int i;
-		u_quad_t q;
-		char s[16];
-	} val;
 
-	dbg(("load by name %s %p", name, x));
+	dbg(("load by name %s", name));
 	for (o = _rtld_objlist->next; o != NULL; o = o->next)
 		if (_rtld_object_match_name(o, name)) {
 			++o->refcount;
 			(*needed)->obj = o;
 			return true;
 		}
-
-	for (; x; x = x->next) {
-		if (strcmp(x->name, name) != 0)
-			continue;
-
-		j = sizeof(val);
-		if ((i = _rtld_sysctl(x->ctlname, &val, &j)) == -1) {
-			xwarnx(_PATH_LD_HINTS ": invalid/unknown sysctl for %s (%d)",
-			    name, errno);
-			break;
-		}
-
-		switch (i) {
-		case CTLTYPE_QUAD:
-			xsnprintf(val.s, sizeof(val.s), "%" PRIu64, val.q);
-			break;
-		case CTLTYPE_INT:
-			xsnprintf(val.s, sizeof(val.s), "%d", val.i);
-			break;
-		case CTLTYPE_STRING:
-			break;
-		default:
-			xwarnx("unsupported sysctl type %d", (int)i);
-			break;
-		}
-
-		dbg(("sysctl returns %s", val.s));
-
-		for (i = 0; i < RTLD_MAX_ENTRY && x->entry[i].value != NULL;
-		    i++) {
-			dbg(("entry %ld", (unsigned long)i));
-			if (strcmp(x->entry[i].value, val.s) == 0)
-				break;
-		}
-
-		if (i == RTLD_MAX_ENTRY) {
-			xwarnx("sysctl value %s not found for lib%s",
-			    val.s, name);
-			break;
-		}
-
-		for (j = 0; j < RTLD_MAX_LIBRARY &&
-		    x->entry[i].library[j] != NULL; j++) {
-			o = _rtld_load_library(x->entry[i].library[j], obj,
-			    flags);
-			if (o == NULL) {
-				xwarnx("could not load %s for %s",
-				    x->entry[i].library[j], name);
-				continue;
-			}
-			got = true;
-			if (j == 0)
-				(*needed)->obj = o;
-			else {
-				/* make a new one and put it in the chain */
-				Needed_Entry *ne = xmalloc(sizeof(*ne));
-				ne->name = (*needed)->name;
-				ne->obj = o;
-				ne->next = (*needed)->next;
-				(*needed)->next = ne;
-				*needed = ne;
-			}
-
-		}
-
-	}
-
-	if (got)
-		return true;
 
 	return ((*needed)->obj = _rtld_load_library(name, obj, flags)) != NULL;
 }
