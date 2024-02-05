@@ -75,7 +75,7 @@ int dbbt_flash(oid_t oid, int fd, dbbt_t *dbbt, const flashsrv_info_t *info)
 	int err;
 
 	/* DBBT is just after BCB_CNT FCB blocks on the same partition */
-	offs_t partoff = BCB_CNT * info->erasesz;
+	off_t partoff = BCB_CNT * info->erasesz;
 
 	dbbt_fingerprint(dbbt);
 	dbbt->size = 1;

@@ -42,7 +42,7 @@ static struct cleanmarker {
 };
 
 
-int flashmng_readraw(oid_t oid, offs_t addr, void *data, size_t size)
+int flashmng_readraw(oid_t oid, off_t addr, void *data, size_t size)
 {
 	msg_t msg = { 0 };
 	flash_i_devctl_t *idevctl = (flash_i_devctl_t *)msg.i.raw;
