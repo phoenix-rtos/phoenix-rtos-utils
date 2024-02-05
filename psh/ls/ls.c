@@ -342,7 +342,7 @@ static void psh_ls_printlong(size_t nfiles)
 		printf("%s %*d ", perms, linksz, files[i].stat.st_nlink);
 		printf("%-*s ", usersz, (files[i].pw != NULL) ? files[i].pw->pw_name : "---");
 		printf("%-*s ", grpsz, (files[i].gr != NULL) ? files[i].gr->gr_name : "---");
-		printf("%*lld %s ", sizesz, files[i].stat.st_size, buff);
+		printf("%*lld %s ", sizesz, (long long)files[i].stat.st_size, buff);
 
 		psh_ls_printfile(&files[i], files[i].namelen);
 		putchar('\n');

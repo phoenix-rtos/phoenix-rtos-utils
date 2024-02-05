@@ -74,7 +74,7 @@ static void psh_mem_procprint(entryinfo_t *e, int mapsz)
 		printf("%p:%p  %-4s  %-5s", e->vaddr, e->vaddr + e->size - 1, prot, flags);
 
 		if (e->offs != -1)
-			printf("  %*llx", (int)(2 * sizeof(e->offs)), e->offs);
+			printf("  %*llx", (int)(2 * sizeof(e->offs)), (long long)e->offs);
 		else
 			printf("  %*s", (int)(2 * sizeof(e->offs)), "");
 
