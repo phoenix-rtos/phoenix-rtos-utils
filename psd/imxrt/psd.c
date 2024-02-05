@@ -264,7 +264,7 @@ int psd_writeRegister(sdp_cmd_t *cmd)
 int psd_writeFile(sdp_cmd_t *cmd)
 {
 	int res, err = hidOK, offset = 0;
-	offs_t writesz;
+	off_t writesz;
 	char *outdata = NULL;
 
 	flash_properties_t *flash = (flash_properties_t *)&psd_common.flashMems[psd_common.flashID];

@@ -181,8 +181,8 @@ static int nandtool_dump(const char *outpath, unsigned int start, unsigned int n
 {
 	const flashsrv_info_t *info;
 	ssize_t len;
-	offs_t blocksz, partsz, pagesz;
-	offs_t addr, endaddr, bytes;
+	off_t blocksz, partsz, pagesz;
+	off_t addr, endaddr, bytes;
 	uint8_t *buf;
 	int ret = 0;
 	int outfd;

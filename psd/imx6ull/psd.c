@@ -85,8 +85,8 @@ struct {
 	char rcvBuff[HID_REPORT_2_SIZE];
 	char buff[_PAGE_SIZE * 2]; /* assuming always big enough to fit psd_common.flash.writesz */
 
-	offs_t partsz;
-	offs_t partOffs;
+	off_t partsz;
+	off_t partOffs;
 
 	unsigned int nfiles;
 	struct filedes *f;
@@ -353,7 +353,7 @@ static int psd_writeRegister(sdp_cmd_t *cmd)
 static int psd_writeFile(sdp_cmd_t *cmd)
 {
 	int res, err = hidOK, buffOffset = 0, badBlock = 0;
-	offs_t writesz, fileOffs = cmd->address;
+	off_t writesz, fileOffs = cmd->address;
 	char *outdata = NULL;
 
 	/* Check command parameters */
