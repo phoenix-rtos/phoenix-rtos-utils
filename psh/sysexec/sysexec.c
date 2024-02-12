@@ -19,6 +19,9 @@
 #include <unistd.h>
 #include <termios.h>
 #include <getopt.h>
+#include <stdbool.h>
+#include <paths.h>
+#include <fcntl.h>
 
 #include <sys/threads.h>
 #include <sys/types.h>
@@ -34,7 +37,12 @@ static void psh_sysexecinfo(void)
 
 static void psh_sysexecUsage(void)
 {
-	fputs("Usage: sysexec [-m datamap] [-M codemap] progname [args]...\n", stderr);
+	fputs("Usage: sysexec [OPTIONS] progname [args]...\n"
+		"Options:\n"
+		"\t-m datamap   select data memory map\n"
+		"\t-M codemap   select code memory map\n"
+		"\t-d           daemonize\n"
+		"\t-s           do not close stdin on daemonization\n", stderr);
 }
 
 
@@ -112,13 +120,14 @@ static int psh_sysexec_checkcommand(int argc, const char **argv)
 
 static int psh_sysexec(int argc, char **argv)
 {
-	pid_t pid, err;
 	int opt, status = 0;
 	const char *progName;
 	const char *codeMapName = NULL;
 	const char *dataMapName = NULL;
+	bool background = false;
+	bool keepStdin = false;
 
-	while ((opt = getopt(argc, argv, "hm:M:")) != -1) {
+	while ((opt = getopt(argc, argv, "hm:M:ds")) != -1) {
 		switch (opt) {
 			case 'm':
 				dataMapName = optarg;
@@ -130,34 +139,77 @@ static int psh_sysexec(int argc, char **argv)
 
 			case 'h':
 				psh_sysexecUsage();
-				return EOK;
+				return EXIT_SUCCESS;
+
+			case 'd':
+				background = true;
+				break;
+
+			case 's':
+				keepStdin = true;
+				break;
 
 			default:
 				psh_sysexecUsage();
-				return -EINVAL;
+				return EXIT_FAILURE;
 		}
+	}
+
+	if (!background && keepStdin) {
+		fprintf(stderr, "psh: -s option can be only used with -d option\n");
+		psh_sysexecUsage();
+		return EXIT_FAILURE;
 	}
 
 	progName = argv[optind];
 	if (progName == NULL) {
 		fprintf(stderr, "psh: missing program name for sysexec\n");
 		psh_sysexecUsage();
-		return -EINVAL;
+		return EXIT_FAILURE;
 	}
 
 	if (psh_sysexec_checkcommand(argc, (const char **)argv) != 1) {
 		fprintf(stderr, "Unknown command!\n");
-		return -EINVAL;
+		return EXIT_FAILURE;
 	}
 
-	pid = spawnSyspage(codeMapName, dataMapName, progName, &argv[optind]);
-	if (pid > 0) {
+	pid_t pid;
+	if (background) {
+		pid = vfork();
+	}
+	else {
+		pid = spawnSyspage(codeMapName, dataMapName, progName, &argv[optind]);
+	}
+
+	/* Forked path */
+	if (pid == 0) {
+		/* Create a new SID for the child process */
+		pid_t sid = setsid();
+		if (sid < 0) {
+			fprintf(stderr, "psh: setsid failed: %s\n", strerror(errno));
+			exit(EXIT_FAILURE);
+		}
+
+		if (!keepStdin) {
+			/* Do not allow daemon to interfere with shell's stdin */
+			close(STDIN_FILENO);
+		}
+
+		pid = spawnSyspage(codeMapName, dataMapName, progName, &argv[optind]);
+		if (pid > 0) {
+			exit(EXIT_SUCCESS);
+		}
+	}
+	else if (pid > 0) {
+		pid_t err;
 		do {
 			err = waitpid(pid, &status, 0);
 		} while (err < 0 && errno == EINTR);
 		/* Take back terminal control */
 		tcsetpgrp(STDIN_FILENO, getpgrp());
-		return err >= 0 ? WEXITSTATUS(status) : errno;
+		return err >= 0 ? WEXITSTATUS(status) : EXIT_FAILURE;
+	}
+	else {
 	}
 
 	switch (pid) {
@@ -190,6 +242,10 @@ static int psh_sysexec(int argc, char **argv)
 
 		default:
 			fprintf(stderr, "psh: sysexec failed with code %d\n", pid);
+	}
+
+	if (background) {
+		exit(EXIT_FAILURE);
 	}
 
 	return pid < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
