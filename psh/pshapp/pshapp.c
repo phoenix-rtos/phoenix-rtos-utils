@@ -60,12 +60,13 @@
 #define CSI_CLEAR0      "\033[0J"
 #define CSI_NORMAL      "\033[m"
 #define CSI_CURSOR_SHOW "\033[?25h"
+#define WIDTH_PROBE     "\0337\033[999G\033[6n\0338" /* Save position, move to column 999, ask for cursor position, move to saved position */
 
 
 /* Special key codes */
 /* clang-format off */
 enum { kUp = 1, kDown, kRight, kLeft, kDelete, kHome, kEnd, kCtrlRight, kCtrlLeft, kCtrlUp,
-	kCtrlDown, kAltRight, kAltLeft, kAltUp, kAltDown, kAltD };
+	kCtrlDown, kAltRight, kAltLeft, kAltUp, kAltDown, kAltD, kCursorPos };
 /* clang-format on */
 
 
@@ -481,6 +482,39 @@ static int psh_cmpname(const void *n1, const void *n2)
 }
 
 
+/* This function assumes that all prefixes of `buff` have been checked earlier */
+static int psh_parseCursorPos(char *buff, int n, int *row, int *col)
+{
+	char *numberEnd = NULL;
+	for (int i = 0; i < n - 1; i++) {
+		if ((buff[i] == ';') && (numberEnd == NULL)) {
+			numberEnd = &buff[i];
+		}
+		else if (!isdigit(buff[i])) {
+			return -EINVAL;
+		}
+	}
+
+	if (isdigit(buff[n - 1]) || ((buff[n - 1] == ';') && (numberEnd == NULL))) {
+		return -EAGAIN;
+	}
+
+	if (buff[n - 1] != 'R') {
+		return -EINVAL;
+	}
+
+	if ((numberEnd == NULL) || (numberEnd == buff)) {
+		return -EINVAL;
+	}
+
+	*numberEnd = '\0';
+	buff[n - 1] = '\0';
+	*row = atoi(buff);
+	*col = atoi(numberEnd + 1);
+	return kCursorPos;
+}
+
+
 static int psh_keyCode(const char *buff, int *pEsc)
 {
 	size_t n;
@@ -550,12 +584,28 @@ static int psh_keyCode(const char *buff, int *pEsc)
 			}
 
 			if (esc != strlen(csiKeys[n].escSeq)) {
-				return -EAGAIN;
+				break;
 			}
 
 			*pEsc = 0;
 			return csiKeys[n].keyCode;
 		}
+
+		int row, col;
+		int ret = psh_parseCursorPos(buff, esc, &row, &col);
+		if ((ret == kCursorPos) && (col != 0)) {
+			struct winsize ws;
+			if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) < 0) {
+				ws.ws_col = 80;
+				ws.ws_row = 25;
+			}
+
+			ws.ws_col = col;
+			(void)ioctl(STDOUT_FILENO, TIOCSWINSZ, &ws);
+			*pEsc = 0;
+		}
+
+		return ret;
 	}
 
 	return -EINVAL;
@@ -604,6 +654,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 	}
 
 	(void)psh_write(STDOUT_FILENO, CSI_CLEAR0, sizeof(CSI_CLEAR0) - 1u);
+	(void)psh_write(STDOUT_FILENO, WIDTH_PROBE, sizeof(WIDTH_PROBE) - 1u);
 	(void)psh_write(STDOUT_FILENO, PROMPT, sizeof(PROMPT) - 1u);
 
 	for (;;) {
