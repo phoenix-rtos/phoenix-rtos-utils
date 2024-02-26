@@ -31,7 +31,6 @@
 static struct {
 	int sortdir;
 	int threads;
-	struct winsize ws;
 	int (*cmp)(const void *, const void *);
 } psh_top_common;
 
@@ -122,9 +121,9 @@ static int psh_top_waitcmd(unsigned int secs)
 
 static void psh_top_refresh(char cmd, threadinfo_t *info, threadinfo_t *previnfo, unsigned int totcnt, time_t delta)
 {
-	static unsigned int prevlines = 0;
+	struct winsize ws;
 	static unsigned int prevcnt = 0;
-	unsigned int i, j, m, s, hs, lines = 3, runcnt = 0, waitcnt = 0;
+	unsigned int i, j, m, s, hs, w, lines = 3, runcnt = 0, waitcnt = 0;
 	char buff[8];
 
 	/* Calculate load */
@@ -174,6 +173,12 @@ static void psh_top_refresh(char cmd, threadinfo_t *info, threadinfo_t *previnfo
 			waitcnt++;
 	}
 
+	/* Get window size */
+	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) < 0) {
+		ws.ws_row = 25;
+		ws.ws_col = 80;
+	}
+
 	/* Move cursor to beginning */
 	printf("\033[f");
 	printf("\033[K");
@@ -189,9 +194,17 @@ static void psh_top_refresh(char cmd, threadinfo_t *info, threadinfo_t *previnfo
 	else
 		printf("\033[K\n");
 
+	/* Set CMD field width */
+	if (ws.ws_col > 61) {
+		w = ws.ws_col - 61;
+	}
+	else {
+		w = 0;
+	}
+
 	/* Set header style */
 	printf("\033[0;30;47m");
-	printf("%8s %8s %2s %5s %5s %7s %9s %8s %-20s\n", (psh_top_common.threads) ? "TID" : "PID", "PPID", "PR", "STATE", "%CPU", "WAIT", "TIME", "VMEM", "CMD");
+	printf("%8s %8s %2s %5s %5s %7s %10s %8s %-*.*s", (psh_top_common.threads) ? "TID" : "PID", "PPID", "PR", "STATE", "%CPU", "WAIT", "TIME", "VMEM", w, w, "CMD");
 
 	/* Reset style */
 	printf("\033[0m");
@@ -206,28 +219,24 @@ static void psh_top_refresh(char cmd, threadinfo_t *info, threadinfo_t *previnfo
 		m = info[i].cpuTime / (60 * 1000000);
 		s = info[i].cpuTime / 1000000 - 60 * m;
 		hs = info[i].cpuTime / 10000 - 60 * 100 * m - 100 * s;
-		printf("%8u %8u %2d %5s %3u.%u %6ss %3u:%02u.%02u ", (psh_top_common.threads) ? info[i].tid : info[i].pid,
+		printf("\n%8u %8u %2d %5s %3u.%u %6ss %4u:%02u.%02u ", (psh_top_common.threads) ? info[i].tid : info[i].pid,
 			info[i].ppid, info[i].priority, (info[i].state) ? "sleep" : "ready",
 			info[i].load / 10, info[i].load % 10, buff, m, s, hs);
 
 		psh_prefix(2, info[i].vmem, 0, 1, buff);
 		printf("%8s ", buff);
-		printf("%-20s\n", info[i].name);
+		printf("%-*.*s", w, w, info[i].name);
 
 		printf("\033[0m");
 
-		if (++lines == psh_top_common.ws.ws_row)
+		if (++lines == ws.ws_row)
 			break;
 	}
 
-	/* Clear pending lines */
-	while (lines < prevlines) {
-		printf("\033[K");
-		prevlines--;
-		if (lines != prevlines)
-			putchar('\n');
+	/* Clear unused lines */
+	while (++lines <= ws.ws_row) {
+		printf("\n\033[K");
 	}
-	prevlines = lines;
 }
 
 
@@ -259,11 +268,6 @@ int psh_top(int argc, char **argv)
 	psh_top_common.threads = 0;
 	psh_top_common.sortdir = -1;
 	psh_top_common.cmp = psh_top_cmpcpu;
-
-	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &psh_top_common.ws) < 0) {
-		psh_top_common.ws.ws_row = 25;
-		psh_top_common.ws.ws_col = 80;
-	}
 
 	while ((c = getopt(argc, argv, "Hd:n:h")) != -1) {
 		switch (c) {
