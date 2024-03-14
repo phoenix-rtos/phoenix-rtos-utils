@@ -74,14 +74,13 @@ static int readraw(oid_t oid, uint32_t addr, void *data, int size)
 {
 	msg_t msg = { 0 };
 	flash_i_devctl_t *idevctl = (flash_i_devctl_t *)msg.i.raw;
-	flash_o_devctl_t *odevctl = (flash_o_devctl_t *)msg.o.raw;
 
 	msg.type = mtDevCtl;
 	msg.o.data = data;
 	msg.o.size = size;
+	msg.oid = oid;
 
 	idevctl->type = flashsrv_devctl_readraw;
-	idevctl->read.oid = oid;
 	idevctl->read.size = size;
 	idevctl->read.address = addr;
 
@@ -89,8 +88,8 @@ static int readraw(oid_t oid, uint32_t addr, void *data, int size)
 		return -1;
 	}
 
-	if (odevctl->err != size) {
-		return odevctl->err;
+	if (msg.o.err != size) {
+		return msg.o.err;
 	}
 
 	return 0;

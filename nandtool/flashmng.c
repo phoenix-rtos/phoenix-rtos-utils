@@ -46,14 +46,13 @@ int flashmng_readraw(oid_t oid, off_t addr, void *data, size_t size)
 {
 	msg_t msg = { 0 };
 	flash_i_devctl_t *idevctl = (flash_i_devctl_t *)msg.i.raw;
-	flash_o_devctl_t *odevctl = (flash_o_devctl_t *)msg.o.raw;
 
 	msg.type = mtDevCtl;
 	msg.o.data = data;
 	msg.o.size = size;
+	msg.oid = oid;
 
 	idevctl->type = flashsrv_devctl_readraw;
-	idevctl->read.oid = oid;
 	idevctl->read.size = size;
 	/* FIXME: Now imx6ull nand DevCtl API supports only 32-bit offsets */
 	idevctl->read.address = (uint32_t)addr;
@@ -62,7 +61,7 @@ int flashmng_readraw(oid_t oid, off_t addr, void *data, size_t size)
 		return -1;
 	}
 
-	return odevctl->err;
+	return msg.o.err;
 }
 
 
@@ -70,18 +69,17 @@ static int write_ex(oid_t oid, uint32_t addr, const void *data, size_t size, int
 {
 	msg_t msg = { 0 };
 	flash_i_devctl_t *idevctl = (flash_i_devctl_t *)msg.i.raw;
-	flash_o_devctl_t *odevctl = (flash_o_devctl_t *)msg.o.raw;
 	int err;
 
 	msg.type = mtDevCtl;
+	msg.oid = oid;
 	msg.i.data = (void *)data; /* TODO: fix after msg.i.data becomes const void * */
 	msg.i.size = size;
 	idevctl->type = type;
-	idevctl->write.oid = oid;
 	idevctl->write.address = addr;
 	idevctl->write.size = size;
 
-	if (((err = msgSend(oid.port, &msg)) < 0) || ((err = odevctl->err) < 0))
+	if (((err = msgSend(oid.port, &msg)) < 0) || ((err = msg.o.err) < 0))
 		return err;
 
 	if (err != size)
@@ -112,7 +110,6 @@ int flashmng_erase(oid_t oid, unsigned int start, unsigned int size)
 {
 	msg_t msg = { 0 };
 	flash_i_devctl_t *idevctl = (flash_i_devctl_t *)msg.i.raw;
-	flash_o_devctl_t *odevctl = (flash_o_devctl_t *)msg.o.raw;
 	flashsrv_info_t *info;
 	int err;
 
@@ -120,12 +117,12 @@ int flashmng_erase(oid_t oid, unsigned int start, unsigned int size)
 		return -EFAULT;
 
 	msg.type = mtDevCtl;
+	msg.oid = oid;
 	idevctl->type = flashsrv_devctl_erase;
-	idevctl->erase.oid = oid;
 	idevctl->erase.address = start * info->erasesz;
 	idevctl->erase.size = size * info->erasesz;
 
-	if (((err = msgSend(oid.port, &msg)) < 0) || ((err = odevctl->err) < 0))
+	if (((err = msgSend(oid.port, &msg)) < 0) || ((err = msg.o.err) < 0))
 		return err;
 
 	return EOK;
@@ -187,7 +184,6 @@ int flashmng_isbad(oid_t oid, unsigned int block)
 {
 	msg_t msg = { 0 };
 	flash_i_devctl_t *idevctl = (flash_i_devctl_t *)msg.i.raw;
-	flash_o_devctl_t *odevctl = (flash_o_devctl_t *)msg.o.raw;
 	flashsrv_info_t *info;
 	int err;
 
@@ -195,14 +191,14 @@ int flashmng_isbad(oid_t oid, unsigned int block)
 		return -EFAULT;
 
 	msg.type = mtDevCtl;
+	msg.oid = oid;
 	idevctl->type = flashsrv_devctl_isbad;
-	idevctl->badblock.oid = oid;
 	idevctl->badblock.address = block * info->erasesz;
 
-	if (((err = msgSend(oid.port, &msg)) < 0) || ((err = odevctl->err) < 0))
+	if (((err = msgSend(oid.port, &msg)) < 0) || ((err = msg.o.err) < 0))
 		return err;
 
-	return odevctl->err;
+	return msg.o.err;
 }
 
 
@@ -218,7 +214,7 @@ flashsrv_info_t *flashmng_info(oid_t oid)
 	msg.type = mtDevCtl;
 	idevctl->type = flashsrv_devctl_info;
 
-	if ((msgSend(oid.port, &msg) < 0) || (odevctl->err < 0))
+	if ((msgSend(oid.port, &msg) < 0) || (msg.o.err < 0))
 		return NULL;
 
 	flashmng_common.info.metasz = odevctl->info.metasz;
@@ -228,9 +224,9 @@ flashsrv_info_t *flashmng_info(oid_t oid)
 
 	msg.type = mtGetAttr;
 	msg.i.attr.type = atSize;
-	msg.i.attr.oid = oid;
+	msg.oid = oid;
 
-	if ((msgSend(oid.port, &msg) < 0) || (msg.o.attr.err < 0)) {
+	if ((msgSend(oid.port, &msg) < 0) || (msg.o.err < 0)) {
 		flashmng_common.oid.port = 0;
 		flashmng_common.oid.id = 0;
 		return NULL;

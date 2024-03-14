@@ -50,17 +50,16 @@ int flashmng_isBadBlock(oid_t oid, uint32_t addr)
 {
 	msg_t msg = { 0 };
 	flash_i_devctl_t *idevctl = (flash_i_devctl_t *)msg.i.raw;
-	flash_o_devctl_t *odevctl = (flash_o_devctl_t *)msg.o.raw;
 
 	msg.type = mtDevCtl;
+	msg.oid = oid;
 	idevctl->type = flashsrv_devctl_isbad;
-	idevctl->badblock.oid = oid;
 	idevctl->badblock.address = addr;
 
 	if (msgSend(oid.port, &msg) < 0)
 		return -1;
 
-	if (odevctl->err != 0)
+	if (msg.o.err != 0)
 		return 1;
 
 	return 0;
@@ -71,26 +70,23 @@ int flashmng_writedev(oid_t oid, uint32_t addr, void *data, int size, int type)
 {
 	msg_t msg;
 	flash_i_devctl_t *idevctl = NULL;
-	flash_o_devctl_t *odevctl = NULL;
 
 	msg.type = mtDevCtl;
 	msg.i.data = data;
 	msg.i.size = size;
 	msg.o.data = NULL;
 	msg.o.size = 0;
+	msg.oid = oid;
 
 	idevctl = (flash_i_devctl_t *)msg.i.raw;
 	idevctl->type = type;
-	idevctl->write.oid = oid;
 	idevctl->write.size = size;
 	idevctl->write.address = addr;
 
 	if (msgSend(oid.port, &msg) < 0)
 		return -1;
 
-	odevctl = (flash_o_devctl_t *)msg.o.raw;
-
-	if (odevctl->err != size)
+	if (msg.o.err != size)
 		return -1;
 
 	return 0;
@@ -101,26 +97,23 @@ int flashmng_eraseBlocks(oid_t oid, unsigned int start, unsigned int size)
 {
 	msg_t msg;
 	flash_i_devctl_t *idevctl = NULL;
-	flash_o_devctl_t *odevctl = NULL;
 
 	msg.type = mtDevCtl;
 	msg.i.data = NULL;
 	msg.i.size = 0;
 	msg.o.data = NULL;
 	msg.o.size = 0;
+	msg.oid = oid;
 
 	idevctl = (flash_i_devctl_t *)msg.i.raw;
 	idevctl->type = flashsrv_devctl_erase;
-	idevctl->erase.oid = oid;
 	idevctl->erase.size = size;
 	idevctl->erase.address = start;
 
 	if (msgSend(oid.port, &msg) < 0)
 		return -1;
 
-	odevctl = (flash_o_devctl_t *)msg.o.raw;
-
-	if (odevctl->err < 0)
+	if (msg.o.err < 0)
 		return -1;
 
 	return 0;
@@ -131,6 +124,7 @@ int flashmng_getAttr(int type, long long *val, oid_t oid)
 {
 	msg_t msg;
 
+	msg.oid = oid;
 	msg.type = mtGetAttr;
 	msg.i.data = NULL;
 	msg.i.size = 0;
@@ -138,11 +132,10 @@ int flashmng_getAttr(int type, long long *val, oid_t oid)
 	msg.o.size = 0;
 
 	msg.i.attr.type = type;
-	msg.i.attr.oid = oid;
 
-	if ((msgSend(oid.port, &msg) < 0) || (msg.o.attr.err < 0))
+	if ((msgSend(oid.port, &msg) < 0) || (msg.o.err < 0)) {
 		return -1;
-
+	}
 	*val = msg.o.attr.val;
 
 	return 0;
@@ -239,21 +232,20 @@ int flashmng_readraw(oid_t oid, uint32_t addr, void *data, int size)
 {
 	msg_t msg = { 0 };
 	flash_i_devctl_t *idevctl = (flash_i_devctl_t *)msg.i.raw;
-	flash_o_devctl_t *odevctl = (flash_o_devctl_t *)msg.o.raw;
 
 	msg.type = mtDevCtl;
 	msg.o.data = data;
 	msg.o.size = size;
+	msg.oid = oid;
 
 	idevctl->type = flashsrv_devctl_readraw;
-	idevctl->read.oid = oid;
 	idevctl->read.size = size;
 	idevctl->read.address = addr;
 
 	if (msgSend(oid.port, &msg) < 0)
 		return -1;
 
-	if (odevctl->err != size)
+	if (msg.o.err != size)
 		return -1;
 
 	return 0;
