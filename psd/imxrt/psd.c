@@ -88,24 +88,21 @@ static int psd_syncFlash(oid_t oid)
 {
 	msg_t msg;
 	flash_i_devctl_t *idevctl = NULL;
-	flash_o_devctl_t *odevctl = NULL;
 
 	msg.type = mtDevCtl;
 	msg.i.data = NULL;
 	msg.i.size = 0;
 	msg.o.data = NULL;
 	msg.o.size = 0;
+	msg.oid = oid;
 
 	idevctl = (flash_i_devctl_t *)msg.i.raw;
 	idevctl->type = flashsrv_devctl_sync;
-	idevctl->oid = oid;
-
-	odevctl = (flash_o_devctl_t *)msg.o.raw;
 
 	if (msgSend(oid.port, &msg) < 0)
 		return -1;
 
-	if (odevctl->err < 0)
+	if (msg.o.err < 0)
 		return -1;
 
 	return 0;
@@ -117,18 +114,20 @@ static int psd_write2Flash(oid_t oid, uint32_t paddr, void *data, int size)
 	msg_t msg;
 
 	msg.type = mtWrite;
-	msg.i.io.oid = oid;
+	msg.oid = oid;
 	msg.i.io.offs = paddr;
 	msg.i.data = data;
 	msg.i.size = size;
 	msg.o.data = NULL;
 	msg.o.size = 0;
 
-	if (msgSend(oid.port, &msg) < 0)
+	if (msgSend(oid.port, &msg) < 0) {
 		return -1;
+	}
 
-	if (msg.o.io.err < size)
+	if (msg.o.err < size) {
 		return -1;
+	}
 
 	return size;
 }
@@ -146,17 +145,17 @@ static int psd_getFlashProperties(uint8_t flashID)
 	msg.i.size = 0;
 	msg.o.data = NULL;
 	msg.o.size = 0;
+	msg.oid = psd_common.flashMems[flashID].oid;
 
 	idevctl = (flash_i_devctl_t *)msg.i.raw;
 	idevctl->type = flashsrv_devctl_properties;
-	idevctl->oid = psd_common.flashMems[flashID].oid;
 
 	odevctl = (flash_o_devctl_t *)msg.o.raw;
 
 	if ((res = msgSend(psd_common.flashMems[flashID].oid.port, &msg)) < 0)
 		return -1;
 
-	if (odevctl->err < 0)
+	if (msg.o.err < 0)
 		return -1;
 
 	psd_common.flashMems[flashID].flashSize = odevctl->properties.size;

@@ -24,12 +24,11 @@ int flashmng_isBad(const oid_t *oid, const flashsrv_info_t *info, unsigned int b
 {
 	msg_t msg = { 0 };
 	flash_i_devctl_t *idevctl = (flash_i_devctl_t *)msg.i.raw;
-	flash_o_devctl_t *odevctl = (flash_o_devctl_t *)msg.o.raw;
 	int err;
 
 	msg.type = mtDevCtl;
+	msg.oid = *oid;
 	idevctl->type = flashsrv_devctl_isbad;
-	idevctl->badblock.oid = *oid;
 	idevctl->badblock.address = block * info->erasesz;
 
 	err = msgSend(oid->port, &msg);
@@ -37,7 +36,7 @@ int flashmng_isBad(const oid_t *oid, const flashsrv_info_t *info, unsigned int b
 		return err;
 	}
 
-	return odevctl->err;
+	return msg.o.err;
 }
 
 
@@ -45,12 +44,11 @@ int flashmng_erase(const oid_t *oid, const flashsrv_info_t *info, unsigned int s
 {
 	msg_t msg = { 0 };
 	flash_i_devctl_t *idevctl = (flash_i_devctl_t *)msg.i.raw;
-	flash_o_devctl_t *odevctl = (flash_o_devctl_t *)msg.o.raw;
 	int err;
 
 	msg.type = mtDevCtl;
+	msg.oid = *oid;
 	idevctl->type = flashsrv_devctl_erase;
-	idevctl->erase.oid = *oid;
 	idevctl->erase.address = start * info->erasesz;
 	idevctl->erase.size = size * info->erasesz;
 
@@ -59,7 +57,7 @@ int flashmng_erase(const oid_t *oid, const flashsrv_info_t *info, unsigned int s
 		return err;
 	}
 
-	return odevctl->err;
+	return msg.o.err;
 }
 
 
@@ -67,14 +65,13 @@ int flashmng_readMeta(const oid_t *oid, const flashsrv_info_t *info, void *data,
 {
 	msg_t msg = { 0 };
 	flash_i_devctl_t *idevctl = (flash_i_devctl_t *)msg.i.raw;
-	flash_o_devctl_t *odevctl = (flash_o_devctl_t *)msg.o.raw;
 	int err;
 
 	msg.type = mtDevCtl;
+	msg.oid = *oid;
 	msg.o.data = data;
 	msg.o.size = info->oobsz;
 	idevctl->type = flashsrv_devctl_readmeta;
-	idevctl->read.oid = *oid;
 	idevctl->read.address = page * info->writesz;
 	idevctl->read.size = info->oobsz;
 
@@ -83,7 +80,7 @@ int flashmng_readMeta(const oid_t *oid, const flashsrv_info_t *info, void *data,
 		return err;
 	}
 
-	return odevctl->err;
+	return msg.o.err;
 }
 
 
@@ -91,14 +88,13 @@ int flashmng_writeMeta(const oid_t *oid, const flashsrv_info_t *info, const void
 {
 	msg_t msg = { 0 };
 	flash_i_devctl_t *idevctl = (flash_i_devctl_t *)msg.i.raw;
-	flash_o_devctl_t *odevctl = (flash_o_devctl_t *)msg.o.raw;
 	int err;
 
 	msg.type = mtDevCtl;
-	msg.i.data = (void *)data; /* TODO: remove cast after msg.i.data becomes const void * */
+	msg.oid = *oid;
+	msg.i.data = data;
 	msg.i.size = info->oobsz;
 	idevctl->type = flashsrv_devctl_writemeta;
-	idevctl->write.oid = *oid;
 	idevctl->write.address = page * info->writesz;
 	idevctl->write.size = info->oobsz;
 
@@ -107,7 +103,7 @@ int flashmng_writeMeta(const oid_t *oid, const flashsrv_info_t *info, const void
 		return err;
 	}
 
-	return odevctl->err;
+	return msg.o.err;
 }
 
 
@@ -154,21 +150,20 @@ int flashmng_readPtable(const oid_t *oid, const flashsrv_info_t *info, ptable_t 
 {
 	msg_t msg = { 0 };
 	flash_i_devctl_t *idevctl = (flash_i_devctl_t *)msg.i.raw;
-	flash_o_devctl_t *odevctl = (flash_o_devctl_t *)msg.o.raw;
 	int err;
 
 	msg.type = mtDevCtl;
+	msg.oid = *oid;
 	msg.o.data = ptable;
 	msg.o.size = info->writesz;
 	idevctl->type = flashsrv_devctl_readptable;
-	idevctl->ptable.oid = *oid;
 
 	err = msgSend(oid->port, &msg);
 	if (err < 0) {
 		return err;
 	}
 
-	return odevctl->err;
+	return msg.o.err;
 }
 
 
@@ -176,21 +171,20 @@ int flashmng_writePtable(const oid_t *oid, const flashsrv_info_t *info, ptable_t
 {
 	msg_t msg = { 0 };
 	flash_i_devctl_t *idevctl = (flash_i_devctl_t *)msg.i.raw;
-	flash_o_devctl_t *odevctl = (flash_o_devctl_t *)msg.o.raw;
 	int err;
 
 	msg.type = mtDevCtl;
+	msg.oid = *oid;
 	msg.i.data = ptable;
 	msg.i.size = info->writesz;
 	idevctl->type = flashsrv_devctl_writeptable;
-	idevctl->ptable.oid = *oid;
 
 	err = msgSend(oid->port, &msg);
 	if (err < 0) {
 		return err;
 	}
 
-	return odevctl->err;
+	return msg.o.err;
 }
 
 
@@ -209,9 +203,9 @@ int flashmng_info(const oid_t *oid, flashsrv_info_t *info)
 		return err;
 	}
 
-	if (odevctl->err == EOK) {
+	if (msg.o.err == EOK) {
 		*info = odevctl->info;
 	}
 
-	return odevctl->err;
+	return msg.o.err;
 }

@@ -63,7 +63,6 @@ int main(int argc, char *argv[])
 {
 	msg_t msg;
 	multi_i_t *i = (void *)msg.i.raw;
-	multi_o_t *o = (void *)msg.o.raw;
 	int opt, usage = 0, file = 0, example = 0, start = 0, terminal = 0, termno = -1;
 	unsigned int offset = 0;
 	char *path = NULL;
@@ -133,8 +132,7 @@ int main(int argc, char *argv[])
 		msg.type = mtDevCtl;
 		msg.o.data = NULL;
 		msg.o.size = 0;
-
-		i->id = driver.id;
+		msg.oid = driver;
 
 		if (file) {
 			i->cm4_type = CM4_LOAD_FILE;
@@ -154,8 +152,8 @@ int main(int argc, char *argv[])
 			return -1;
 		}
 
-		if (o->err < 0) {
-			fprintf(stderr, "imxrt117x-cm4 driver failed to run the binary (err %d)\n", o->err);
+		if (msg.o.err < 0) {
+			fprintf(stderr, "imxrt117x-cm4 driver failed to run the binary (err %d)\n", msg.o.err);
 			free(path);
 
 			return -1;
@@ -170,8 +168,8 @@ int main(int argc, char *argv[])
 		msg.type = mtDevCtl;
 		msg.o.data = NULL;
 		msg.o.size = 0;
+		msg.oid = driver;
 		i->cm4_type = CM4_RUN_CORE;
-		i->id = driver.id;
 		msg.i.data = (void *)&offset;
 		msg.i.size = sizeof(offset);
 
@@ -182,8 +180,8 @@ int main(int argc, char *argv[])
 			return -1;
 		}
 
-		if (o->err < 0) {
-			fprintf(stderr, "imxrt117x-cm4 driver failed to start the core (err %d)\n", o->err);
+		if (msg.o.err < 0) {
+			fprintf(stderr, "imxrt117x-cm4 driver failed to start the core (err %d)\n", msg.o.err);
 			free(path);
 
 			return -1;

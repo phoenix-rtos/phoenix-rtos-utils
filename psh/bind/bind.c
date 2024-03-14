@@ -52,15 +52,14 @@ int psh_bind(int argc, char **argv)
 		return -ENOTDIR;
 
 	msg.type = mtSetAttr;
-	msg.i.attr.oid = doid;
+	msg.oid = doid;
 	msg.i.attr.type = atDev;
 	msg.i.data = &soid;
 	msg.i.size = sizeof(oid_t);
 
-	if (((err = msgSend(doid.port, &msg)) < 0) || ((err = msg.o.attr.err) < 0))
-		return err;
+	err = msgSend(doid.port, &msg);
 
-	return EOK;
+	return (err < 0) ? err : msg.o.err;
 }
 
 
