@@ -1,0 +1,9 @@
+#
+# Makefile for Phoenix-RTOS 3 utils
+#
+# riscv64-noelv tool set
+#
+# Copyright 2024 Phoenix Systems
+#
+
+DEFAULT_COMPONENTS := psh
