@@ -137,7 +137,7 @@ int main(int argc, char *argv[])
 		if (file) {
 			i->cm4_type = CM4_LOAD_FILE;
 			msg.i.data = path;
-			msg.i.size = strlen(path);
+			msg.i.size = strlen(path) + 1;
 		}
 		else {
 			i->cm4_type = CM4_LOAD_BUFF;
