@@ -1,0 +1,9 @@
+#
+# Makefile for Phoenix-RTOS 3 device drivers
+#
+# MCX N94x tool set
+#
+# Copyright 2024 Phoenix Systems
+#
+
+DEFAULT_COMPONENTS := psh
