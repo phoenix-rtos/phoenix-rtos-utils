@@ -65,6 +65,9 @@ extern const psh_appentry_t *psh_applist_next(const psh_appentry_t *current);
 extern size_t psh_write(int fd, const void *buf, size_t count);
 
 
+extern size_t psh_read(int fd, void *buf, size_t count);
+
+
 extern int psh_ttyopen(const char *dev);
 
 
