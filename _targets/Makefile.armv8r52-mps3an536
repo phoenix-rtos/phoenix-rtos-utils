@@ -1,0 +1,9 @@
+#
+# Makefile for Phoenix-RTOS 3 device drivers
+#
+# armv8r52-mps3an536 tool set
+#
+# Copyright 2024 Phoenix Systems
+#
+
+DEFAULT_COMPONENTS := psh
