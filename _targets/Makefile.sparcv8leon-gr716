@@ -1,7 +1,7 @@
 #
 # Makefile for Phoenix-RTOS 3 device drivers
 #
-# sparcv8leon3-gr716 tool set
+# sparcv8leon-gr716 tool set
 #
 # Copyright 2022 Phoenix Systems
 #
