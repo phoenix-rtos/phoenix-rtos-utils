@@ -1,7 +1,7 @@
 #
 # Makefile for Phoenix-RTOS 3 utils
 #
-# sparcv8leon3-generic tool set
+# sparcv8leon-generic tool set
 #
 # Copyright 2024 Phoenix Systems
 #
