@@ -36,6 +36,7 @@
 
 #include "cdefs.h"
 #include <sys/types.h>
+#include <dlfcn.h>
 
 /* Enable needed fragments. */
 #define _NETBSD_SOURCE
@@ -53,6 +54,9 @@ typedef	_BSD_SSIZE_T_	ssize_t;
 #undef	_BSD_SSIZE_T_
 #endif
 
+#ifdef phoenix
+typedef Dl_info_t Dl_info;
+#else
 #if defined(_NETBSD_SOURCE)
 typedef struct _dl_info {
 	const char	*dli_fname;	/* File defining the symbol */
@@ -61,6 +65,7 @@ typedef struct _dl_info {
 	const void	*dli_saddr;	/* Symbol address */
 } Dl_info;
 #endif /* defined(_NETBSD_SOURCE) */
+#endif
 
 /*
  * User interface to the run-time linker.
