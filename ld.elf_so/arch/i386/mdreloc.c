@@ -6,7 +6,12 @@ __RCSID("$NetBSD: mdreloc.c,v 1.44 2024/08/03 21:59:58 riastradh Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
+
+#if phoenix
+#include "../../phoenix-lwp.h"
+#else
 #include <sys/ucontext.h>
+#endif
 
 #include <limits.h>
 

@@ -56,6 +56,10 @@ struct tls_tcb {
 __BEGIN_PUBLIC_DECLS
 struct tls_tcb	*_rtld_tls_allocate(void);
 void	 	 _rtld_tls_free(struct tls_tcb *);
+#ifdef phoenix
+void _rtld_tls_free_curr(void);
+void _rtld_tls_allocate_curr(void);
+#endif
 __END_PUBLIC_DECLS
 #endif /* __HAVE_TLS_VARIANT_I || __HAVE_TLS_VARIANT_II */
 
