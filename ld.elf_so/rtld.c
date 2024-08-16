@@ -115,6 +115,11 @@ static void    *auxinfo;
  */
 char           *argv_progname;
 char          **environ;
+/* Disable TLS in our copy of libphoenix. */
+/* TODO: investigate why it's needed, after TLS is setup(accessing errno causes call to _tls_get_addr with module = 4096) */
+/*       NetBSD also doesn't enable TLS. */
+/* TODO: check if all potential errno sets/acceses are safe(wrapped inside _rtld_exclusive_enter) */
+int             can_use_tls;
 
 /* FIXME: convert to RWMutex if implemented in libphoenix */
 static handle_t _rtld_mutex;
