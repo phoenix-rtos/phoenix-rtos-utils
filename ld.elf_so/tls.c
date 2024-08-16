@@ -43,13 +43,24 @@ __RCSID("$NetBSD: tls.c,v 1.22 2024/07/23 22:00:00 riastradh Exp $");
  */
 
 #include <sys/param.h>
+#ifdef phoenix
+#include "phoenix-lwp.h"
+#else
 #include <sys/ucontext.h>
 #include <lwp.h>
+#endif
 #include <stdalign.h>
 #include <stddef.h>
 #include <string.h>
 #include "debug.h"
 #include "rtld.h"
+
+
+/* Phoenix doesn't define roundup2 in sys/param.h */
+#ifndef roundup2
+#define	roundup2(x,m)	((((x) - 1) | ((m) - 1)) + 1)
+#endif
+
 
 #if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
 
@@ -69,7 +80,11 @@ static void *_rtld_tls_module_allocate(struct tls_tcb *, size_t);
 #define	TLS_DTV_OFFSET	0
 #endif
 
+#ifdef phoenix
+size_t _rtld_tls_static_space;	/* Static TLS space allocated */
+#else
 static size_t _rtld_tls_static_space;	/* Static TLS space allocated */
+#endif
 static size_t _rtld_tls_static_offset;	/* Next offset for static TLS to use */
 size_t _rtld_tls_dtv_generation = 1;	/* Bumped on each load of obj w/ TLS */
 size_t _rtld_tls_max_index = 1;		/* Max index into up-to-date DTV */
@@ -300,6 +315,27 @@ _rtld_tls_allocate(void)
 
 	return tcb;
 }
+
+#if __phoenix__
+void
+_rtld_tls_free_curr(void) {
+	_rtld_tls_free(__lwp_getprivate_fast());
+}
+
+
+void
+_rtld_tls_allocate_curr(void)
+{
+	struct tls_tcb *tcb;
+
+	tcb = _rtld_tls_allocate_locked();
+#ifdef __HAVE___LWP_SETTCB
+	__lwp_settcb(tcb);
+#else
+	_lwp_setprivate(tcb);
+#endif
+}
+#endif
 
 /*
  * _rtld_tls_free(tcb)
