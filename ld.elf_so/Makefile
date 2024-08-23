@@ -55,3 +55,8 @@ LANGUAGE_EXTENSIONS += %.S
 include $(binary.mk)
 
 LANGUAGE_EXTENSIONS := $(LANGUAGE_EXTENSIONS_OLD)
+
+
+rtld: ld.elf_so librtld_stubs
+rtld-install: ld.elf_so-install librtld_stubs-install
+rtld-clean: ld.elf_so-clean librtld_stubs-clean
