@@ -52,6 +52,17 @@ static inline void *__lwp_getprivate_fast(void)
 	return tcb;
 }
 
+#elif defined(__arm__)
+
+static inline void *__lwp_getprivate_fast(void)
+{
+	void *tcb;
+
+	__asm__ volatile("mrc p15, 0, %0, cr13, cr0, 3" : "=r"(tcb));
+
+	return tcb;
+}
+
 #endif
 
 #endif /*__HAVE___LWP_GETTCB_FAST */
@@ -90,6 +101,7 @@ static inline void _lwp_setprivate(void *prv)
 	/* Update self pointer. */
 	struct tls_tcb *tcb = (struct tls_tcb *)privatePtr;
 	tcb->tcb_self = tcb;
+#endif
 }
 
 #endif /* __HAVE___LWP_SETTCB */
