@@ -27,21 +27,23 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "include/NetBSD/cdefs.h"
+#include "../../include/NetBSD/cdefs.h"
 #ifndef lint
 __RCSID("$NetBSD: find_exidx.c,v 1.4 2014/08/10 23:35:27 matt Exp $");
 #endif /* not lint */
 
-#include "debug.h"
-#include "rtld.h"
+#include "../../debug.h"
+#include "../../rtld.h"
 
 #if defined(__ARM_EABI__) && !defined(__ARM_DWARF_EH__)
+
+typedef unsigned long vaddr_t;
 
 _Unwind_Ptr
 __gnu_Unwind_Find_exidx(_Unwind_Ptr pc, int * pcount)
 {
 	const Obj_Entry *obj;
-	_Unwind_Ptr start = NULL;
+	_Unwind_Ptr start = (_Unwind_Ptr)NULL;
 	int count = 0;
 
 	dbg(("__gnu_Unwind_Find_exidx"));
@@ -72,7 +74,7 @@ __gnu_Unwind_Find_exidx(_Unwind_Ptr pc, int * pcount)
 			    && ph->p_vaddr <= va
 			    && va < ph->p_vaddr + ph->p_memsz) {
 				count = obj->exidx_sz / 8;
-				start = obj->exidx_start;
+				start = (_Unwind_Ptr)obj->exidx_start;
 				break;
 			}
 		}
