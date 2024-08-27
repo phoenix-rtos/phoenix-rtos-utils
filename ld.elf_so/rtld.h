@@ -49,7 +49,11 @@
 #if defined(_RTLD_SOURCE)
 
 #if defined(__ARM_EABI__) && !defined(__ARM_DWARF_EH__)
+#if phoenix
+#include <unwind.h>
+#else
 #include "unwind.h"
+#endif
 #endif
 
 #ifndef	RTLD_DEFAULT_LIBRARY_PATH

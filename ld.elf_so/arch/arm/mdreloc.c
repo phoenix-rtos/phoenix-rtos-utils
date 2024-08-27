@@ -1,6 +1,6 @@
 /*	$NetBSD: mdreloc.c,v 1.48 2024/08/03 21:59:58 riastradh Exp $	*/
 
-#include "include/NetBSD/cdefs.h"
+#include "../../include/NetBSD/cdefs.h"
 #ifndef lint
 __RCSID("$NetBSD: mdreloc.c,v 1.48 2024/08/03 21:59:58 riastradh Exp $");
 #endif /* not lint */
@@ -16,9 +16,10 @@ __RCSID("$NetBSD: mdreloc.c,v 1.48 2024/08/03 21:59:58 riastradh Exp $");
 
 #include <sys/types.h>
 #include <string.h>
+#include <limits.h>
 
-#include "debug.h"
-#include "rtld.h"
+#include "../../debug.h"
+#include "../../rtld.h"
 
 void _rtld_bind_start(void);
 void _rtld_relocate_nonplt_self(Elf_Dyn *, Elf_Addr);
