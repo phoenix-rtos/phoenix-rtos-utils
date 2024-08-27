@@ -49,6 +49,8 @@ ifeq ($(TARGET_SUFF),ia32)
 	include $(addprefix $(LOCAL_DIR), arch/i386/Makefile.inc)
 else ifeq ($(findstring riscv,$(TARGET_SUFF)),riscv)
 	include $(addprefix $(LOCAL_DIR), arch/riscv/Makefile.inc)
+else ifeq ($(findstring arm,$(TARGET_SUFF)),arm)
+	include $(addprefix $(LOCAL_DIR), arch/arm/Makefile.inc)
 endif
 
 LANGUAGE_EXTENSIONS_OLD := $(LANGUAGE_EXTENSIONS)
