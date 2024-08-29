@@ -1,14 +1,28 @@
-# $NetBSD: Makefile.inc,v 1.2 2018/12/27 18:58:14 christos Exp $
+#
+# Makefile for Phoenix-RTOS ld.elf_so/arch
+#
+# Copyright 2024 Phoenix Systems
+#
 
-SRCS+=		rtld_start.S mdreloc.c
+LDSO_ARCH_DIR := $(call my-dir)
+LDSO_ARCH_PREFIX := $(LDSO_ARCH_DIR:$(LOCAL_DIR)%=%)
 
-# XXX Should not be in CPPFLAGS!
-CPPFLAGS+=	-fpic
+LOCAL_SRCS += $(addprefix $(LDSO_ARCH_PREFIX), rtld_start.S mdreloc.c)
 
-.if ${LDELFSO_MACHINE_ARCH} == "riscv64"
-CPPFLAGS+=	-DELFSIZE=64
-.else
-CPPFLAGS+=	-DELFSIZE=32
-.endif
+LOCAL_CFLAGS += $(TARGET_PIC_FLAG)
 
-LDFLAGS+=	-Wl,-e,_rtld_start
+ifeq ($(findstring riscv64,$(TARGET_SUFF)),riscv64)
+LOCAL_CFLAGS +=	-DELFSIZE=64
+else
+LOCAL_CFLAGS +=	-DELFSIZE=32
+endif
+
+LOCAL_LDFLAGS += $(LDFLAGS_PREFIX)-e,_rtld_start
+
+# FIXME: improve tls implementation in Phoenix
+LOCAL_CFLAGS += -DTLS_DTV_OFFSET=0x800
+LOCAL_CFLAGS += -D__HAVE_TLS_VARIANT_I
+LOCAL_CFLAGS += -D__HAVE_COMMON___TLS_GET_ADDR
+
+LOCAL_CFLAGS += -D__HAVE___LWP_GETTCB_FAST
+LOCAL_CFLAGS += -D__HAVE___LWP_SETTCB
