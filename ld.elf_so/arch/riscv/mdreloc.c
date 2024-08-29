@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "include/NetBSD/cdefs.h"
+#include "../../include/NetBSD/cdefs.h"
 #ifndef lint
 __RCSID("$NetBSD: mdreloc.c,v 1.10 2024/07/22 23:11:05 riastradh Exp $");
 #endif /* not lint */
@@ -44,14 +44,15 @@ __RCSID("$NetBSD: mdreloc.c,v 1.10 2024/07/22 23:11:05 riastradh Exp $");
  */
 
 #include <sys/types.h>
-#include <sys/endian.h>
-#include <sys/tls.h>
+#include "../../include/NetBSD/tls.h"
 
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
-#include "debug.h"
-#include "rtld.h"
+#include "../../debug.h"
+#include "../../rtld.h"
+#include "../../phoenix-lwp.h"
 
 void _rtld_bind_start(void);
 void _rtld_relocate_nonplt_self(Elf_Dyn *, Elf_Addr);
@@ -96,6 +97,13 @@ _rtld_relocate_nonplt_self(Elf_Dyn *dynp, Elf_Addr relocbase)
 		    }
 
 		case R_TYPE(NONE):
+		/* Ignore TLS relocations, TLS is not used in rtld. */
+		case R_TYPE(TLS_DTPMOD32):
+		case R_TYPE(TLS_DTPMOD64):
+		case R_TYPE(TLS_DTPREL32):
+		case R_TYPE(TLS_DTPREL64):
+		case R_TYPE(TLS_TPREL32):
+		case R_TYPE(TLS_TPREL64):
 			break;
 
 		default:
