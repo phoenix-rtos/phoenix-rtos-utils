@@ -38,22 +38,23 @@
  *	http://sparc.org/wp-content/uploads/2014/01/SCD.2.4.1.pdf.gz
  */
 
-#include "include/NetBSD/cdefs.h"
+#include "../../include/NetBSD/cdefs.h"
 #ifndef lint
 __RCSID("$NetBSD: mdreloc.c,v 1.60 2024/08/03 21:59:58 riastradh Exp $");
 #endif /* not lint */
 
-#include <machine/elf_support.h>
+#include "../../include/NetBSD/arch/sparc/elf_support.h"
 
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <limits.h>
 
-#include "rtldenv.h"
-#include "debug.h"
-#include "rtld.h"
+#include "../../rtldenv.h"
+#include "../../debug.h"
+#include "../../rtld.h"
 
 /*
  * The following table holds for each relocation type:

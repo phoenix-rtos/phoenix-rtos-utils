@@ -29,16 +29,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <machine/asm.h>
-
 	.section	".text"
 	.align	4
 	.global	_rtld_start
 	.type	_rtld_start,@function
 _rtld_start:
 	mov	0, %fp			/* Erect a fence post for ourselves */
-	mov	%g1, %l1		/* save ps_strings */
-	sub	%sp, 32+8, %sp		/* room for return args and save area */
+	sub	%sp, 32, %sp		/* room for save area */
 
 	sethi	%hi(_GLOBAL_OFFSET_TABLE_-4), %l7
 	call	0f
@@ -58,13 +55,10 @@ _rtld_start:
 	call	_rtld
 	 add	%sp, 96, %o0		/* &argc - 8 */
 
-	ld	[%sp + 96], %g3	/* arg: cleanup */
-	ld	[%sp + 96 + 4], %g2	/* arg: obj */
-	add	%sp, 32+8, %sp		/* restore stack pointer */
+	add	%sp, 32, %sp		/* restore stack pointer */
 
 	jmp	%o0
-	 mov	%l1, %g1		/* restore ps_strings */
-
+	nop
 
 	.section	".text"
 	.align	4
@@ -78,4 +72,3 @@ _rtld_bind_start:	# (obj, reloff)
 
 	jmp	%o0			/* return value == function address */
 	 restore
-

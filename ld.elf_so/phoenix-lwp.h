@@ -63,6 +63,15 @@ static inline void *__lwp_getprivate_fast(void)
 	return tcb;
 }
 
+#elif defined(__sparc__)
+
+static inline void *__lwp_getprivate_fast(void)
+{
+	register void *tcb asm("g7");
+
+	return tcb;
+}
+
 #endif
 
 #endif /*__HAVE___LWP_GETTCB_FAST */

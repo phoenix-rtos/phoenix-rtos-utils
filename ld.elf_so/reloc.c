@@ -273,7 +273,8 @@ _rtld_call_ifunc(Obj_Entry *obj, sigset_t *mask, u_int cur_objgen)
 
 #ifdef RTLD_COMMON_CALL_IFUNC_RELA
 #  ifdef __sparc__
-#  include <machine/elf_support.h>
+/* FIXME: split to sparc and sparc64 include. */
+#  include "include/NetBSD/arch/sparc/elf_support.h"
 #  endif
 
 void
