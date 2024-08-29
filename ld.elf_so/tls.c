@@ -319,7 +319,15 @@ _rtld_tls_allocate(void)
 #if __phoenix__
 void
 _rtld_tls_free_curr(void) {
-	_rtld_tls_free(__lwp_getprivate_fast());
+	struct tls_tcb *tcb;
+
+#ifdef __HAVE___LWP_GETTCB_FAST
+	tcb = __lwp_gettcb_fast();
+#else
+	tcb = __lwp_getprivate_fast();
+#endif
+
+	_rtld_tls_free(tcb);
 }
 
 

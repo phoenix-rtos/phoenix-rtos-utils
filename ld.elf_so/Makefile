@@ -47,6 +47,8 @@ LOCAL_LDLIBS := -lphoenix -lgcc
 
 ifeq ($(TARGET_SUFF),ia32)
 	include $(addprefix $(LOCAL_DIR), arch/i386/Makefile.inc)
+else ifeq ($(findstring riscv,$(TARGET_SUFF)),riscv)
+	include $(addprefix $(LOCAL_DIR), arch/riscv/Makefile.inc)
 endif
 
 LANGUAGE_EXTENSIONS_OLD := $(LANGUAGE_EXTENSIONS)

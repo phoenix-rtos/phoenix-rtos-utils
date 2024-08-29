@@ -9,4 +9,7 @@
 # To resolve a symbol from linker in dynamic binary a weak symbol is required.
 NAME := librtld_stubs
 LOCAL_SRCS := librtld_stubs.c
+
+LOCAL_LDFLAGS := -static-libgcc
+
 include $(shared-lib.mk)
