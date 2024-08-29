@@ -51,6 +51,8 @@ else ifeq ($(findstring riscv,$(TARGET_SUFF)),riscv)
 	include $(addprefix $(LOCAL_DIR), arch/riscv/Makefile.inc)
 else ifeq ($(findstring arm,$(TARGET_SUFF)),arm)
 	include $(addprefix $(LOCAL_DIR), arch/arm/Makefile.inc)
+else ifeq ($(findstring sparc,$(TARGET_SUFF)),sparc)
+	include $(addprefix $(LOCAL_DIR), arch/sparc/Makefile.inc)
 endif
 
 LANGUAGE_EXTENSIONS_OLD := $(LANGUAGE_EXTENSIONS)
