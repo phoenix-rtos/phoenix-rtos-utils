@@ -288,7 +288,7 @@ _rtld_relocate_plt_object(const Obj_Entry *obj, const Elf_Rela *rela,
 	if (__predict_false(def == NULL))
 		return -1;
 	if (__predict_false(def == &_rtld_sym_zero))
-		return -1;
+		return 0;
 
 	if (ELF_ST_TYPE(def->st_info) == STT_GNU_IFUNC) {
 		if (tp == NULL)
