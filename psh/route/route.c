@@ -58,7 +58,7 @@ void psh_routeUsage(void)
 
 static void psh_routeInfo(void)
 {
-	printf("prints the name of current working directory");
+	printf("show and manipulate the IP routing table");
 }
 
 
