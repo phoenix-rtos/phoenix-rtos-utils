@@ -6,4 +6,4 @@
 # Copyright 2019 Phoenix Systems
 #
 
-DEFAULT_COMPONENTS := psh psd psd-old nandtool nandpart metacheck
+DEFAULT_COMPONENTS := psh psd psd-old nandtool nandpart metacheck ldconfig

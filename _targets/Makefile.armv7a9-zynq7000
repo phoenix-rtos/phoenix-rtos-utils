@@ -6,4 +6,4 @@
 # Copyright 2021 Phoenix Systems
 #
 
-DEFAULT_COMPONENTS := psh spitool
+DEFAULT_COMPONENTS := psh spitool ldconfig
