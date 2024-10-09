@@ -35,7 +35,7 @@
 
 static struct {
 	char *symbolic;
-	char *path;
+	char path[PATH_MAX];
 	struct stat st;
 	int rflag;
 	int errors;
@@ -316,11 +316,6 @@ static int psh_chmod(int argc, char **argv)
 		common.u_mask = umask(0);
 	}
 
-	common.path = calloc(1, PATH_MAX);
-	if (common.path == NULL) {
-		return EXIT_FAILURE;
-	}
-
 	while (argc-- > 0) {
 		ret = do_chmod(*argv++);
 		if (ret < 0) {
@@ -332,8 +327,6 @@ static int psh_chmod(int argc, char **argv)
 			/* no break, continue */
 		}
 	}
-
-	free(common.path);
 
 	return exitCode;
 }
