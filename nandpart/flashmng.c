@@ -116,7 +116,7 @@ int flashmng_markClean(const oid_t *oid, const flashsrv_info_t *info, unsigned i
 	} jffs2_cleanmarker = { 0x1985, 0x2003, 8 };
 	unsigned int block, n = 0, end = start + size, npages = info->erasesz / info->writesz;
 	unsigned char *buff;
-	int err;
+	int err = 0;
 
 	buff = malloc(info->oobsz);
 	if (buff == NULL) {
