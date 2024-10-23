@@ -300,7 +300,7 @@ static int psh_sharedMaps(void)
 			continue;
 		}
 
-		printf("\nMap #%d\n", info.maps.map[i].id);
+		printf("\nMap #%d: %s\n", info.maps.map[i].id, info.maps.map[i].name);
 		psh_bytes2humanReadable(buff, sizeof(buff), info.maps.map[i].alloc + info.maps.map[i].free);
 		printf("\tSize:     %s (%zu bytes)\n", buff, info.maps.map[i].alloc + info.maps.map[i].free);
 		psh_bytes2humanReadable(buff, sizeof(buff), info.maps.map[i].alloc);
