@@ -40,6 +40,8 @@
 
 
 #ifdef DEBUG
+#include "rtld.h"
+#include <sys/debug.h>
 
 extern void debug_printf __P((const char *, ...))
     __attribute__((__format__(__printf__, 1, 2)));
@@ -48,7 +50,9 @@ extern int debugFlag;
 # define dbg(a)		debug_printf a
 #else
 # define dbg(a)		((void) 0)
+# define dbg_rtld_dump_loadmap(a)
 #endif
+
 #ifdef RTLD_DEBUG_RELOC
 # define rdbg(a)	debug_printf a
 #else

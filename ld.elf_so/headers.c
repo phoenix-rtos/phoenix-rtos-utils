@@ -90,7 +90,7 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 
 		case DT_REL:
 			obj->rel = (const Elf_Rel *)
-			    (obj->relocbase + dynp->d_un.d_ptr);
+			    rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, dynp->d_un.d_ptr);
 			break;
 
 		case DT_RELSZ:
@@ -111,7 +111,7 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 
 		case DT_RELA:
 			obj->rela = (const Elf_Rela *)
-			    (obj->relocbase + dynp->d_un.d_ptr);
+			    rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, dynp->d_un.d_ptr);
 			break;
 
 		case DT_RELASZ:
@@ -130,7 +130,7 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 
 		case DT_SYMTAB:
 			obj->symtab = (const Elf_Sym *)
-				(obj->relocbase + dynp->d_un.d_ptr);
+				rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, dynp->d_un.d_ptr);
 			break;
 
 		case DT_SYMENT:
@@ -139,7 +139,7 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 
 		case DT_STRTAB:
 			obj->strtab = (const char *)
-			    (obj->relocbase + dynp->d_un.d_ptr);
+			    rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, dynp->d_un.d_ptr);
 			break;
 
 		case DT_STRSZ:
@@ -148,7 +148,7 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 
 		case DT_VERNEED:
 			obj->verneed = (const Elf_Verneed *)
-			    (obj->relocbase + dynp->d_un.d_ptr);
+			    rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, dynp->d_un.d_ptr);
 			break;
 
 		case DT_VERNEEDNUM:
@@ -157,7 +157,7 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 
 		case DT_VERDEF:
 			obj->verdef = (const Elf_Verdef *)
-			    (obj->relocbase + dynp->d_un.d_ptr);
+			    rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, dynp->d_un.d_ptr);
 			break;
 
 		case DT_VERDEFNUM:
@@ -166,14 +166,14 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 
 		case DT_VERSYM:
 			obj->versyms = (const Elf_Versym *)
-			    (obj->relocbase + dynp->d_un.d_ptr);
+			    rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, dynp->d_un.d_ptr);
 			break;
 
 		case DT_HASH:
 			{
 				uint32_t nbuckets, nchains;
 				const Elf_Symindx *hashtab = (const Elf_Symindx *)
-				    (obj->relocbase + dynp->d_un.d_ptr);
+				    rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, dynp->d_un.d_ptr);
 
 				if (hashtab[0] > UINT32_MAX)
 					nbuckets = UINT32_MAX;
@@ -208,7 +208,7 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 				int bloom_size32;
 				bool nmw_power2;
 				const Elf_Symindx *hashtab = (const Elf_Symindx *)
-				    (obj->relocbase + dynp->d_un.d_ptr);
+				    rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, dynp->d_un.d_ptr);
 
 				if (hashtab[0] > UINT32_MAX)
 					nbuckets = UINT32_MAX;
@@ -270,7 +270,7 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 
 		case DT_PLTGOT:
 			obj->pltgot = (Elf_Addr *)
-			    (obj->relocbase + dynp->d_un.d_ptr);
+			    rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, dynp->d_un.d_ptr);
 			break;
 
 		case DT_TEXTREL:
@@ -304,7 +304,7 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 #ifdef HAVE_INITFINI_ARRAY
 		case DT_INIT_ARRAY:
 			obj->init_array =
-			    (fptr_t *)(obj->relocbase + dynp->d_un.d_ptr);
+			    (fptr_t *)rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, dynp->d_un.d_ptr);
 			dbg(("headers: DT_INIT_ARRAY at %p",
 			    obj->init_array));
 			break;
@@ -325,7 +325,7 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 #ifdef HAVE_INITFINI_ARRAY
 		case DT_FINI_ARRAY:
 			obj->fini_array =
-			    (fptr_t *)(obj->relocbase + dynp->d_un.d_ptr);
+			    (fptr_t *)rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, dynp->d_un.d_ptr);
 			dbg(("headers: DT_FINI_ARRAY at %p",
 			    obj->fini_array));
 			break;
@@ -373,11 +373,11 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 #ifdef __powerpc__
 #ifdef _LP64
 		case DT_PPC64_GLINK:
-			obj->glink = (Elf_Addr)(uintptr_t)obj->relocbase + dynp->d_un.d_ptr;
+			obj->glink = (Elf_Addr)(uintptr_t)rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, dynp->d_un.d_ptr);
 			break;
 #else
 		case DT_PPC_GOT:
-			obj->gotptr = (Elf_Addr *)(obj->relocbase + dynp->d_un.d_ptr);
+			obj->gotptr = (Elf_Addr *)rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, dynp->d_un.d_ptr);
 			break;
 #endif
 #endif
@@ -397,8 +397,8 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 	obj->rellim = (const Elf_Rel *)((const uint8_t *)obj->rel + relsz);
 	obj->relalim = (const Elf_Rela *)((const uint8_t *)obj->rela + relasz);
 	if (use_pltrel) {
-		obj->pltrel = (const Elf_Rel *)(obj->relocbase + pltrel);
-		obj->pltrellim = (const Elf_Rel *)(obj->relocbase + pltrel + pltrelsz);
+		obj->pltrel = (const Elf_Rel *)rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, pltrel);
+		obj->pltrellim = (const Elf_Rel *)(rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, pltrel) + pltrelsz);
 		obj->pltrelalim = 0;
 		/* On PPC and SPARC, at least, REL(A)SZ may include JMPREL.
 		   Trim rel(a)lim to save time later. */
@@ -407,9 +407,9 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 		    obj->rellim <= obj->pltrellim)
 			obj->rellim = obj->pltrel;
 	} else if (use_pltrela) {
-		obj->pltrela = (const Elf_Rela *)(obj->relocbase + pltrel);
+		obj->pltrela = (const Elf_Rela *)rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, pltrel);
 		obj->pltrellim = 0;
-		obj->pltrelalim = (const Elf_Rela *)(obj->relocbase + pltrel + pltrelsz);
+		obj->pltrelalim = (const Elf_Rela *)(rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, pltrel) + pltrelsz);
 		/* On PPC and SPARC, at least, REL(A)SZ may include JMPREL.
 		   Trim rel(a)lim to save time later. */
 		if (obj->relalim && obj->pltrela &&
@@ -448,9 +448,9 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 		    _rtld_function_descriptor_alloc(obj, NULL, fini);
 #else
 	if (init != 0)
-		obj->init = (void (*)(void)) (obj->relocbase + init);
+		obj->init = (void (*)(void)) rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, init);
 	if (fini != 0)
-		obj->fini = (void (*)(void)) (obj->relocbase + fini);
+		obj->fini = (void (*)(void)) rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, fini);
 #endif
 #endif
 
@@ -472,14 +472,13 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
  * returns an Obj_Entry structure.
  */
 Obj_Entry *
-_rtld_digest_phdr(const Elf_Phdr *phdr, int phnum, caddr_t entry)
+_rtld_digest_phdr(const Elf_Phdr *phdr, int phnum, caddr_t entry, const struct elf_fdpic_loadmap *loadmap)
 {
 	Obj_Entry      *obj;
 	const Elf_Phdr *phlimit = phdr + phnum;
 	const Elf_Phdr *ph;
-	bool            first_seg = true;
 	Elf_Addr        vaddr;
-	size_t          size;
+	void *relocbase = NULL;
 
 	obj = _rtld_obj_new();
 
@@ -487,16 +486,39 @@ _rtld_digest_phdr(const Elf_Phdr *phdr, int phnum, caddr_t entry)
 		if (ph->p_type != PT_PHDR)
 			continue;
 
-		obj->relocbase = (caddr_t)((uintptr_t)phdr - (uintptr_t)ph->p_vaddr);
 		obj->phdr = phdr; /* Equivalent to relocbase + p_vaddr. */
 		obj->phsize = ph->p_memsz;
-		dbg(("headers: phdr %p (%p) phsize %zu relocbase %p",
-		    obj->phdr, phdr, obj->phsize, obj->relocbase));
+		if (loadmap == NULL) {
+			relocbase = (caddr_t)((uintptr_t)phdr - (uintptr_t)ph->p_vaddr);
+		} else {
+			memcpy(&obj->loadmap, loadmap, sizeof(loadmap) + (loadmap->nsegs * sizeof(*loadmap->segs)));
+		}
 		break;
 	}
 
+	if (loadmap == NULL) {
+		obj->loadmap.version = 0;
+		obj->loadmap.nsegs = 0;
+		/* Assume one relocbase for all segments. */
+		for (ph = phdr; ph < phlimit; ++ph) {
+			if (ph->p_type != PT_LOAD)
+				continue;
+
+			assert(obj->loadmap.nsegs < sizeof(obj->loadmap.segs) / sizeof(obj->loadmap.segs[0]));
+
+			obj->loadmap.segs[obj->loadmap.nsegs].addr = (Elf_Addr)relocbase + ph->p_vaddr;
+			obj->loadmap.segs[obj->loadmap.nsegs].p_vaddr = ph->p_vaddr;
+			obj->loadmap.segs[obj->loadmap.nsegs].p_memsz = ph->p_memsz;
+			obj->loadmap.nsegs++;
+		}
+	}
+
+	dbg(("headers: phdr %p (%p) phsize %zu loadmap %p",
+	    obj->phdr, phdr, obj->phsize, &obj->loadmap));
+	dbg_rtld_dump_loadmap((const struct elf_fdpic_loadmap *)&obj->loadmap);
+
 	for (ph = phdr; ph < phlimit; ++ph) {
-		vaddr = (Elf_Addr)(uintptr_t)(obj->relocbase + ph->p_vaddr);
+		vaddr = (Elf_Addr)(uintptr_t)rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, ph->p_vaddr);
 		switch (ph->p_type) {
 
 		case PT_INTERP:
@@ -507,16 +529,6 @@ _rtld_digest_phdr(const Elf_Phdr *phdr, int phnum, caddr_t entry)
 			break;
 
 		case PT_LOAD:
-			size = round_up(vaddr + ph->p_memsz) - obj->vaddrbase;
-			if (first_seg) {	/* First load segment */
-				obj->vaddrbase = round_down(vaddr);
-				obj->mapbase = (caddr_t)(uintptr_t)obj->vaddrbase;
-				obj->textsize = size;
-				obj->mapsize = size;
-				first_seg = false;
-			} else {		/* Last load segment */
-				obj->mapsize = max(obj->mapsize, size);
-			}
 			dbg(("headers: %s %p phsize %" PRImemsz,
 			    "PT_LOAD", (void *)(uintptr_t)vaddr,
 			     ph->p_memsz));
@@ -532,7 +544,7 @@ _rtld_digest_phdr(const Elf_Phdr *phdr, int phnum, caddr_t entry)
 #ifdef GNU_RELRO
 		case PT_GNU_RELRO:
 			/* rounding happens later. */
-			obj->relro_page = obj->relocbase + ph->p_vaddr;
+			obj->relro_page = rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, ph->p_vaddr);
 			obj->relro_size = ph->p_memsz;
 			dbg(("headers: %s %p phsize %" PRImemsz,
 			    "PT_GNU_RELRO", (void *)(uintptr_t)vaddr,
@@ -546,7 +558,7 @@ _rtld_digest_phdr(const Elf_Phdr *phdr, int phnum, caddr_t entry)
 			obj->tlssize = ph->p_memsz;
 			obj->tlsalign = ph->p_align;
 			obj->tlsinitsize = ph->p_filesz;
-			obj->tlsinit = (void *)(obj->relocbase +
+			obj->tlsinit = (void *)rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap,
 			    (uintptr_t)ph->p_vaddr);
 			dbg(("headers: %s %p phsize %" PRImemsz,
 			    "PT_TLS", (void *)(uintptr_t)vaddr,

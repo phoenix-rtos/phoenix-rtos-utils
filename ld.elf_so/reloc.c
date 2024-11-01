@@ -65,7 +65,7 @@ static int _rtld_do_copy_relocation(const Obj_Entry *, const Elf_Rela *);
 static int
 _rtld_do_copy_relocation(const Obj_Entry *dstobj, const Elf_Rela *rela)
 {
-	void           *dstaddr = (void *)(dstobj->relocbase + rela->r_offset);
+	void           *dstaddr = (void *)rtld_relocate((struct elf_fdpic_loadmap *)&dstobj->loadmap, rela->r_offset);
 	const Elf_Sym  *dstsym = dstobj->symtab + ELF_R_SYM(rela->r_info);
 	const char     *name = dstobj->strtab + dstsym->st_name;
 	Elf_Hash        hash;
@@ -105,7 +105,7 @@ _rtld_do_copy_relocation(const Obj_Entry *dstobj, const Elf_Rela *rela)
 		    " relocation in %s", name, dstobj->path);
 		return (-1);
 	}
-	srcaddr = (const void *)(srcobj->relocbase + srcsym->st_value);
+	srcaddr = (const void *)rtld_relocate((struct elf_fdpic_loadmap *)&srcobj->loadmap, srcsym->st_value);
 	rdbg(("COPY %s %s %s --> src=%p dst=%p size %ld",
 	    dstobj->path, srcobj->path, name, srcaddr,
 	    (void *)dstaddr, (long)size));
@@ -198,7 +198,8 @@ _rtld_relocate_objects(Obj_Entry *first, bool bind_now)
 			 * There are relocations to the write-protected text
 			 * segment.
 			 */
-			if (mprotect(obj->mapbase, obj->textsize,
+			if (mprotect((void *)round_down(obj->loadmap.segs[0].addr),
+				round_up(obj->loadmap.segs[0].addr + obj->loadmap.segs[0].p_memsz) - round_down(obj->loadmap.segs[0].addr),
 				PROT_READ | PROT_WRITE) == -1) {
 				_rtld_error("%s: Cannot write-enable text "
 				    "segment: %s", obj->path, xstrerror(errno));
@@ -209,7 +210,8 @@ _rtld_relocate_objects(Obj_Entry *first, bool bind_now)
 		if (_rtld_relocate_nonplt_objects(obj) < 0)
 			ok = 0;
 		if (obj->textrel) {	/* Re-protected the text segment. */
-			if (mprotect(obj->mapbase, obj->textsize,
+			if (mprotect((void *)round_down(obj->loadmap.segs[0].addr),
+				     round_up(obj->loadmap.segs[0].addr +obj->loadmap.segs[0].p_memsz) - round_down(obj->loadmap.segs[0].addr),
 				     PROT_READ | PROT_EXEC) == -1) {
 				_rtld_error("%s: Cannot write-protect text "
 				    "segment: %s", obj->path, xstrerror(errno));
@@ -246,7 +248,7 @@ _rtld_resolve_ifunc(const Obj_Entry *obj, const Elf_Sym *def)
 
 	_rtld_shared_exit();
 	target = _rtld_resolve_ifunc2(obj,
-	    (Elf_Addr)obj->relocbase + def->st_value);
+	    (Elf_Addr)rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, def->st_value));
 	_rtld_shared_enter();
 	return target;
 }
@@ -297,11 +299,11 @@ _rtld_call_ifunc(Obj_Entry *obj, sigset_t *mask, u_int cur_objgen)
 		if (ELF_R_TYPE(rela->r_info) != PLT_IRELATIVE)
 			continue;
 #ifdef __sparc__
-		where2 = (Elf_Word *)(obj->relocbase + rela->r_offset);
+		where2 = (Elf_Word *)rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, rela->r_offset);
 #else
-		where = (Elf_Addr *)(obj->relocbase + rela->r_offset);
+		where = (Elf_Addr *)rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, rela->r_offset);
 #endif
-		target = (Elf_Addr)(obj->relocbase + rela->r_addend);
+		target = (Elf_Addr)rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, rela->r_addend);
 		_rtld_exclusive_exit(mask);
 		target = _rtld_resolve_ifunc2(obj, target);
 		_rtld_exclusive_enter(mask);
@@ -317,8 +319,8 @@ _rtld_call_ifunc(Obj_Entry *obj, sigset_t *mask, u_int cur_objgen)
 		rela = obj->relalim - obj->ifunc_remaining_nonplt--;
 		if (ELF_R_TYPE(rela->r_info) != R_TYPE(IRELATIVE))
 			continue;
-		where = (Elf_Addr *)(obj->relocbase + rela->r_offset);
-		target = (Elf_Addr)(obj->relocbase + rela->r_addend);
+		where = (Elf_Addr *)rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, rela->r_offset);
+		target = (Elf_Addr)rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, rela->r_addend);
 		_rtld_exclusive_exit(mask);
 		target = _rtld_resolve_ifunc2(obj, target);
 		_rtld_exclusive_enter(mask);
@@ -339,7 +341,7 @@ _rtld_call_ifunc(Obj_Entry *obj, sigset_t *mask, u_int cur_objgen)
 		rel = obj->pltrellim - obj->ifunc_remaining;
 		--obj->ifunc_remaining;
 		if (ELF_R_TYPE(rel->r_info) == R_TYPE(IRELATIVE)) {
-			where = (Elf_Addr *)(obj->relocbase + rel->r_offset);
+			where = (Elf_Addr *)rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, rel->r_offset);
 			_rtld_exclusive_exit(mask);
 			target = _rtld_resolve_ifunc2(obj, *where);
 			_rtld_exclusive_enter(mask);
@@ -351,7 +353,7 @@ _rtld_call_ifunc(Obj_Entry *obj, sigset_t *mask, u_int cur_objgen)
 	while (obj->ifunc_remaining_nonplt > 0 && _rtld_objgen == cur_objgen) {
 		rel = obj->rellim - obj->ifunc_remaining_nonplt--;
 		if (ELF_R_TYPE(rel->r_info) == R_TYPE(IRELATIVE)) {
-			where = (Elf_Addr *)(obj->relocbase + rel->r_offset);
+			where = (Elf_Addr *)rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, rel->r_offset);
 			_rtld_exclusive_exit(mask);
 			target = _rtld_resolve_ifunc2(obj, *where);
 			_rtld_exclusive_enter(mask);

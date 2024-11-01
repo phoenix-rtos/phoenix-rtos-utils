@@ -53,6 +53,7 @@ __RCSID("$NetBSD: search.c,v 1.27 2020/04/22 23:54:32 joerg Exp $");
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <phoenix/sysinfo.h>
 
 #include "debug.h"
 #include "rtld.h"
@@ -123,6 +124,9 @@ _rtld_load_library(const char *name, const Obj_Entry *refobj, int flags)
 	const char *pathname;
 	int namelen;
 	Obj_Entry *obj;
+	syspageprog_t sysprog;
+	int syspagesz;
+	int freepathname = 0;
 
 	if (strchr(name, '/') != NULL) {	/* Hard coded pathname */
 		if (name[0] != '/' && !_rtld_trust) {
@@ -160,6 +164,22 @@ _rtld_load_library(const char *name, const Obj_Entry *refobj, int flags)
 		    sp->sp_path, sp->sp_pathlen, flags)) != NULL)
 			goto pathfound;
 
+	/* Check syspage. */
+	syspagesz = syspageprog(NULL, -1);
+	if (syspagesz < 0) {
+		_rtld_error("Cannot get syspage size");
+		return NULL;
+	}
+	for(syspagesz = syspagesz -1; syspagesz >= 0; syspagesz--) {
+		if (syspageprog(&sysprog, syspagesz) < 0) {
+			_rtld_error("Cannot get syspage prog: %d", syspagesz);
+			return NULL;
+		}
+		if (strcmp(sysprog.name, name) == 0) {
+			goto found_syspage;
+		}
+	}
+
 	_rtld_error("%s: Shared object \"%s\" not found",
 	    refobj ? refobj->path : argv_progname, name);
 	return NULL;
@@ -184,8 +204,25 @@ pathfound:
 		(void)dlerror();
 	return obj;
 
+found_syspage:
+	pathname = xmalloc(strlen("syspage:") + strlen(name) + 1);
+	if (pathname == NULL) {
+		_rtld_error("Could not allocate memory.");
+		return NULL;
+	}
+	strcpy(pathname, "syspage:");
+	strcat(pathname, name);
+
+	if (tmperrorp)
+		_rtld_error("%s", tmperror);
+	else
+		(void)dlerror();
+
+	freepathname = 1;
 found:
 	obj = _rtld_load_object(pathname, flags);
+	if (freepathname)
+		xfree(pathname);
 	if (obj == OBJ_ERR)
 		return NULL;
 

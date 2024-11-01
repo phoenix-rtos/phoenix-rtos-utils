@@ -8,11 +8,22 @@
 
 #define R_DEBUG_VERSION	1 /* SVR4 Protocol version */
 
+#ifdef __FDPIC__
+struct elf_fdpic_loadaddr {
+    struct elf_fdpic_loadmap *map;
+    void *got_value;
+};
+#endif
+
 typedef struct link_map {
+#ifdef __FDPIC__
+	struct elf_fdpic_loadaddr l_addr;
+#else
 	caddr_t		 l_addr;	/* Base Address of library */
 #ifdef __mips__
 	caddr_t		 l_offs;	/* Load Offset of library */
 #endif
+#endif /* __FDPIC__ */
 	const char	*l_name;	/* Absolute Path to Library */
 	void		*l_ld;		/* Pointer to .dynamic in memory */
 	struct link_map	*l_next;	/* linked list of mapped libs */
@@ -50,7 +61,11 @@ struct r_debug {
 
 struct dl_phdr_info
 {
+#ifdef __FDPIC__
+	struct elf_fdpic_loadaddr dlpi_addr;
+#else
 	Elf_Addr dlpi_addr;			/* module relocation base */
+#endif
 	const char *dlpi_name;			/* module name */
 	const Elf_Phdr *dlpi_phdr;		/* pointer to module's phdr */
 	Elf_Half dlpi_phnum;			/* number of entries in phdr */

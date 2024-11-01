@@ -53,6 +53,8 @@ ENTRY(_rtld_start)
 	mv	a1, s2
 	call	_C_LABEL(_rtld_relocate_nonplt_self)
 
+	mv	a3, zero			# loadmapProg
+	mv	a2, zero			# loadmap
 	mv	a1, s2			# relocbase
 	mv	a0, sp	# sp
 	call	_C_LABEL(_rtld)		# a0 = _rtld(sp, relocbase)

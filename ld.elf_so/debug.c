@@ -44,6 +44,7 @@ __RCSID("$NetBSD: debug.c,v 1.6 2004/10/22 05:39:56 skrll Exp $");
 
 #include "debug.h"
 #include "rtldenv.h"
+#include "rtld.h"
 
 #ifdef DEBUG
 int debugFlag = 0;
@@ -59,6 +60,14 @@ debug_printf(const char *format, ...)
 		xvprintf(format, ap);
 		va_end(ap);
 		xprintf("\n");
+	}
+}
+
+void
+dbg_rtld_dump_loadmap(const struct elf_fdpic_loadmap *loadmap) {
+	dbg(("Loadmap %p\n", loadmap));
+	for (Elf_Half i = 0; i < loadmap->nsegs; i++) {
+		dbg(("\t%p %p %p\n", (void *)loadmap->segs[i].addr, (void *)loadmap->segs[i].p_vaddr, (void *)loadmap->segs[i].p_memsz));
 	}
 }
 #endif

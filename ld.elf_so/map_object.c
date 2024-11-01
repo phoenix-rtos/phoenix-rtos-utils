@@ -46,9 +46,61 @@ __RCSID("$NetBSD: map_object.c,v 1.69 2024/08/03 21:59:57 riastradh Exp $");
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <sys/minmax.h>
+#include <phoenix/sysinfo.h>
 
 #include "debug.h"
 #include "rtld.h"
+
+void *
+rtld_relocate(const struct elf_fdpic_loadmap *loadmap, Elf_Addr addr)
+{
+	Elf_Half i;
+
+	if (addr == ~(Elf_Addr)0) {
+		return NULL;
+	}
+
+	/* Relocate relative to last segment as a fallback. */
+	/* It is required eg on RISC-V where gp symbol is set to .data + 0x800 which may not fit into data segment. */
+	for (i = 0; i < (loadmap->nsegs - 1); ++i) {
+		if ((loadmap->segs[i].p_vaddr <= addr) && ((loadmap->segs[i].p_vaddr + loadmap->segs[i].p_memsz) > addr)) {
+			break;
+		}
+	}
+
+	return (void *)(addr - loadmap->segs[i].p_vaddr + loadmap->segs[i].addr);
+}
+
+void
+rtld_unmap(const struct elf_fdpic_loadmap *loadmap)
+{
+#ifdef NOMMU
+	/* Unmapping region mapped with MAP_PHYSMEM breaks the memory maps on NOMMU. */
+	/* TODO: mark regions that can be munmaped and those that cannot. */
+	(void)loadmap;
+#else
+	Elf_Half i;
+	Elf_Addr start;
+	Elf_Addr end;
+
+	for (i = 0; i < loadmap->nsegs; ++i) {
+		start = round_down(loadmap->segs[i].addr);
+		end = round_up(loadmap->segs[i].addr + loadmap->segs[i].p_memsz);
+		if (end - start != 0) {
+			munmap((void *)start, end - start);
+		}
+	}
+#endif
+}
+
+const char *
+rtld_syspage_libname(const char *pathname)
+{
+	if (strncmp(pathname, "syspage:", strlen("syspage:")) == 0) {
+		return pathname + strlen("syspage:");
+	}
+	return NULL;
+}
 
 static int convert_prot(int);	/* Elf flags -> mmap protection */
 static int convert_flags(int);  /* Elf flags -> mmap flags */
@@ -63,7 +115,7 @@ static int convert_flags(int);  /* Elf flags -> mmap flags */
  * for the shared object.  Returns NULL on failure.
  */
 Obj_Entry *
-_rtld_map_object(const char *path, int fd, const struct stat *sb)
+_rtld_map_object(const char *path, int fd, const struct stat *sb, const syspageprog_t *sysprog)
 {
 	Obj_Entry	*obj;
 	Elf_Ehdr	*ehdr;
@@ -74,17 +126,21 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 	Elf_Phdr	*phlimit;
 	Elf_Phdr       **segs = NULL;
 	int		 nsegs;
+#ifdef __FDPIC__
+	caddr_t		 data_addr_copy;
+#else
 	caddr_t		 mapbase = MAP_FAILED;
 	size_t		 mapsize = 0;
-	int		 mapflags;
-	Elf_Addr	 alignment_overmap;
-	Elf_Addr	 front_alignment_overmap;
+	caddr_t		 unmapbase;
+	void		*base_addr;
 	Elf_Addr	 base_alignment;
 	Elf_Addr	 base_vaddr;
 	Elf_Addr	 base_vlimit;
-	Elf_Addr	 text_vlimit;
+	Elf_Addr	 alignment_overmap;
+	Elf_Addr	 front_alignment_overmap;
+	int		 mapflags;
+#endif
 	Elf_Addr	 text_end;
-	void		*base_addr;
 	Elf_Off		 data_offset;
 	Elf_Addr	 data_vaddr;
 	Elf_Addr	 data_vlimit;
@@ -113,8 +169,11 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 #ifdef notyet
 	int		 stack_flags;
 #endif
+	int      base_flags = (sysprog == NULL) ? MAP_NONE : (MAP_ANONYMOUS | MAP_PHYSMEM);
+	off_t      base_off = (sysprog == NULL) ? 0 : sysprog->addr;
 
-	if (sb != NULL && sb->st_size < (off_t)sizeof (Elf_Ehdr)) {
+	if ((sb != NULL && sb->st_size < (off_t)sizeof (Elf_Ehdr)) ||
+			(sysprog != NULL && sysprog->size < sizeof (Elf_Ehdr))) {
 		_rtld_error("%s: not ELF file (too short)", path);
 		return NULL;
 	}
@@ -127,8 +186,11 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 		obj->ino = sb->st_ino;
 	}
 
-	ehdr = mmap(NULL, _rtld_pagesz, PROT_READ, MAP_SHARED, fd,
-	    (off_t)0);
+	obj->loadmap.nsegs = 0;
+	obj->loadmap.version = 0;
+
+	ehdr = mmap(NULL, _rtld_pagesz, PROT_READ, MAP_SHARED | base_flags, fd,
+	    base_off);
 	obj->ehdr = ehdr;
 	if (ehdr == MAP_FAILED) {
 		_rtld_error("%s: read error: %s", path, xstrerror(errno));
@@ -208,12 +270,14 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 
 		case PT_LOAD:
 			segs[++nsegs] = phdr;
+#ifndef NOMMU
 			if ((segs[nsegs]->p_align & (_rtld_pagesz - 1)) != 0) {
 				_rtld_error(
 				    "%s: PT_LOAD segment %d not page-aligned",
 				    path, nsegs);
 				goto error;
 			}
+#endif
 			if ((segs[nsegs]->p_flags & PF_X) == PF_X) {
 				text_end = max(text_end,
 				    round_up(segs[nsegs]->p_vaddr +
@@ -289,10 +353,6 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 	 * and unmap the gaps left by padding to alignment.
 	 */
 
-	base_alignment = segs[0]->p_align;
-	base_vaddr = round_down(segs[0]->p_vaddr);
-	base_vlimit = round_up(segs[nsegs]->p_vaddr + segs[nsegs]->p_memsz);
-	text_vlimit = round_up(segs[0]->p_vaddr + segs[0]->p_memsz);
 	data_offset = round_down(segs[nsegs]->p_offset);
 	data_vaddr = round_down(segs[nsegs]->p_vaddr);
 	data_vlimit = round_up(segs[nsegs]->p_vaddr + segs[nsegs]->p_filesz);
@@ -301,8 +361,6 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 	clear_vaddr = segs[nsegs]->p_vaddr + segs[nsegs]->p_filesz;
 #endif
 
-	obj->textsize = text_vlimit - base_vaddr;
-	obj->vaddrbase = base_vaddr;
 	obj->isdynamic = ehdr->e_type == ET_DYN;
 
 #if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
@@ -318,6 +376,11 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 		    obj->tlsinitsize));
 	}
 #endif
+
+#ifndef __FDPIC__
+	base_alignment = segs[0]->p_align;
+	base_vaddr = round_down(segs[0]->p_vaddr);
+	base_vlimit = round_up(segs[nsegs]->p_vaddr + segs[nsegs]->p_memsz);
 
 	/*
 	 * Calculate log2 of the base section alignment.
@@ -370,33 +433,73 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 		goto error;
 	}
 #endif
+#endif /* __FDPIC__ */
 
 	obj->phdr_loaded = false;
+	assert(nsegs < sizeof(obj->loadmap.segs) / sizeof(obj->loadmap.segs[0]));
 	for (i = 0; i <= nsegs; i++) {
+		obj->loadmap.segs[obj->loadmap.nsegs].addr = (Elf_Addr)NULL;
+		obj->loadmap.segs[obj->loadmap.nsegs].p_vaddr = segs[i]->p_vaddr;
+		obj->loadmap.segs[obj->loadmap.nsegs].p_memsz = segs[i]->p_memsz;
+
 		/* Overlay the segment onto the proper region. */
-		data_offset = round_down(segs[i]->p_offset);
+		data_offset = round_down(segs[i]->p_offset) + base_off;
 		data_vaddr = round_down(segs[i]->p_vaddr);
 		data_vlimit = round_up(segs[i]->p_vaddr
 		    + segs[i]->p_filesz);
-		data_addr = mapbase + (data_vaddr - base_vaddr);
 		data_prot = convert_prot(segs[i]->p_flags);
-		data_flags = convert_flags(segs[i]->p_flags) | MAP_FIXED;
-		if (data_vlimit != data_vaddr &&
-		    mmap(data_addr, data_vlimit - data_vaddr, data_prot,
-		    data_flags, fd, data_offset) == MAP_FAILED) {
-			_rtld_error("%s: mmap of data failed: %s", path,
-			    xstrerror(errno));
-			goto error;
+		data_flags = convert_flags(segs[i]->p_flags);
+#ifdef __FDPIC__
+		data_addr = NULL;
+#else
+		data_addr = mapbase + (data_vaddr - base_vaddr);
+		data_flags |= MAP_FIXED;
+#endif
+		if (data_vlimit != data_vaddr) {
+			data_addr = mmap(data_addr, data_vlimit - data_vaddr, data_prot,
+		    data_flags | base_flags, fd, data_offset);
+			if (data_addr == MAP_FAILED) {
+				_rtld_error("%s: mmap of data failed: %s", path,
+					xstrerror(errno));
+				goto error;
+			}
+#ifdef NOMMU
+			/* Shared memory is not fully functional in Phoenix on NOMMU. */
+			/* Only syspage progams are currently supported and mmap on syspage doesn't create a copy. */
+			/* Create copy of writeable segments by hand. */
+			if ((data_prot & PROT_WRITE) != 0) {
+				/* BSS has to be mapped at once, otherwise another process may occupy the space after current region. */
+				bss_vlimit = round_up(segs[i]->p_vaddr + segs[i]->p_memsz);
+				data_addr_copy = mmap(NULL, bss_vlimit - data_vaddr, data_prot, data_flags | MAP_ANONYMOUS, -1, 0);
+				if (data_addr_copy == MAP_FAILED) {
+					_rtld_error("%s: mmap of data copy failed: %s", path,
+						xstrerror(errno));
+					goto error_bss;
+				}
+
+				memcpy(data_addr_copy + (segs[i]->p_vaddr & (_rtld_pagesz - 1)), data_addr + (segs[i]->p_offset & (_rtld_pagesz - 1)), segs[i]->p_filesz);
+				/* BSS */
+				memset(data_addr_copy + (segs[i]->p_vaddr & (_rtld_pagesz - 1)) + segs[i]->p_filesz, 0, segs[i]->p_memsz - segs[i]->p_filesz);
+
+				/* munmap on memory mapped with MAP_PHYSMEM, doesn't work. */
+				if ((base_flags & MAP_PHYSMEM) == 0)
+					munmap(data_addr, data_vlimit - data_vaddr);
+
+				data_addr = data_addr_copy;
+			}
+#endif
+			data_addr += (segs[i]->p_vaddr & (_rtld_pagesz - 1));
+			obj->loadmap.segs[obj->loadmap.nsegs].addr = (Elf_Addr)data_addr;
 		}
 
+#ifndef NOMMU
 		/* Do BSS setup */
 		if (segs[i]->p_filesz != segs[i]->p_memsz) {
 #ifdef RTLD_LOADER
 			/* Clear any BSS in the last page of the segment. */
 			clear_vaddr = segs[i]->p_vaddr + segs[i]->p_filesz;
-			clear_addr = mapbase + (clear_vaddr - base_vaddr);
-			clear_page = mapbase + (round_down(clear_vaddr)
-			    - base_vaddr);
+			clear_addr = data_addr + segs[i]->p_filesz;
+			clear_page = (void *)round_down((uintptr_t)clear_addr);
 
 			if ((nclear = data_vlimit - clear_vaddr) > 0) {
 				/*
@@ -408,7 +511,7 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 				     data_prot|PROT_WRITE)) {
 					_rtld_error("%s: mprotect failed: %s",
 					    path, xstrerror(errno));
-					goto error;
+					goto error_bss;
 				}
 
 				memset(clear_addr, 0, nclear);
@@ -424,19 +527,36 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 			bss_vaddr = data_vlimit;
 			bss_vlimit = round_up(segs[i]->p_vaddr +
 			    segs[i]->p_memsz);
-			bss_addr = mapbase + (bss_vaddr - base_vaddr);
 			if (bss_vlimit > bss_vaddr) {
 				/* There is something to do */
-				if (mmap(bss_addr, bss_vlimit - bss_vaddr,
-				    data_prot, data_flags | MAP_ANON, -1, 0)
-				    == MAP_FAILED) {
+
+				/* Special case for FDPIC BSS only. */
+				if (data_addr != NULL) {
+					bss_addr = (caddr_t)round_down((Elf_Addr)data_addr) + (data_vlimit - data_vaddr);
+					data_flags |= MAP_FIXED;
+				} else {
+					bss_addr = NULL;
+				}
+				bss_addr = mmap(bss_addr, bss_vlimit - bss_vaddr,
+				    data_prot, data_flags | MAP_ANON, -1, 0);
+				if (bss_addr == MAP_FAILED) {
 					_rtld_error(
 					    "%s: mmap of bss failed: %s",
 					    path, xstrerror(errno));
-					goto error;
+					goto error_bss;
 				}
+				if (obj->loadmap.segs[obj->loadmap.nsegs].addr == (Elf_Addr)NULL) {
+					obj->loadmap.segs[obj->loadmap.nsegs].addr = (Elf_Addr)bss_addr + (segs[i]->p_vaddr & (_rtld_pagesz - 1));
+				}
+#ifdef phoenix
+				/* On phoenix pages from MAP_ANON are not zero. */
+				/* NOTE: this assumes that BSS is in WRITEABLE memory. */
+				memset(bss_addr, 0, bss_vlimit - bss_vaddr);
+#endif
 			}
 		}
+#endif
+		obj->loadmap.nsegs++;
 
 		if (phdr_vaddr != EA_UNDEF &&
 		    segs[i]->p_vaddr <= phdr_vaddr &&
@@ -450,6 +570,7 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 			obj->phdr_loaded = true;
 		}
 	}
+	assert(obj->loadmap.nsegs != 0);
 	if (obj->phdr_loaded) {
 		obj->phdr = (void *)(uintptr_t)phdr_vaddr;
 		obj->phsize = phdr_memsz;
@@ -466,43 +587,65 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 
 #if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
 	if (phtls != NULL) {
-		obj->tlsinit = mapbase + tls_vaddr;
-		dbg(("%s: tls init = %p + %"PRImemsz" = %p", obj->path,
-		    mapbase, tls_vaddr, obj->tlsinit));
+		obj->tlsinit = rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, tls_vaddr);
+		dbg(("%s: tls init = %"PRImemsz" = %p", obj->path,
+		    tls_vaddr, obj->tlsinit));
 	}
 #endif
 
-	obj->mapbase = mapbase;
-	obj->mapsize = mapsize;
-	obj->relocbase = mapbase - base_vaddr;
+#ifndef __FDPIC__
+	unmapbase = mapbase;
+	for (i = 0; i < obj->loadmap.nsegs; i++) {
+		if (unmapbase != (void *)round_down(obj->loadmap.segs[i].addr)) {
+			munmap(unmapbase, round_down(obj->loadmap.segs[i].addr) - (Elf_Addr)unmapbase);
+		}
+		unmapbase = (void *)round_up(obj->loadmap.segs[i].addr + obj->loadmap.segs[i].p_memsz);
+	}
+	if (unmapbase != (mapbase + mapsize)) {
+		munmap(unmapbase, (Elf_Addr)(mapbase + mapsize) - (Elf_Addr)unmapbase);
+	}
+#endif
 
 #ifdef GNU_RELRO
 	/* rounding happens later. */
-	obj->relro_page = obj->relocbase + relro_page;
+	obj->relro_page = rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, relro_page);
 	obj->relro_size = relro_size;
 #endif
 
 	if (obj->dynamic)
-		obj->dynamic = (void *)(obj->relocbase + (Elf_Addr)(uintptr_t)obj->dynamic);
+		obj->dynamic = rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, (Elf_Addr)(uintptr_t)obj->dynamic);
 	if (obj->entry)
-		obj->entry = (void *)(obj->relocbase + (Elf_Addr)(uintptr_t)obj->entry);
+		obj->entry = rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, (Elf_Addr)(uintptr_t)obj->entry);
 	if (obj->interp)
-		obj->interp = (void *)(obj->relocbase + (Elf_Addr)(uintptr_t)obj->interp);
+		obj->interp = rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, (Elf_Addr)(uintptr_t)obj->interp);
 	if (obj->phdr_loaded)
-		obj->phdr =  (void *)(obj->relocbase + (Elf_Addr)(uintptr_t)obj->phdr);
+		obj->phdr =  rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, (Elf_Addr)(uintptr_t)obj->phdr);
 #ifdef __ARM_EABI__
 	if (obj->exidx_start)
-		obj->exidx_start = (void *)(obj->relocbase + (Elf_Addr)(uintptr_t)obj->exidx_start);
+		obj->exidx_start = rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, (Elf_Addr)(uintptr_t)obj->exidx_start);
 #endif
 	xfree(segs);
 
 	return obj;
 
+error_bss:
+	if (data_addr != NULL) {
+		/* Not yet present in loadmap. */
+		munmap(data_addr, data_vlimit - data_vaddr);
+	}
 error:
+#ifdef __FDPIC__
+	rtld_unmap((struct elf_fdpic_loadmap *)&obj->loadmap);
+#else
 	if (mapbase != MAP_FAILED)
 		munmap(mapbase, mapsize);
-	if (obj->ehdr != MAP_FAILED)
-		munmap(obj->ehdr, _rtld_pagesz);
+#endif
+	if (obj->ehdr != MAP_FAILED) {
+#ifdef NOMMU
+		if ((base_flags & MAP_PHYSMEM) == 0)
+#endif
+			munmap(obj->ehdr, _rtld_pagesz);
+	}
 	_rtld_obj_free(obj);
 	xfree(segs);
 	return NULL;
@@ -538,6 +681,9 @@ _rtld_obj_free(Obj_Entry *obj)
 	}
 	if (!obj->phdr_loaded)
 		xfree((void *)(uintptr_t)obj->phdr);
+#ifdef __HAVE_FUNCTION_DESCRIPTORS
+	_rtld_function_descriptor_free(obj->descs);
+#endif
 	xfree(obj);
 }
 

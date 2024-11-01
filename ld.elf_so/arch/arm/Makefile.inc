@@ -7,7 +7,13 @@
 LDSO_ARCH_DIR := $(call my-dir)
 LDSO_ARCH_PREFIX := $(LDSO_ARCH_DIR:$(LOCAL_DIR)%=%)
 
+ifeq ($(HAVE_MMU), y)
 LOCAL_SRCS += $(addprefix $(LDSO_ARCH_PREFIX), rtld_start.S mdreloc.c)
+else
+LOCAL_SRCS += $(addprefix $(LDSO_ARCH_PREFIX), rtld_start_fdpic.S mdreloc_fdpic.c)
+
+LOCAL_CFLAGS += -D__HAVE_FUNCTION_DESCRIPTORS
+endif
 
 LOCAL_CFLAGS += $(TARGET_PIC_FLAG)
 LOCAL_CFLAGS += -DELFSIZE=32

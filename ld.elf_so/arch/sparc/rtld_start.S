@@ -50,6 +50,8 @@ _rtld_start:
 	call	_rtld_relocate_nonplt_self
 	 mov	%l0, %o1		/* relocbase */
 
+	mov	0, %o3		/* loadmapInterp */
+	mov	0, %o2		/* loadmap */
 	mov	%l0, %o1		/* relocbase */
 	call	_rtld
 	 add	%sp, 96, %o0		/* &argc - 8 */

@@ -72,7 +72,7 @@ _rtld_relocate_nonplt_objects(Obj_Entry *obj)
 		Elf_Addr         tmp;
 		unsigned long	 symnum;
 
-		where = (Elf_Addr *)(obj->relocbase + rel->r_offset);
+		where = (Elf_Addr *)rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, rel->r_offset);
 
 		switch (ELF_R_TYPE(rel->r_info)) {
 		case R_TYPE(PC32):
@@ -103,7 +103,7 @@ _rtld_relocate_nonplt_objects(Obj_Entry *obj)
 
 #if 1 /* XXX should not occur */
 		case R_TYPE(PC32):
-			target = (Elf_Addr)(defobj->relocbase + def->st_value);
+			target = (Elf_Addr)rtld_relocate((struct elf_fdpic_loadmap *)&defobj->loadmap, def->st_value);
 
 			*where += target - (Elf_Addr)where;
 			rdbg(("PC32 %s in %s --> %p in %s",
@@ -115,7 +115,7 @@ _rtld_relocate_nonplt_objects(Obj_Entry *obj)
 #endif
 		case R_TYPE(32):
 		case R_TYPE(GLOB_DAT):
-			target = (Elf_Addr)(defobj->relocbase + def->st_value);
+			target = (Elf_Addr)rtld_relocate((struct elf_fdpic_loadmap *)&defobj->loadmap, def->st_value);
 
 			tmp = target + *where;
 			if (*where != tmp)
@@ -135,7 +135,7 @@ _rtld_relocate_nonplt_objects(Obj_Entry *obj)
 			/* FALL-THROUGH */
 
 		case R_TYPE(RELATIVE):
-			*where += (Elf_Addr)obj->relocbase;
+			*where = (Elf_Addr)rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, *where);
 			rdbg(("RELATIVE in %s --> %p", obj->path,
 			    (void *)*where));
 			break;
@@ -218,7 +218,7 @@ _rtld_relocate_plt_lazy(Obj_Entry *obj)
 	const Elf_Rel *rel;
 
 	for (rel = obj->pltrellim; rel-- > obj->pltrel; ) {
-		Elf_Addr *where = (Elf_Addr *)(obj->relocbase + rel->r_offset);
+		Elf_Addr *where = (Elf_Addr *)rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, rel->r_offset);
 
 		assert(ELF_R_TYPE(rel->r_info) == R_TYPE(JMP_SLOT) ||
 		       ELF_R_TYPE(rel->r_info) == R_TYPE(IRELATIVE));
@@ -227,7 +227,7 @@ _rtld_relocate_plt_lazy(Obj_Entry *obj)
 			obj->ifunc_remaining = obj->pltrellim - rel;
 
 		/* Just relocate the GOT slots pointing into the PLT */
-		*where += (Elf_Addr)obj->relocbase;
+		*where = (Elf_Addr)rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, *where);
 		rdbg(("fixup !main in %s --> %p", obj->path, (void *)*where));
 	}
 
@@ -238,7 +238,7 @@ static inline int
 _rtld_relocate_plt_object(const Obj_Entry *obj, const Elf_Rel *rel,
 	Elf_Addr *tp)
 {
-	Elf_Addr *where = (Elf_Addr *)(obj->relocbase + rel->r_offset);
+	Elf_Addr *where = (Elf_Addr *)rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, rel->r_offset);
 	Elf_Addr target;
 	const Elf_Sym *def;
 	const Obj_Entry *defobj;
@@ -260,7 +260,7 @@ _rtld_relocate_plt_object(const Obj_Entry *obj, const Elf_Rel *rel,
 			return 0;
 		target = _rtld_resolve_ifunc(defobj, def);
 	} else {
-		target = (Elf_Addr)(defobj->relocbase + def->st_value);
+		target = (Elf_Addr)rtld_relocate((struct elf_fdpic_loadmap *)&defobj->loadmap, def->st_value);
 	}
 
 	rdbg(("bind now/fixup in %s --> old=%p new=%p",
