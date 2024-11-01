@@ -76,10 +76,10 @@ extern void _libc_init(void);
 /*
  * Function declarations.
  */
-static void     _rtld_init(caddr_t, caddr_t, const char *);
+static void     _rtld_init(struct elf_fdpic_loadmap *, const char *);
 static void     _rtld_exit(void);
 
-Elf_Addr        _rtld(Elf_Addr *, Elf_Addr);
+Elf_Addr        _rtld(Elf_Addr *, Elf_Addr, struct elf_fdpic_loadmap *, struct elf_fdpic_loadmap *);
 
 
 /*
@@ -102,6 +102,7 @@ const char	_rtld_path[] = _PATH_RTLD;
 Elf_Sym		_rtld_sym_zero = {
     .st_info	= ELF_ST_INFO(STB_GLOBAL, STT_NOTYPE),
     .st_shndx	= SHN_ABS,
+    .st_value	= ~(Elf_Addr)0, /* Special value handled by rtld_relocate */
 };
 size_t	_rtld_pagesz;	/* Page size, as provided by kernel */
 
@@ -155,6 +156,26 @@ _rtld_call_initfini_function(fptr_t func, sigset_t *mask)
 	_rtld_exclusive_enter(mask);
 }
 
+/* FIXME: WHY https://patchwork.ozlabs.org/project/gcc/patch/20190515124006.25840-6-christophe.lyon@st.com/#2214345 ?? */
+/* And why our private constructors work properly. */
+/* Maybe the patch is good but support for __attribute__((constructor)) is missing. */
+/* However how did it work before on different archs? */
+
+/* This hack is so ugly that GCC on higher optimization levels has problems with it. */
+
+/* First entry in init_array and fini_array is a function pointer instead on function descriptor pointer on GCC. */
+/* Use current FDPIC to call it. */
+__attribute__((optimize("-O0"))) static void
+_init_fini_array_fdpic_set0(fptr_t *init, void *desc[2])
+{
+#ifdef __FDPIC__
+	*init = (fptr_t)desc;
+#else
+	(void)init;
+	(void)desc;
+#endif
+}
+
 static void
 _rtld_call_fini_function(Obj_Entry *obj, sigset_t *mask, u_int cur_objgen)
 {
@@ -175,12 +196,20 @@ _rtld_call_fini_function(Obj_Entry *obj, sigset_t *mask, u_int cur_objgen)
 	 * the array pointer and decrement the size each time through
 	 * the loop.
 	 */
+	bool first = true;
 	while (obj->fini_arraysz > 0 && _rtld_objgen == cur_objgen) {
+		void *fdesc[2];
 		fptr_t fini = *obj->fini_array++;
 		obj->fini_arraysz--;
 		dbg (("calling fini array function %s at %p%s", obj->path,
 		    (void *)fini,
 		    obj->z_initfirst ? " (DF_1_INITFIRST)" : ""));
+		if (first) {
+			fdesc[0] = fini;
+			fdesc[1] = obj->pltgot;
+			_init_fini_array_fdpic_set0(&fini, fdesc);
+			first = false;
+		}
 		_rtld_call_initfini_function(fini, mask);
 	}
 #endif /* HAVE_INITFINI_ARRAY */
@@ -242,6 +271,8 @@ restart:
 static void
 _rtld_call_init_function(Obj_Entry *obj, sigset_t *mask, u_int cur_objgen)
 {
+	bool first;
+
 	if (obj->init_arraysz == 0 && (obj->init_called || obj->init == NULL))
 		return;
 
@@ -260,12 +291,20 @@ _rtld_call_init_function(Obj_Entry *obj, sigset_t *mask, u_int cur_objgen)
 	 * the array pointer and decrement the size each time through
 	 * the loop.
 	 */
+	first = true;
 	while (obj->init_arraysz > 0 && _rtld_objgen == cur_objgen) {
+		void *fdesc[2];
 		fptr_t init = *obj->init_array++;
 		obj->init_arraysz--;
 		dbg (("calling init_array function %s at %p%s",
 		    obj->path, (void *)init,
 		    obj->z_initfirst ? " (DF_1_INITFIRST)" : ""));
+		if (first) {
+			fdesc[0] = init;
+			fdesc[1] = obj->pltgot;
+			_init_fini_array_fdpic_set0(&init, fdesc);
+			first = false;
+		}
 		_rtld_call_initfini_function(init, mask);
 	}
 #endif /* HAVE_INITFINI_ARRAY */
@@ -354,7 +393,7 @@ restart:
  * define __HAVE_FUNCTION_DESCRIPTORS
  */
 static void
-_rtld_init(caddr_t mapbase, caddr_t relocbase, const char *execname)
+_rtld_init(struct elf_fdpic_loadmap *loadmap, const char *execname)
 {
 	const Elf_Ehdr *ehdr;
 	__debugused int res;
@@ -363,29 +402,25 @@ _rtld_init(caddr_t mapbase, caddr_t relocbase, const char *execname)
 	_rtld_objself.path = __UNCONST(_rtld_path);
 	_rtld_objself.pathlen = sizeof(_rtld_path)-1;
 	_rtld_objself.rtld = true;
-	_rtld_objself.mapbase = mapbase;
-	_rtld_objself.relocbase = relocbase;
+	if (loadmap != NULL) {
+		memcpy(&_rtld_objself.loadmap, loadmap, sizeof(loadmap) + (loadmap->nsegs * sizeof(*loadmap->segs)));
+	}
 	_rtld_objself.dynamic = (Elf_Dyn *) &_DYNAMIC;
 	_rtld_objself.strtab = "_rtld_sym_zero";
 
-	/*
-	 * Set value to -relocbase so that
-	 *
-	 *     _rtld_objself.relocbase + _rtld_sym_zero.st_value == 0
-	 *
-	 * This allows unresolved references to weak symbols to be computed
-	 * to a value of 0.
-	 */
-	_rtld_sym_zero.st_value = -(uintptr_t)relocbase;
-
 	_rtld_digest_dynamic(_rtld_path, &_rtld_objself);
 	assert(!_rtld_objself.needed);
-#if !defined(__hppa__)
+#if !defined(__HAVE_FUNCTION_DESCRIPTORS)
+#if defined(__FDPIC__) && defined(__arm__)
+	/* May not be present in DYNAMIC section. */
+	register void *r9 asm("r9");
+	_rtld_objself.pltgot = r9;
+#endif
 	assert(!_rtld_objself.pltrel && !_rtld_objself.pltrela);
 #else
 	_rtld_relocate_plt_objects(&_rtld_objself);
 #endif
-#if !defined(__mips__) && !defined(__hppa__)
+#if !defined(__mips__) && !defined(__hppa__) && !defined(__FDPIC__)
 	assert(!_rtld_objself.pltgot);
 #endif
 #if !defined(__arm__) && !defined(__mips__) && !defined(__sh__)
@@ -409,10 +444,14 @@ _rtld_init(caddr_t mapbase, caddr_t relocbase, const char *execname)
 	_rtld_debug.r_version = R_DEBUG_VERSION;
 	_rtld_debug.r_brk = _rtld_debug_state;
 	_rtld_debug.r_state = RT_CONSISTENT;
-	_rtld_debug.r_ldbase = _rtld_objself.relocbase;
+#ifdef __FDPIC__
+	_rtld_debug.r_ldbase = _rtld_objself.pltgot;
+#else
+	_rtld_debug.r_ldbase = (void*)_rtld_objself.loadmap.segs[0].addr;
+#endif
 
-	ehdr = (Elf_Ehdr *)mapbase;
-	_rtld_objself.phdr = (Elf_Phdr *)((char *)mapbase + ehdr->e_phoff);
+	ehdr = (Elf_Ehdr *)_rtld_objself.loadmap.segs[0].addr;
+	_rtld_objself.phdr = (Elf_Phdr *)((char *)ehdr + ehdr->e_phoff);
 	_rtld_objself.phsize = ehdr->e_phnum * sizeof(_rtld_objself.phdr[0]);
 
 	_libc_init();
@@ -457,7 +496,7 @@ _dlauxinfo(void)
  * linker's exit procedure in sp[0].
  */
 Elf_Addr
-_rtld(Elf_Addr *sp, Elf_Addr relocbase)
+_rtld(Elf_Addr *sp, Elf_Addr relocbase, struct elf_fdpic_loadmap *loadmap, struct elf_fdpic_loadmap *loadmapProg)
 {
 	const AuxInfo  *pAUX_base, *pAUX_entry, *pAUX_execfd, *pAUX_phdr,
 	               *pAUX_phent, *pAUX_phnum, *pAUX_euid, *pAUX_egid,
@@ -492,8 +531,10 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	/* first Elf_Word reserved to address of exit routine */
 #if defined(RTLD_DEBUG)
 	debugFlag = 1;
-	dbg(("sp = %p, argc = %ld, argv = %p <%s>, env = %p <%s>, relocbase %p", sp,
-	    (long)sp[1], (char **) sp[2], *(char **) sp[2], (char **) sp[3], *(char **) sp[3], (void *)relocbase));
+	dbg(("sp = %p, argc = %ld, argv = %p <%s>, env = %p <%s>, relocbase %p, loadmap %p", sp,
+	    (long)sp[1], (char **) sp[2], *(char **) sp[2], (char **) sp[3], *(char **) sp[3], (void *)relocbase, (void *)loadmap));
+	if (loadmap != NULL)
+		dbg_rtld_dump_loadmap(loadmap);
 #ifndef __x86_64__
 	dbg(("got is at %p, dynamic is at %p", _GLOBAL_OFFSET_TABLE_,
 	    &_DYNAMIC));
@@ -571,14 +612,25 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	}
 
 	/* Initialize and relocate ourselves. */
-	if (pAUX_base == NULL) {
-		_rtld_error("Bad pAUX_base");
-		_rtld_die();
+	if (loadmap == NULL) {
+		if (pAUX_base == NULL) {
+			_rtld_error("Bad pAUX_base");
+			_rtld_die();
+		} else {
+			extern char _end[];
+
+			_rtld_objself.loadmap.version = 0;
+			_rtld_objself.loadmap.nsegs = 1;
+			_rtld_objself.loadmap.segs[0].addr = pAUX_base->a_v;
+			/* Assume 0 as start address. */
+			_rtld_objself.loadmap.segs[0].p_vaddr = (Elf_Addr)0;
+			_rtld_objself.loadmap.segs[0].p_memsz = (Elf_Addr)_end;
+		}
 	}
 	assert(pAUX_pagesz != NULL);
 	_rtld_pagesz = (size_t)pAUX_pagesz->a_v;
-	_rtld_init((caddr_t)(uintptr_t)pAUX_base->a_v, (caddr_t)relocbase, execname);
 
+	_rtld_init(loadmap, execname);
 	argv_progname = _rtld_objself.path;
 	environ = env;
 
@@ -655,8 +707,8 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	}
 	_rtld_process_hints(execname, &_rtld_paths,
 	    _PATH_LD_HINTS);
-	dbg(("dynamic linker is initialized, mapbase=%p, relocbase=%p",
-	     _rtld_objself.mapbase, _rtld_objself.relocbase));
+	dbg(("dynamic linker is initialized, loadmap=%p", &_rtld_objself.loadmap));
+	dbg_rtld_dump_loadmap((const struct elf_fdpic_loadmap *)&_rtld_objself.loadmap);
 
 	/*
          * Load the main program, or process its program header if it is
@@ -666,7 +718,7 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 		int             fd = (int)pAUX_execfd->a_v;
 		const char *obj_name = argv[0] ? argv[0] : "main program";
 		dbg(("loading main program"));
-		_rtld_objmain = _rtld_map_object(obj_name, fd, NULL);
+		_rtld_objmain = _rtld_map_object(obj_name, fd, NULL, NULL);
 		close(fd);
 		if (_rtld_objmain == NULL)
 			_rtld_die();
@@ -684,7 +736,7 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 		assert(pAUX_phent->a_v == sizeof(Elf_Phdr));
 		assert(pAUX_entry != NULL);
 		entry = (caddr_t)(uintptr_t)pAUX_entry->a_v;
-		_rtld_objmain = _rtld_digest_phdr(phdr, phnum, entry);
+		_rtld_objmain = _rtld_digest_phdr(phdr, phnum, entry, loadmapProg);
 		_rtld_objmain->path = xstrdup(argv[0] ? argv[0] :
 		    "main program");
 		_rtld_objmain->pathlen = strlen(_rtld_objmain->path);
@@ -805,12 +857,20 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 
 	_rtld_exclusive_exit(&mask);
 
+	for (Obj_Entry *o = _rtld_objlist; o != NULL; o = o->next) {
+		dbg(("OBJ: %s", o->path));
+		dbg_rtld_dump_loadmap((const struct elf_fdpic_loadmap *)&o->loadmap);
+	}
 	/*
 	 * Return with the entry point and the exit procedure in at the top
 	 * of stack.
 	 */
 
 	((void **) osp)[0] = _rtld_exit;
+	/* TODO: move to arch/arm */
+#ifdef __FDPIC__
+	asm volatile ("mov r9, %0" :: "r"(_rtld_objmain->pltgot));
+#endif
 	return (Elf_Addr) _rtld_objmain->entry;
 }
 
@@ -941,9 +1001,14 @@ _rtld_unload_object(sigset_t *mask, Obj_Entry *root, bool do_fini_funcs)
 		while ((obj = *linkp) != NULL) {
 			if (obj->refcount == 0) {
 				dbg(("unloading \"%s\"", obj->path));
+
+				/* NOTE: On NOMMU if ehdr was mapped with MAP_PHYSMEM it cannot be unmapped,
+				 * as only SYSPAGE objects are supported it happens always. */
+#ifndef NOMMU
 				if (obj->ehdr != MAP_FAILED)
 					munmap(obj->ehdr, _rtld_pagesz);
-				munmap(obj->mapbase, obj->mapsize);
+#endif
+				rtld_unmap((const struct elf_fdpic_loadmap *)&obj->loadmap);
 				_rtld_objlist_remove(&_rtld_list_global, obj);
 				_rtld_linkmap_delete(obj);
 				*linkp = obj->next;
@@ -1135,7 +1200,7 @@ _rtld_objmain_sym(const char *name)
 	    NULL, &donelist);
 
 	if (def != NULL)
-		return obj->relocbase + def->st_value;
+		return rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, def->st_value);
 	return NULL;
 }
 
@@ -1287,7 +1352,7 @@ do_dlsym(void *handle, const char *name, const Ver_Entry *ventry, void *retaddr)
 			return p;
 		}
 #endif /* __HAVE_FUNCTION_DESCRIPTORS */
-		p = defobj->relocbase + def->st_value;
+		p = rtld_relocate((struct elf_fdpic_loadmap *)&defobj->loadmap, def->st_value);
 		lookup_mutex_exit();
 		return p;
 	}
@@ -1365,7 +1430,9 @@ dladdr(const void *addr, Dl_info *info)
 		return 0;
 	}
 	info->dli_fname = obj->path;
-	info->dli_fbase = obj->mapbase;
+	/* TODO: devise what to do with FPIC obj, as this is POSIX interface, */
+	/*       e.g. The struct may be extended with additional info. */
+	info->dli_fbase = (void *)obj->loadmap.segs[0].addr;
 	info->dli_saddr = (void *)0;
 	info->dli_sname = NULL;
 
@@ -1389,7 +1456,7 @@ dladdr(const void *addr, Dl_info *info)
 		 * is further away from addr than the current nearest symbol,
 		 * then reject it.
 		 */
-		symbol_addr = obj->relocbase + def->st_value;
+		symbol_addr = rtld_relocate((struct elf_fdpic_loadmap *)&obj->loadmap, def->st_value);
 		if (symbol_addr > addr || symbol_addr < info->dli_saddr)
 			continue;
 
@@ -1468,7 +1535,12 @@ static void
 _rtld_fill_dl_phdr_info(const Obj_Entry *obj, struct dl_phdr_info *phdr_info)
 {
 
-	phdr_info->dlpi_addr = (Elf_Addr)obj->relocbase;
+#ifdef __FDPIC__
+	phdr_info->dlpi_addr.map = (struct elf_fdpic_loadmap *)&obj->loadmap;
+	phdr_info->dlpi_addr.got_value = obj->pltgot;
+#else
+	phdr_info->dlpi_addr = obj->loadmap.segs[0].addr;
+#endif
 	/* XXX: wrong but not fixing it yet */
 	phdr_info->dlpi_name = obj->path;
 	phdr_info->dlpi_phdr = obj->phdr;
@@ -1591,12 +1663,17 @@ _rtld_linkmap_add(Obj_Entry *obj)
 	struct link_map *prev;
 
 	obj->linkmap.l_name = obj->path;
-	obj->linkmap.l_addr = obj->relocbase;
 	obj->linkmap.l_ld = obj->dynamic;
+#ifdef __FDPIC__
+	obj->linkmap.l_addr.map = (struct elf_fdpic_loadmap *)&obj->loadmap;
+	obj->linkmap.l_addr.got_value = obj->pltgot;
+#else
+	obj->linkmap.l_addr = (void *)obj->loadmap.segs[0].addr;
 #ifdef __mips__
 	/* XXX This field is not standard and will be removed eventually. */
-	obj->linkmap.l_offs = obj->relocbase;
+	obj->linkmap.l_offs = obj->linkmap.l_addr;
 #endif
+#endif /* __FDPIC__ */
 
 	if (_rtld_debug.r_map == NULL) {
 		_rtld_debug.r_map = l;
@@ -1636,12 +1713,14 @@ static Obj_Entry *
 _rtld_obj_from_addr(const void *addr)
 {
 	Obj_Entry *obj;
+	Elf_Half i;
 
 	for (obj = _rtld_objlist;  obj != NULL;  obj = obj->next) {
-		if (addr < (void *) obj->mapbase)
-			continue;
-		if (addr < (void *) (obj->mapbase + obj->mapsize))
-			return obj;
+		for (i = 0; i < obj->loadmap.nsegs; ++i) {
+			if ((obj->loadmap.segs[i].addr <= (Elf_Addr)addr) && ((obj->loadmap.segs[i].addr + obj->loadmap.segs[i].p_memsz) > (Elf_Addr)addr)) {
+				return obj;
+			}
+		}
 	}
 	return NULL;
 }

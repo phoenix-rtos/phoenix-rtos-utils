@@ -57,6 +57,7 @@ __RCSID("$NetBSD: load.c,v 1.49 2020/09/21 16:08:57 kamil Exp $");
 #include <string.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <phoenix/sysinfo.h>
 
 #include "debug.h"
 #include "rtld.h"
@@ -116,6 +117,9 @@ _rtld_load_object(const char *filepath, int flags)
 	int fd = -1;
 	struct stat sb;
 	size_t pathlen = strlen(filepath);
+	const char *syspagename = rtld_syspage_libname(filepath);
+	syspageprog_t sysprog;
+	int syspagesz;
 
 	for (obj = _rtld_objlist->next; obj != NULL; obj = obj->next)
 		if (pathlen == obj->pathlen && !strcmp(obj->path, filepath))
@@ -130,19 +134,41 @@ _rtld_load_object(const char *filepath, int flags)
 	 * using stat().
 	 */
 	if (obj == NULL) {
-		if ((fd = open(filepath, O_RDONLY)) == -1) {
-			_rtld_error("Cannot open \"%s\"", filepath);
-			return NULL;
-		}
-		if (fstat(fd, &sb) == -1) {
-			_rtld_error("Cannot fstat \"%s\"", filepath);
-			close(fd);
-			return NULL;
-		}
-		for (obj = _rtld_objlist->next; obj != NULL; obj = obj->next) {
-			if (obj->ino == sb.st_ino && obj->dev == sb.st_dev) {
+		if (syspagename == NULL) {
+			if ((fd = open(filepath, O_RDONLY)) == -1) {
+				_rtld_error("Cannot open \"%s\"", filepath);
+				return NULL;
+			}
+			if (fstat(fd, &sb) == -1) {
+				_rtld_error("Cannot fstat \"%s\"", filepath);
 				close(fd);
-				break;
+				return NULL;
+			}
+			for (obj = _rtld_objlist->next; obj != NULL; obj = obj->next) {
+				if (obj->ino == sb.st_ino && obj->dev == sb.st_dev) {
+					close(fd);
+					break;
+				}
+			}
+		} else {
+			syspagesz = syspageprog(NULL, -1);
+			if (syspagesz < 0) {
+				_rtld_error("Cannot get syspage size");
+				return NULL;
+			}
+
+			for(syspagesz = syspagesz -1; syspagesz >= 0; syspagesz--) {
+				if (syspageprog(&sysprog, syspagesz) < 0) {
+					_rtld_error("Cannot get syspage prog: %d", syspagesz);
+					return NULL;
+				}
+				if (strcmp(sysprog.name, syspagename) == 0) {
+					break;
+				}
+			}
+			if (syspagesz < 0) {
+				_rtld_error("Cannot find syspage prog: %s", syspagename);
+				return NULL;
 			}
 		}
 	}
@@ -156,8 +182,12 @@ _rtld_load_object(const char *filepath, int flags)
 #endif
 
 	if (obj == NULL) { /* First use of this object, so we must map it in */
-		obj = _rtld_map_object(filepath, fd, &sb);
-		(void)close(fd);
+		if (syspagename == NULL) {
+			obj = _rtld_map_object(filepath, fd, &sb, NULL);
+			(void)close(fd);
+		} else {
+			obj = _rtld_map_object(filepath, -1, NULL, &sysprog);
+		}
 		if (obj == NULL)
 			return NULL;
 		_rtld_digest_dynamic(filepath, obj);
@@ -168,7 +198,7 @@ _rtld_load_object(const char *filepath, int flags)
 				    obj->path));
 				_rtld_error("Cannot dlopen non-loadable %s",
 				    obj->path);
-				munmap(obj->mapbase, obj->mapsize);
+				rtld_unmap((const struct elf_fdpic_loadmap *)&obj->loadmap);
 				_rtld_obj_free(obj);
 				return OBJ_ERR;
 			}
@@ -181,8 +211,8 @@ _rtld_load_object(const char *filepath, int flags)
 #ifdef RTLD_LOADER
 		_rtld_linkmap_add(obj);	/* for the debugger */
 #endif
-		dbg(("  %p .. %p: %s", obj->mapbase,
-		    obj->mapbase + obj->mapsize - 1, obj->path));
+		dbg(("Loadmap: %s", obj->path));
+		dbg_rtld_dump_loadmap((const struct elf_fdpic_loadmap *)&obj->loadmap);
 		if (obj->textrel)
 			dbg(("  WARNING: %s has impure text", obj->path));
 	}

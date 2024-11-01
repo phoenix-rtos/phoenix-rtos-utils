@@ -45,14 +45,12 @@ _rtld_start:
 	add	r6, r6, pc		/* r6 = &GOT[0]; pc = &LPIC1; */
 	adds	r0, r6, r5		/* arg0 = &_DYNAMIC */
 .LPIC1:
-	ldr	r5, [r6]		/* GOT[0] = &_DYNAMIC */
-	subs	r5, r0, r5		/* relocbase = GOT[0] - &_DYNAMIC */
-	movs	r1, r5			/* arg1 = relocabase */
+	movs	r1, r8			/* arg1 = loadmapInterp */
 	bl	_rtld_relocate_nonplt_self
 
-	mov r3, #0
-	mov r2, #0
-	movs	r1, r5			/* relocbase */
+	movs	r3, r7			/* loadmapProg */
+	movs	r2, r8			/* loadmap */
+	movs	r1, 0			/* relocbase */
 	mov	r0, sp			/* sp */
 	bl	_rtld			/* call the shared loader */
 
@@ -65,30 +63,30 @@ _rtld_start:
 	.word	_DYNAMIC(GOTOFF)
 .size _rtld_start, .-_rtld_start
 
+
 /*
- *	stack[0] = RA
- *	ip = &GOT[n+3]
- *	lr = &GOT[2]
+ * ip        -- the GOT address (FDPIC value) for the resolver's GOT
+ * SP[0]     -- funcdesc_value_reloc_offset(foo)
+ * R9        -- the GOT address for the caller's GOT
  */
 	.align 2
 	.globl _rtld_bind_start
 	.type _rtld_bind_start,%function
 	.arm
 _rtld_bind_start:
-	stmdb	sp!,{r0-r4,sl,fp}	/* 8 byte aligned (lr already saved) */
+	stmdb	sp!,{r0-r3,sl,fp,lr}	/* 8 byte aligned (rel offset on stack) */
 
-	sub	r1, ip, lr		/* r1 = 4 * (n + 1) */
-	sub	r1, r1, #4		/* r1 = 4 * n */
-	add	r1, r1, r1		/* r1 = 8 * n */
+	ldr r1, [sp, #28]   /* funcdesc_value_reloc_offset */
 
-	ldr	r0, [lr, #-4]		/* get obj ptr from GOT[1] */
-	mov	r4, ip			/* save GOT location */
+	mov	r0, r9	        /* GOT of object needing resolution */
+	mov r9, ip
 
 	bl	_rtld_bind		/* Call the binder */
 
-	str	r0, [r4]		/* save address in GOT */
-	mov	ip, r0			/* save new address */
+    ldr ip, [r0]        /* Get FDPIC register and function location from the descriptor */
+    ldr r9, [r0, #4]
 
-	ldmia	sp!,{r0-r4,sl,fp,lr}	/* restore the stack */
+	ldmia	sp!,{r0-r3,sl,fp,lr}	/* restore the stack */
+	add sp, sp, 4       /* remove funcdesc value from stack */
 	mov		pc, ip			/* jump to the new address */
 	.size _rtld_bind_start, .-_rtld_bind_start

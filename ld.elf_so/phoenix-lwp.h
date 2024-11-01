@@ -11,12 +11,6 @@
 
 #define __HAVE___LWP_GETPRIVATE_FAST
 
-#define STR_HELPER(a) #a
-#define STR(a)        STR_HELPER(a)
-#define DBG()         debug(__FILE__ ":" STR(__LINE__) "\n")
-/* #define DBG() */
-
-
 extern size_t _rtld_tls_static_space;
 
 

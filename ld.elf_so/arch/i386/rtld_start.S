@@ -47,11 +47,13 @@
 	pushl	%ecx			# &_DYNAMIC
 	call	_rtld_relocate_nonplt_self
 
+	pushl	$0				# loadmapProg
+	pushl	$0				# loadmap
 	pushl	%ebx			# relocbase
 	pushl	%ebp			# sp
 	call	_rtld			# _rtld(sp, relocbase)
 
-	addl	$16,%esp		# pop args
+	addl	$24,%esp		# pop args
 
 	jmp	*%eax
 
