@@ -124,6 +124,12 @@ _rtld_load_library(const char *name, const Obj_Entry *refobj, int flags)
 	int namelen;
 	Obj_Entry *obj;
 
+	/* Syspage library. */
+	if (rtld_syspage_libname(name) != NULL) {
+		pathname = name;
+		goto found;
+	}
+
 	if (strchr(name, '/') != NULL) {	/* Hard coded pathname */
 		if (name[0] != '/' && !_rtld_trust) {
 			_rtld_error(

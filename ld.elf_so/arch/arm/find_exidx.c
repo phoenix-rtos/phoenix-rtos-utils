@@ -45,6 +45,7 @@ __gnu_Unwind_Find_exidx(_Unwind_Ptr pc, int * pcount)
 	const Obj_Entry *obj;
 	_Unwind_Ptr start = (_Unwind_Ptr)NULL;
 	int count = 0;
+	Elf_Half i = 0;
 
 	dbg(("__gnu_Unwind_Find_exidx"));
 
@@ -56,9 +57,11 @@ __gnu_Unwind_Find_exidx(_Unwind_Ptr pc, int * pcount)
 		 * If the address we are looking for is inside this object,
 		 * we've found the object to inspect.
 		 */
-		if ((vaddr_t)obj->mapbase <= va
-		    && va < (vaddr_t)obj->mapbase + obj->mapsize)
-			break;
+		for (i = 0; i < obj->loadmap.nsegs; ++i) {
+			if ((obj->loadmap.segs[i].p_vaddr <= va) && ((obj->loadmap.segs[i].p_vaddr + obj->loadmap.segs[i].p_memsz) > va)) {
+				break;
+			}
+		}
 	}
 
 	/*
@@ -66,7 +69,7 @@ __gnu_Unwind_Find_exidx(_Unwind_Ptr pc, int * pcount)
 	 * need to see if the address matches a PT_LOAD section.
 	 */
 	if (obj != NULL && obj->exidx_start != NULL) {
-		va -= (vaddr_t)obj->relocbase;
+		va -= (vaddr_t)obj->loadmap.segs[i].addr;
 		const Elf_Phdr *ph = obj->phdr;
 		const Elf_Phdr * const phlimit = ph + obj->phsize / sizeof(*ph);
 		for (; ph < phlimit; ph++) {

@@ -40,6 +40,8 @@
 #include <stddef.h>
 #include <sys/param.h>
 #include <sys/types.h>
+#include <sys/types.h>
+#include <phoenix/sysinfo.h>
 #include "include/NetBSD/queue.h"
 #include "include/NetBSD/exec_elf.h"
 #include "include/NetBSD/tls.h"
@@ -127,6 +129,39 @@ typedef struct Struct_Ver_Entry {
 /* Ver_Entry.flags */
 #define VER_INFO_HIDDEN	0x01
 
+
+/* This data structure represents a PT_LOAD segment.  */
+struct elf_fdpic_loadseg {
+	/* Core address to which the segment is mapped.  */
+	Elf_Addr addr;
+	/* VMA recorded in the program header.  */
+	Elf_Addr p_vaddr;
+	/* Size of this segment in memory.  */
+	Elf_Word p_memsz;
+};
+
+
+struct elf_fdpic_loadmap {
+	/* Protocol version number, must be zero.  */
+	Elf_Half version;
+	/* Number of segments in this map.  */
+	Elf_Half nsegs;
+	/* The actual memory map.  */
+	struct elf_fdpic_loadseg segs[/*nsegs*/];
+};
+
+/* NOTE: Version of elf_fdpic_loadmap allowing static allocation. 8 is chosen arbitrarly. */
+struct elf_fdpic_loadmap_max {
+	Elf_Half version;
+	Elf_Half nsegs;
+	struct elf_fdpic_loadseg segs[8];
+};
+
+void *rtld_relocate(const struct elf_fdpic_loadmap *, Elf_Addr);
+void rtld_unmap(const struct elf_fdpic_loadmap *);
+const char *rtld_syspage_libname(const char *);
+
+
 /*
  * Shared object descriptor.
  *
@@ -143,11 +178,7 @@ typedef struct Struct_Obj_Entry {
 	int             dl_refcount;	/* Number of times loaded by dlopen */
 
 	/* These items are computed by map_object() or by digest_phdr(). */
-	caddr_t         mapbase;	/* Base address of mapped region */
-	size_t          mapsize;	/* Size of mapped region in bytes */
-	size_t          textsize;	/* Size of text segment in bytes */
-	Elf_Addr        vaddrbase;	/* Base address in shared object file */
-	caddr_t         relocbase;	/* Reloc const = mapbase - *vaddrbase */
+	struct elf_fdpic_loadmap_max loadmap; /* Loadmap. */
 	Elf_Dyn        *dynamic;	/* Dynamic section */
 	caddr_t         entry;		/* Entry point */
 	const Elf_Phdr *phdr;		/* Program header (may be xmalloc'ed) */
@@ -311,6 +342,9 @@ typedef struct Struct_Obj_Entry {
 	void		*exidx_start;
 	size_t		exidx_sz;
 #endif
+#ifdef __FDPIC__
+	void *descs; /* Function descriptors. */
+#endif
 } Obj_Entry;
 
 typedef struct Struct_DoneList {
@@ -399,7 +433,7 @@ size_t _rtld_expand_path(char *, size_t, const char *, const char *,\
 
 /* headers.c */
 void _rtld_digest_dynamic(const char *, Obj_Entry *);
-Obj_Entry *_rtld_digest_phdr(const Elf_Phdr *, int, caddr_t);
+Obj_Entry *_rtld_digest_phdr(const Elf_Phdr *, int, caddr_t, const struct elf_fdpic_loadmap *);
 
 /* load.c */
 Obj_Entry *_rtld_load_object(const char *, int);
@@ -483,7 +517,7 @@ __dso_public extern void *___tls_get_addr(void *)
 
 /* map_object.c */
 struct stat;
-Obj_Entry *_rtld_map_object(const char *, int, const struct stat *);
+Obj_Entry *_rtld_map_object(const char *, int, const struct stat *, const syspageprog_t*);
 void _rtld_obj_free(Obj_Entry *);
 Obj_Entry *_rtld_obj_new(void);
 

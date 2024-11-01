@@ -58,7 +58,13 @@ endif
 LANGUAGE_EXTENSIONS_OLD := $(LANGUAGE_EXTENSIONS)
 LANGUAGE_EXTENSIONS += %.S
 
+# FDPIC symbol hiding overwrite
+LDFLAGS_OLD := $(LDFLAGS)
+LDFLAGS := $(filter-out $(LDFLAGS_PREFIX)--version-script="$(hide.map)" , $(LDFLAGS))
+
 include $(binary.mk)
+
+LDFLAGS := $(LDFLAGS_OLD)
 
 LANGUAGE_EXTENSIONS := $(LANGUAGE_EXTENSIONS_OLD)
 

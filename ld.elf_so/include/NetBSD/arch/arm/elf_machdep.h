@@ -130,6 +130,17 @@
 #define R_ARM_RPC24		254
 #define R_ARM_RBASE		255
 
+/* FDPIC relocations */
+
+#define R_ARM_GOTFUNCDESC    	161
+#define R_ARM_GOTOFFFUNCDESC 	162
+#define R_ARM_FUNCDESC       	163
+#define R_ARM_FUNCDESC_VALUE 	164
+#define R_ARM_TLS_GD32_FDPIC    165
+#define R_ARM_TLS_LDM32_FDPIC   166
+#define R_ARM_TLS_IE32_FDPIC    167
+
+
 #define R_TYPE(name)		__CONCAT(R_ARM_,name)
 
 /* Processor specific program header flags */
