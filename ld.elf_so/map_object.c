@@ -74,6 +74,11 @@ rtld_relocate(const struct elf_fdpic_loadmap *loadmap, Elf_Addr addr)
 void
 rtld_unmap(const struct elf_fdpic_loadmap *loadmap)
 {
+#ifdef NOMMU
+	/* Unmapping region mapped with MAP_PHYSMEM breaks the memory maps on NOMMU. */
+	/* TODO: mark regions that can be munmaped and those that cannot. */
+	(void)loadmap;
+#else
 	Elf_Half i;
 	Elf_Addr start;
 	Elf_Addr end;
@@ -85,6 +90,7 @@ rtld_unmap(const struct elf_fdpic_loadmap *loadmap)
 			munmap((void *)start, end - start);
 		}
 	}
+#endif
 }
 
 const char *
@@ -471,7 +477,10 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb, const syspagep
 
 				memcpy(data_addr_copy + (segs[i]->p_vaddr & (_rtld_pagesz - 1)), data_addr + (segs[i]->p_offset & (_rtld_pagesz - 1)), segs[i]->p_filesz);
 
-				munmap(data_addr, data_vlimit - data_vaddr);
+				/* munmap on memory mapped with MAP_PHYSMEM, doesn't work. */
+				if ((base_flags & MAP_PHYSMEM) == 0)
+					munmap(data_addr, data_vlimit - data_vaddr);
+
 				data_addr = data_addr_copy;
 			}
 #endif
@@ -625,8 +634,12 @@ error:
 	if (mapbase != MAP_FAILED)
 		munmap(mapbase, mapsize);
 #endif
-	if (obj->ehdr != MAP_FAILED)
-		munmap(obj->ehdr, _rtld_pagesz);
+	if (obj->ehdr != MAP_FAILED) {
+#ifdef NOMMU
+		if ((base_flags & MAP_PHYSMEM) == 0)
+#endif
+			munmap(obj->ehdr, _rtld_pagesz);
+	}
 	_rtld_obj_free(obj);
 	xfree(segs);
 	return NULL;

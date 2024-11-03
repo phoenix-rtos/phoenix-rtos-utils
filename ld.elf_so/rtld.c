@@ -996,8 +996,13 @@ _rtld_unload_object(sigset_t *mask, Obj_Entry *root, bool do_fini_funcs)
 		while ((obj = *linkp) != NULL) {
 			if (obj->refcount == 0) {
 				dbg(("unloading \"%s\"", obj->path));
+
+				/* NOTE: On NOMMU if ehdr was mapped with MAP_PHYSMEM it cannot be unmapped,
+				 * as only SYSPAGE objects are supported it happens always. */
+#ifndef NOMMU
 				if (obj->ehdr != MAP_FAILED)
 					munmap(obj->ehdr, _rtld_pagesz);
+#endif
 				rtld_unmap((const struct elf_fdpic_loadmap *)&obj->loadmap);
 				_rtld_objlist_remove(&_rtld_list_global, obj);
 				_rtld_linkmap_delete(obj);
