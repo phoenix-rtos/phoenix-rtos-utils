@@ -1,0 +1,9 @@
+#
+# Makefile for Phoenix-RTOS 3 device drivers
+#
+# sparcv8leon-gr740 tool set
+#
+# Copyright 2025 Phoenix Systems
+#
+
+DEFAULT_COMPONENTS := psh
