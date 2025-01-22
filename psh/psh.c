@@ -194,7 +194,7 @@ int main(int argc, char **argv)
 		if (ispshlogin != 0) {
 			app = psh_findapp("auth");
 			if (app != NULL) {
-				while (app->run(0, NULL) != 0)
+				while (app->run(argc, argv) != 0)
 					;
 			}
 		}
