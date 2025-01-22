@@ -111,6 +111,8 @@ static int psh_auth(int argc, char **argv)
 	int retries;
 	int c;
 
+	optind = 0;
+
 	while ((c = getopt(argc, argv, "t:h")) != -1) {
 		switch (c) {
 			case 't':

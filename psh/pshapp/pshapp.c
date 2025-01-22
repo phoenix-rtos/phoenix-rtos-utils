@@ -1774,6 +1774,8 @@ int psh_pshapp(int argc, char **argv)
 	const char *consolePath = _PATH_CONSOLE;
 	int c;
 
+	optind = 0;
+
 	/* Run shell script */
 	if (argc > 1) {
 		while ((c = getopt(argc, argv, "t:i:h")) != -1) {
@@ -1802,11 +1804,7 @@ int psh_pshapp(int argc, char **argv)
 			return psh_runscript(path) < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 	}
 	/* Run shell interactively */
-	else {
-		return psh_run(1, consolePath) < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
-	}
-
-	return EXIT_FAILURE;
+	return psh_run(1, consolePath) < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
 
