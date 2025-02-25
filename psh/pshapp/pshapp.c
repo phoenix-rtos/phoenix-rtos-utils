@@ -135,6 +135,7 @@ struct psh_redir {
 
 pshapp_common_t pshapp_common;
 
+const char *psh_consolePath;
 
 void _psh_exit(int code)
 {
@@ -1771,7 +1772,7 @@ void psh_pshappexitinfo(void)
 int psh_pshapp(int argc, char **argv)
 {
 	char *path = NULL;
-	const char *consolePath = _PATH_CONSOLE;
+	psh_consolePath = _PATH_CONSOLE;
 	int c;
 
 	optind = 0;
@@ -1781,7 +1782,7 @@ int psh_pshapp(int argc, char **argv)
 		while ((c = getopt(argc, argv, "t:i:h")) != -1) {
 			switch (c) {
 				case 't':
-					consolePath = optarg;
+					psh_consolePath = optarg;
 					break;
 				case 'i':
 					path = optarg;
@@ -1804,7 +1805,7 @@ int psh_pshapp(int argc, char **argv)
 			return psh_runscript(path) < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 	}
 	/* Run shell interactively */
-	return psh_run(1, consolePath) < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
+	return psh_run(1, psh_consolePath) < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
 
