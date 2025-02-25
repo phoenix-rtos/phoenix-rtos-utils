@@ -39,6 +39,8 @@ typedef struct {
 
 extern psh_common_t psh_common;
 
+extern const char *psh_consolePath;
+
 
 /* Converts n = x * base ^ y to a short binary(base 2) or SI(base 10) prefix notation */
 /* (rounds n to prec decimal places and cuts trailing zeros), e.g. */
