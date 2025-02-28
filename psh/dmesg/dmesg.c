@@ -19,6 +19,7 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <string.h>
+#include <sys/ioctl.h>
 
 #include "../psh.h"
 
@@ -40,6 +41,21 @@ static void psh_dmesg_help(const char *prog)
 
 static int psh_kmsgctrl(bool state)
 {
+	if (psh_common.consolePath != NULL) {
+		int fd = open(psh_common.consolePath, O_NONBLOCK);
+		if (fd >= 0) {
+			int res = ioctl(fd, KIOEN, state ? 1u : 0u);
+			close(fd);
+			if (res >= 0) {
+				return EXIT_SUCCESS;
+			}
+			else if (errno != ENOSYS) {
+				perror("dmesg: ioctl(KIOEN) failed");
+				return EXIT_FAILURE;
+			}
+		}
+	}
+
 	int fd = open("devfs/kmsgctrl", O_WRONLY);
 	if (fd < 0) {
 		fd = open("/dev/kmsgctrl", O_WRONLY);

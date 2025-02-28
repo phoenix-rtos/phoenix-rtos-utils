@@ -34,6 +34,7 @@ typedef struct {
 	volatile unsigned char sigstop; /* Received SIGTSTP */
 	pid_t tcpid;
 	int exitStatus;
+	const char *consolePath;
 } psh_common_t;
 
 
