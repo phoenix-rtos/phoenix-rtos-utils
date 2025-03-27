@@ -1,9 +1,9 @@
 #
-# Makefile for Phoenix-RTOS 3 device drivers
+# Makefile for Phoenix-RTOS 3 utils
 #
 # ia32-qemu tool set
 #
 # Copyright 2019 Phoenix Systems
 #
 
-DEFAULT_COMPONENTS := psh
+DEFAULT_COMPONENTS := psh ldconfig
