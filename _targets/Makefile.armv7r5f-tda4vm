@@ -1,0 +1,9 @@
+#
+# Makefile for Phoenix-RTOS 3 utils
+#
+# TDA4VM tool set
+#
+# Copyright 2025 Phoenix Systems
+#
+
+DEFAULT_COMPONENTS := psh
