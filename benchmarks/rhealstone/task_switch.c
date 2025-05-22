@@ -33,22 +33,22 @@ static struct {
 
 static void task1(void *arg)
 {
-	common.start1 = bench_getTime();
+	common.start1 = bench_plat_getTime();
 	for (unsigned int i = 0; i < MAX_LOOPS; i++) {
 		usleep(0);
 	}
-	common.end1 = bench_getTime();
+	common.end1 = bench_plat_getTime();
 	endthread();
 }
 
 
 static void task2(void *arg)
 {
-	common.start2 = bench_getTime();
+	common.start2 = bench_plat_getTime();
 	for (unsigned int i = 0; i < MAX_LOOPS; i++) {
 		usleep(0);
 	}
-	common.end2 = bench_getTime();
+	common.end2 = bench_plat_getTime();
 	endthread();
 }
 
@@ -57,9 +57,14 @@ int main(int argc, char *argv[])
 {
 	puts("Rhealstone benchmark suite:\nTask Switching");
 
+	if (bench_plat_initTimer() < 0) {
+		puts("Platform timer init fail");
+		return 1;
+	}
+
 	priority(1);
 
-	uint64_t overhead = bench_getTime();
+	uint64_t overhead = bench_plat_getTime();
 
 	for (unsigned int i = 0; i < MAX_LOOPS; i++) {
 		__asm__ volatile("nop");
@@ -68,7 +73,7 @@ int main(int argc, char *argv[])
 		__asm__ volatile("nop");
 	}
 
-	overhead = bench_getTime() - overhead;
+	overhead = bench_plat_getTime() - overhead;
 
 	int tid1, tid2;
 	int res = beginthreadex(task1, 2, common.stack[0], sizeof(common.stack[0]), NULL, &tid1);
