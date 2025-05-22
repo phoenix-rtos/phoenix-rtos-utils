@@ -8,6 +8,10 @@
 
 NAME := bench_common
 LOCAL_SRCS := bench_common.c
-LOCAL_HEADERS := bench_common.h
+LOCAL_HEADERS := bench_common.h bench_plat.h
+
+ifeq ($(TARGET_SUBFAMILY),gr740)
+  LOCAL_SRCS += bench_plat_gr740.c
+endif
 
 include $(static-lib.mk)

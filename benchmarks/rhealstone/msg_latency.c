@@ -122,7 +122,7 @@ static void task1(void *arg)
 {
 	long sendBuf[4] = { 0 };
 
-	common.benchStart = bench_getTime();
+	common.benchStart = bench_plat_getTime();
 
 	for (int i = 0; i < BENCHMARKS; i++) {
 		queueSend(&common.queue, sendBuf);
@@ -138,7 +138,7 @@ static void task2(void *arg)
 	for (int i = 0; i < BENCHMARKS; i++) {
 		queueRecv(&common.queue, recvBuf);
 	}
-	common.benchEnd = bench_getTime();
+	common.benchEnd = bench_plat_getTime();
 	endthread();
 }
 
@@ -147,6 +147,11 @@ int main(int argc, char *argv[])
 {
 	puts("Rhealstone benchmark suite:\nMessage Latency");
 
+	if (bench_plat_initTimer() < 0) {
+		puts("Platform timer init fail");
+		return 1;
+	}
+
 	priority(1);
 
 	if (queueCreate(&common.queue, 1, MESSAGE_SIZE) < 0) {
@@ -154,7 +159,7 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	uint64_t loopOverhead = bench_getTime();
+	uint64_t loopOverhead = bench_plat_getTime();
 
 	for (int i = 0; i < BENCHMARKS; i++) {
 		__asm__ volatile("nop");
@@ -164,7 +169,7 @@ int main(int argc, char *argv[])
 		__asm__ volatile("nop");
 	}
 
-	loopOverhead = bench_getTime() - loopOverhead;
+	loopOverhead = bench_plat_getTime() - loopOverhead;
 
 	int tid1, tid2;
 	if (beginthreadex(task2, 2, common.stack[1], sizeof(common.stack[1]), NULL, &tid2) < 0) {
