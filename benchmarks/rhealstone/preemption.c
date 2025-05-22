@@ -25,40 +25,54 @@
 
 #define MAX_LOOPS 4000
 
-#define ONE_TICK     26000 /* Number dependent on CPU. For loop to this count must be longer than sleep period (1 ms) */
-#define ONE_TICK_AVG 24990 /* For loop up to this count takes 1ms */
-
-
 static struct {
+	uint32_t one_tick;
+	uint32_t one_tick_avg;
 	atomic_int delay;
 	uint64_t start1, start2, end1, end2;
 	unsigned char stack[2][4096] __attribute__((aligned(8)));
 } common;
 
 
+/* Function for testing if one_tick_avg is set correctly. This is not part of the benchmark. */
+void one_tick_timing_test(void)
+{
+	for (int i = 0; i < 10; i++) {
+		uint64_t start1 = bench_plat_getTime();
+		for (common.delay = 0; common.delay < common.one_tick_avg * 1000; common.delay++) {
+			__asm__ volatile("nop");
+			/* Delay loop */
+		}
+
+		uint64_t end1 = bench_plat_getTime();
+		printf("Ticks per loop*1000: %u\n", (unsigned int)(end1 - start1));
+	}
+}
+
+
 /* Low priority */
 static void task1(void *arg)
 {
-	common.start1 = bench_getTime();
+	common.start1 = bench_plat_getTime();
 	for (volatile int cnt1 = 0; cnt1 < MAX_LOOPS; cnt1++) {
-		for (common.delay = 0; common.delay < ONE_TICK; common.delay++) {
+		for (common.delay = 0; common.delay < common.one_tick; common.delay++) {
 			__asm__ volatile("nop");
 			/* Delay loop */
 		}
 	}
-	common.end1 = bench_getTime();
+	common.end1 = bench_plat_getTime();
 	endthread();
 }
 
 /* High priority */
 static void task2(void *arg)
 {
-	common.start2 = bench_getTime();
+	common.start2 = bench_plat_getTime();
 	for (volatile int cnt2 = 0; cnt2 < MAX_LOOPS; cnt2++) {
-		common.delay = ONE_TICK;
+		common.delay = common.one_tick;
 		usleep(1000);
 	}
-	common.end2 = bench_getTime();
+	common.end2 = bench_plat_getTime();
 	endthread();
 }
 
@@ -67,12 +81,24 @@ int main(int argc, char *argv[])
 {
 	puts("Rhealstone benchmark suite:\nPreemption");
 
-	priority(1);
+	if (bench_plat_initTimer() < 0) {
+		puts("Platform timer init fail");
+		return 1;
+	}
 
-	uint64_t overhead = bench_getTime();
+	priority(1);
+#if 0
+	one_tick_timing_test();
+#else
+	(void)one_tick_timing_test;
+#endif
+
+	common.one_tick_avg = bench_plat_getOneTickAvg();
+	common.one_tick = bench_plat_getOneTick();
+	uint64_t overhead = bench_plat_getTime();
 
 	for (volatile int cnt1 = 0; cnt1 < MAX_LOOPS; cnt1++) {
-		for (atomic_int i = 0; i < ONE_TICK_AVG; i++) {
+		for (atomic_int i = 0; i < common.one_tick_avg; i++) {
 			__asm__ volatile("nop");
 			/* Delay loop */
 		}
@@ -81,7 +107,7 @@ int main(int argc, char *argv[])
 		__asm__ volatile("nop");
 	}
 
-	overhead = bench_getTime() - overhead;
+	overhead = bench_plat_getTime() - overhead;
 
 	int tid1, tid2;
 	int res = beginthreadex(task1, 3, common.stack[0], sizeof(common.stack[0]), NULL, &tid1);
