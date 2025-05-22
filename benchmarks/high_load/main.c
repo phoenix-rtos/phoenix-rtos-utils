@@ -43,10 +43,10 @@ void idleTask(void *arg)
 	while (!common.taskStart) {
 		usleep(0);
 	}
-	uint64_t start_cycles = bench_getTime();
+	uint64_t start_cycles = bench_plat_getTime();
 	uint64_t end_cycles = start_cycles + (BENCHMARK_DURATION_SEC * 250000000ULL);  // 250 MHz * 1 second
 
-	while (bench_getTime() < end_cycles) {
+	while (bench_plat_getTime() < end_cycles) {
 		++common.counters[n];
 	}
 
@@ -87,6 +87,11 @@ int main(int argc, char *argv[])
 {
 	int ntasks = MAX_TASKS;
 	printf("Starting benchmark\n");
+
+	if (bench_plat_initTimer() < 0) {
+		puts("Platform timer init fail");
+		return 1;
+	}
 
 	if (argc > 1) {
 		ntasks = atoi(argv[1]);
