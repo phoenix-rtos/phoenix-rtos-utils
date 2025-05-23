@@ -22,6 +22,9 @@
 #if defined(__CPU_GR740)
 #define ONE_TICK     26000 /* Number dependent on CPU. For loop to this count must be longer than sleep period (1 ms) */
 #define ONE_TICK_AVG 24990 /* For loop up to this count takes 1ms */
+#elif defined(__CPU_TDA4VM)
+#define ONE_TICK     24750 /* Number dependent on CPU. For loop to this count must be longer than sleep period (1 ms) */
+#define ONE_TICK_AVG 23810 /* For loop up to this count takes 1ms */
 #else
 #error "Unsupported platform"
 #endif
