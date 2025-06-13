@@ -72,7 +72,8 @@ int main(int argc, char *argv[])
 	uint64_t overhead = bench_getTime();
 
 	for (volatile int cnt1 = 0; cnt1 < MAX_LOOPS; cnt1++) {
-		for (volatile int i = 0; i < ONE_TICK_AVG; i++) {
+		for (atomic_int i = 0; i < ONE_TICK_AVG; i++) {
+			__asm__ volatile("nop");
 			/* Delay loop */
 		}
 	}
