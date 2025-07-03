@@ -22,6 +22,18 @@
 #include "../psh.h"
 
 
+#include <board_config.h>
+
+
+#ifndef PSH_PERF_BUFSZ
+#define PSH_PERF_BUFSZ (4 << 20)
+#endif
+
+#ifndef PSH_PERF_USE_RTT
+#define PSH_PERF_USE_RTT 0
+#endif
+
+
 void psh_perfinfo(void)
 {
 	printf("track kernel performance events");
@@ -37,11 +49,10 @@ static void perfHelp(void)
 
 int psh_perf(int argc, char **argv)
 {
-	time_t timeout = 0, elapsed = 0, sleeptime = 200 * 1000;
+	time_t timeout = 0, elapsed = 0, sleeptime = 1000 * 1000;
 	threadinfo_t *info, *rinfo;
-	const size_t bufsz = 4 << 20;
 	int bcount, tcnt, n = 32;
-	char *buffer, *end, *mode_str;
+	char *buffer = NULL, *end, *mode_str;
 	perf_mode_t mode;
 
 	if (argc == 1) {
@@ -72,65 +83,91 @@ int psh_perf(int argc, char **argv)
 		timeout *= 1000 * 1000;
 	}
 
-	if ((info = malloc(n * sizeof(threadinfo_t))) == NULL) {
-		fprintf(stderr, "perf: out of memory\n");
-		return -ENOMEM;
-	}
-
-	while ((tcnt = threadsinfo(n, info)) >= n) {
-		n *= 2;
-		if ((rinfo = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
+	if (mode != perf_mode_trace) {
+		/* in trace mode threads info is contained in the perf datastream already */
+		info = malloc(n * sizeof(threadinfo_t));
+		if (info == NULL) {
 			fprintf(stderr, "perf: out of memory\n");
-			free(info);
 			return -ENOMEM;
 		}
-		info = rinfo;
-	}
 
-	if (fwrite(&tcnt, sizeof(tcnt), 1, stdout) != 1) {
-		fprintf(stderr, "perf: failed or partial write\n");
+		tcnt = threadsinfo(n, info);
+		while (tcnt >= n) {
+			n *= 2;
+			rinfo = realloc(info, n * sizeof(threadinfo_t));
+			if (rinfo == NULL) {
+				fprintf(stderr, "perf: out of memory\n");
+				free(info);
+				return -ENOMEM;
+			}
+			info = rinfo;
+			tcnt = threadsinfo(n, info);
+		}
+
+		if (fwrite(&tcnt, sizeof(tcnt), 1, stdout) != 1) {
+			fprintf(stderr, "perf: failed or partial write\n");
+			free(info);
+			return -EIO;
+		}
+
+		if (fwrite(info, sizeof(threadinfo_t), tcnt, stdout) != tcnt) {
+			fprintf(stderr, "perf: failed or partial write\n");
+			free(info);
+			return -EIO;
+		}
+
 		free(info);
-		return -EIO;
 	}
-
-	if (fwrite(info, sizeof(threadinfo_t), tcnt, stdout) != tcnt) {
-		fprintf(stderr, "perf: failed or partial write\n");
-		free(info);
-		return -EIO;
-	}
-
-	free(info);
 
 	if (argc == 1)
 		return EOK;
 
-	if ((buffer = malloc(bufsz)) == NULL) {
+#if PSH_PERF_USE_RTT
+	fprintf(stderr, "perf %s: using RTT buffer\n", mode_str);
+#else
+	fprintf(stderr, "perf %s: using memory buffer\n", mode_str);
+	buffer = malloc(PSH_PERF_BUFSZ);
+	if (buffer == NULL) {
 		fprintf(stderr, "perf: out of memory\n");
 		return -ENOMEM;
 	}
+#endif
 
 	if (perf_start(mode, -1) < 0) {
-		fprintf(stderr, "perf %s: could not start\n", mode_str);
-		free(buffer);
+		fprintf(stderr, "perf %s: could not start: %s\n", mode_str, strerror(errno));
+		if (buffer != NULL) {
+			free(buffer);
+		}
 		return -1;
 	}
 
 	while (elapsed < timeout) {
-		bcount = perf_read(mode, buffer, bufsz);
+		if (buffer != NULL) {
+			bcount = perf_read(mode, buffer, PSH_PERF_BUFSZ);
 
-		if (fwrite(buffer, 1, bcount, stdout) < bcount) {
-			fprintf(stderr, "perf %s: failed or partial write\n", mode_str);
-			break;
+			if (bcount < 0) {
+				fprintf(stderr, "perf %s: perf_read failed %d\n", mode_str, bcount);
+			}
+
+			if (fwrite(buffer, 1, bcount, stdout) < bcount) {
+				fprintf(stderr, "perf %s: failed or partial write\n", mode_str);
+				break;
+			}
+
+			fprintf(stderr, "perf %s: wrote %d/%d bytes\n", mode_str, bcount, PSH_PERF_BUFSZ);
 		}
-
-		fprintf(stderr, "perf %s: wrote %d/%zd bytes\n", mode_str, bcount, bufsz);
-
+		else {
+			fprintf(stderr, "perf %s: elapsed %lld/%lld s\n", mode_str, elapsed / (1000 * 1000), timeout / (1000 * 1000));
+		}
 		usleep(sleeptime);
 		elapsed += sleeptime;
 	}
 
 	perf_finish(mode);
-	free(buffer);
+
+	if (buffer != NULL) {
+		free(buffer);
+	}
 
 	fprintf(stderr, "perf %s: finished\n", mode_str);
 
