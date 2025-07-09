@@ -1,0 +1,9 @@
+#
+# Makefile for Phoenix-RTOS 3 utils
+#
+# riscv64-gr765 tool set
+#
+# Copyright 2025 Phoenix Systems
+#
+
+DEFAULT_COMPONENTS := psh
