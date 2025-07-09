@@ -1,7 +1,7 @@
 #
 # Makefile for Phoenix-RTOS 3 utils
 #
-# riscv64-noelv tool set
+# riscv64-grfpga tool set
 #
 # Copyright 2024 Phoenix Systems
 #
