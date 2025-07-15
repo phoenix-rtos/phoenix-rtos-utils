@@ -40,7 +40,7 @@ static struct {
 static void task2(void *arg)
 {
 	uint64_t start, end;
-	start = bench_getTime();
+	start = bench_plat_getTime();
 
 	for (common.count = 0; common.count < BENCHMARKS; common.count++) {
 		if (common.semExe) {
@@ -55,7 +55,7 @@ static void task2(void *arg)
 
 		usleep(0);
 	}
-	end = bench_getTime();
+	end = bench_plat_getTime();
 
 	if (!common.semExe) {
 		common.overhead = end - start;
@@ -99,6 +99,11 @@ static void task1(void *arg)
 int main(int argc, char *argv[])
 {
 	puts("Rhealstone benchmark suite:\nSemaphore shuffle");
+
+	if (bench_plat_initTimer() < 0) {
+		puts("Platform timer init fail");
+		return 1;
+	}
 
 	priority(1);
 
