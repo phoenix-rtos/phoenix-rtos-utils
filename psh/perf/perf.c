@@ -26,7 +26,7 @@
 
 
 #ifndef PSH_PERF_BUFSZ
-#define PSH_PERF_BUFSZ (4 << 20)
+#define PSH_PERF_BUFSZ (512 << 10)
 #endif
 
 #ifndef PSH_PERF_USE_RTT
@@ -43,17 +43,19 @@ void psh_perfinfo(void)
 
 static void perfHelp(void)
 {
-	printf("Usage: perf [threads | trace] [timeout]\n");
+	printf("Usage: perf [threads | trace] [timeout] [bufsize exp] [sleeptime [ms]] [prio]\n");
 }
 
 
 int psh_perf(int argc, char **argv)
 {
-	time_t timeout = 0, elapsed = 0, sleeptime = 1000 * 1000;
+	time_t timeout = 0, elapsed = 0, sleeptime = 100 * 1000;
 	threadinfo_t *info, *rinfo;
 	int bcount, tcnt, n = 32;
 	char *buffer = NULL, *end, *mode_str;
 	perf_mode_t mode;
+
+	size_t bufsize = PSH_PERF_BUFSZ;
 
 	if (argc == 1) {
 		perfHelp();
@@ -82,6 +84,38 @@ int psh_perf(int argc, char **argv)
 		}
 		timeout *= 1000 * 1000;
 	}
+
+
+	if (argc > 3) {
+		bufsize = strtoul(argv[3], &end, 10);
+
+		if (*end != '\0' || !bufsize) {
+			fprintf(stderr, "perf: bufsize argument must be integer greater than 0\n");
+			return -EINVAL;
+		}
+
+		bufsize = 2 << bufsize;
+	}
+
+
+	if (argc > 4) {
+		sleeptime = strtoul(argv[4], &end, 10);
+
+		if (*end != '\0' || !sleeptime) {
+			fprintf(stderr, "perf: sleeptime argument must be integer greater than 0\n");
+			return -EINVAL;
+		}
+
+		sleeptime *= 1000;
+	}
+
+	int prio = 4;
+
+	if (argc > 5) {
+		prio = strtoul(argv[5], &end, 10);
+	}
+
+	priority(prio);
 
 	if (mode != perf_mode_trace) {
 		/* in trace mode threads info is contained in the perf datastream already */
@@ -126,7 +160,7 @@ int psh_perf(int argc, char **argv)
 	fprintf(stderr, "perf %s: using RTT buffer\n", mode_str);
 #else
 	fprintf(stderr, "perf %s: using memory buffer\n", mode_str);
-	buffer = malloc(PSH_PERF_BUFSZ);
+	buffer = malloc(bufsize);
 	if (buffer == NULL) {
 		fprintf(stderr, "perf: out of memory\n");
 		return -ENOMEM;
@@ -143,18 +177,19 @@ int psh_perf(int argc, char **argv)
 
 	while (elapsed < timeout) {
 		if (buffer != NULL) {
-			bcount = perf_read(mode, buffer, PSH_PERF_BUFSZ);
+			bcount = perf_read(mode, buffer, bufsize);
 
 			if (bcount < 0) {
 				fprintf(stderr, "perf %s: perf_read failed %d\n", mode_str, bcount);
 			}
 
-			if (fwrite(buffer, 1, bcount, stdout) < bcount) {
-				fprintf(stderr, "perf %s: failed or partial write\n", mode_str);
+			size_t ret = fwrite(buffer, 1, bcount, stdout);
+			if (ret < bcount) {
+				fprintf(stderr, "perf %s: failed or partial write: %zu/%zu\n", mode_str, ret, bcount);
 				break;
 			}
 
-			fprintf(stderr, "perf %s: wrote %d/%d bytes\n", mode_str, bcount, PSH_PERF_BUFSZ);
+			fprintf(stderr, "perf %s: wrote %d/%d bytes\n", mode_str, bcount, bufsize);
 		}
 		else {
 			fprintf(stderr, "perf %s: elapsed %lld/%lld s\n", mode_str, elapsed / (1000 * 1000), timeout / (1000 * 1000));
