@@ -6,4 +6,4 @@
 # Copyright 2026 Apator Metrix
 #
 
-DEFAULT_COMPONENTS := psh
+DEFAULT_COMPONENTS := psh coredump_server
