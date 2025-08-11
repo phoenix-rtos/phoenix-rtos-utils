@@ -6,7 +6,7 @@
 # Copyright 2019, 2023 Phoenix Systems
 #
 
-DEFAULT_COMPONENTS := psh meterfs-migrate
+DEFAULT_COMPONENTS := psh meterfs-migrate coredump_server
 
 ifneq (, $(findstring 106, $(TARGET)))
   DEFAULT_COMPONENTS += psd

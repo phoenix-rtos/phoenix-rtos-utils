@@ -6,4 +6,4 @@
 # Copyright 2023 Phoenix Systems
 #
 
-DEFAULT_COMPONENTS := psh
+DEFAULT_COMPONENTS := psh coredump_server
