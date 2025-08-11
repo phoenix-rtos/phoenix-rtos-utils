@@ -22,6 +22,9 @@ LOCAL_LDFLAGS := -z stack-size=4096 -z noexecstack
 PSH_ALLCOMMANDS := bind cat cd chmod cp date dd df dmesg echo edit exec hm hd \
 ifconfig kill ln ls mem mkdir mount nc nslookup ntpclient perf ping pm printenv \
 ps pwd reboot rm rmdir runfile route sync sysexec top touch tty umount uptime wget
+ifeq ($(COREDUMP_DISABLE),)
+	PSH_ALLCOMMANDS += coredump
+endif
 PSH_COMMANDS ?= $(PSH_ALLCOMMANDS)
 PSH_INTERNAL_APPLETS := pshapp help $(filter $(PSH_ALLCOMMANDS), $(PSH_COMMANDS))
 
@@ -32,6 +35,10 @@ HEADERS:= $(LOCAL_PATH)/psh.h
 
 # Project-specific applets .a files and their dependencies
 LIBS := $(PSH_PROJECT_DEPS)
+
+ifeq ($(COREDUMP_DISABLE),)
+	LIBS += libcoredumpsrv
+endif
 
 # Applets to create links:
 PSH_LINK_APPLETS := $(PSH_COMMANDS) pshlogin
