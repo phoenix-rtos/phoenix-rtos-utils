@@ -65,6 +65,7 @@ static struct {
 	size_t bufSize;
 	chan_t *chans;
 	bool started;
+	bool rolling;
 	bool warnReadTooSlow;
 } perf_common = {
 	.mode = perf_mode_trace,
@@ -94,9 +95,10 @@ static void perfHelp(void)
 		   " [options]\n"
 		   "Options:\n"
 		   "  -t [timeout] (default: %d ms)\n"
-		   "  -b [bufsize exp (default: %d -> (2 << 18) B)]\n"
-		   "  -s [sleeptime (default: %d ms)]\n"
-		   "  -d [time to freeze after perf start (default: %d ms)]\n"
+		   "  -b [bufsize exp] (default: %d -> (2 << 18) B)\n"
+		   "  -s [sleeptime] (default: %d ms)]\n"
+		   "  -d [time to freeze after perf start] (default: %d ms)\n"
+		   "  -j [start | stop] - just start/stop perf and exit\n"
 		   "  -p [prio]\n",
 			PSH_PERF_DEFAULT_TIMEOUT_MS,
 			PSH_PERF_BUFSZ_EXP,
@@ -121,7 +123,7 @@ static size_t read_channels(void)
 
 		total += bcount;
 
-		if (perf_common.bufSize == bcount && perf_common.started) {
+		if (perf_common.bufSize == bcount && !perf_common.rolling) {
 			perf_common.warnReadTooSlow = true;
 		}
 
@@ -184,9 +186,11 @@ static void cleanup(void)
 {
 	if (perf_common.buffer != NULL) {
 		free(perf_common.buffer);
+		perf_common.buffer = NULL;
 	}
 	if (perf_common.chans != NULL) {
 		free(perf_common.chans);
+		perf_common.chans = NULL;
 	}
 	if (perf_common.started) {
 		if (perf_finish(perf_common.mode) < 0) {
@@ -273,8 +277,16 @@ static int psh_perf(int argc, char **argv)
 	time_t stopDelayUs = PSH_PERF_DEFAULT_STOP_DELAY_MS;
 	int opt;
 
+	perf_common.total = 0;
+	perf_common.started = false;
+	perf_common.warnReadTooSlow = false;
+
+	/* clang-format off */
+	enum { perf_none, perf_just_start, perf_just_stop } restrictTo = perf_none;
+	/* clang-format on */
+
 	for (;;) {
-		opt = getopt(argc, argv, "o:m:t:b:s:d:p:h");
+		opt = getopt(argc, argv, "o:m:t:b:s:d:p:j:h");
 		if (opt == -1) {
 			break;
 		}
@@ -325,6 +337,7 @@ static int psh_perf(int argc, char **argv)
 					return -EINVAL;
 				}
 				stopDelayUs *= 1000;
+				perf_common.rolling = true;
 				break;
 			case 'p':
 				int prio = strtoul(optarg, &end, 10);
@@ -333,6 +346,19 @@ static int psh_perf(int argc, char **argv)
 					return -EINVAL;
 				}
 				priority(prio);
+				break;
+			case 'j':
+				if (strcmp(optarg, "start") == 0) {
+					restrictTo = perf_just_start;
+					perf_common.rolling = true;
+				}
+				else if (strcmp(optarg, "stop") == 0) {
+					restrictTo = perf_just_stop;
+				}
+				else {
+					log_error("bad arg: -n %s", optarg);
+					return -EINVAL;
+				}
 				break;
 			default:
 			case 'h':
@@ -348,18 +374,44 @@ static int psh_perf(int argc, char **argv)
 
 	unsigned flags = 0;
 
-	if (stopDelayUs != 0) {
-		flags |= PERF_TRACE_FLAG_ROLLING;
+	if (perf_common.rolling) {
+		if (perf_common.mode == perf_mode_trace) {
+			flags |= PERF_TRACE_FLAG_ROLLING;
+			log_info("rolling mode");
+		}
+		else {
+			log_error("rolling mode required but not supported in %s mode", modeStrs[perf_common.mode]);
+			cleanup();
+			return -ENOSYS;
+		}
 	}
 
-	res = perf_start(perf_common.mode, flags, NULL, 0);
+	if (restrictTo == perf_just_stop) {
+		res = perf_stop(perf_common.mode);
+	}
+	else {
+		res = perf_start(perf_common.mode, flags, NULL, 0);
+	}
+
 	if (res <= 0) {
-		log_error("could not start: %d", res);
+		log_error("perf syscall failed: %d", res);
 		cleanup();
 		return -EIO;
 	}
+
+	if (restrictTo == perf_just_start) {
+		/*
+		 * perf_common.started is kept as false intentionally so that
+		 * perf_finish() is not called in cleanup()
+		 */
+		cleanup();
+		log_info("perf started");
+		return EOK;
+	}
+
 	perf_common.started = true;
 	perf_common.nchans = res;
+	log_info("%d channel(s) to read", perf_common.nchans);
 
 	perf_common.chans = malloc(sizeof(chan_t) * perf_common.nchans);
 	if (perf_common.chans == NULL) {
@@ -395,16 +447,18 @@ static int psh_perf(int argc, char **argv)
 		}
 	}
 
-	if (stopDelayUs != 0) {
-		usleep(stopDelayUs);
+	if (stopDelayUs != 0 || restrictTo == perf_just_stop) {
+		if (restrictTo != perf_just_stop) {
+			usleep(stopDelayUs);
 
-		if (perf_stop(perf_common.mode) < 0) {
-			log_error("could not stop: %s", strerror(errno));
-			cleanup();
-			return -EIO;
+			if (perf_stop(perf_common.mode) < 0) {
+				log_error("could not stop: %s", strerror(errno));
+				cleanup();
+				return -EIO;
+			}
 		}
 
-		log_info("stopped trace");
+		log_info("perf stopped");
 
 		while (read_channels() > 0) { }
 
