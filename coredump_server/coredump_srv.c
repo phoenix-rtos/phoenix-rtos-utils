@@ -57,7 +57,7 @@ const coredump_opts_t defaultOpts = {
 	.print = 1,
 	.printSleep = 10000, /* 10ms */
 	.savepath = "/coredumps",
-	.maxFiles = 0,
+	.maxFiles = 1,
 };
 
 
