@@ -1,0 +1,257 @@
+/*
+ * Phoenix-RTOS
+ *
+ * Operating system kernel
+ *
+ * ELF definitions
+ *
+ * Copyright 2012, 2025 Phoenix Systems
+ * Copyright 2001, 2005 Pawel Pisarczyk
+ * Author: Pawel Pisarczyk, Jakub Klimek
+ *
+ * This file is part of Phoenix-RTOS.
+ *
+ * %LICENSE%
+ */
+
+#ifndef _ELF_H_
+#define _ELF_H_
+
+#include <phoenix/types.h>
+
+
+typedef unsigned short Elf32_Half;
+typedef unsigned int Elf32_Word;
+typedef unsigned int Elf32_Addr;
+typedef unsigned int Elf32_Off;
+typedef int Elf32_Sword;
+
+
+typedef __u16 Elf64_Half;
+typedef __u32 Elf64_Word;
+typedef __u64 Elf64_Addr;
+typedef __u64 Elf64_Off;
+typedef __s64 Elf64_Sword;
+typedef __u64 Elf64_Xword;
+
+#define ELFMAG  "\177ELF"
+#define SELFMAG 4
+
+#define EI_CLASS     4 /* File class byte index */
+#define ELFCLASSNONE 0 /* Invalid class */
+#define ELFCLASS32   1 /* 32-bit objects */
+#define ELFCLASS64   2 /* 64-bit objects */
+#define ELFCLASSNUM  3
+
+#define EI_DATA     5 /* Data encoding byte index */
+#define ELFDATANONE 0 /* Invalid data encoding */
+#define ELFDATA2LSB 1 /* 2's complement, little endian */
+#define ELFDATA2MSB 2 /* 2's complement, big endian */
+#define ELFDATANUM  3
+
+#define EI_VERSION 6 /* File version byte index */
+					 /* Value must be EV_CURRENT */
+
+#define EI_OSABI            7            /* OS ABI identification */
+#define ELFOSABI_NONE       0            /* UNIX System V ABI */
+#define ELFOSABI_SYSV       0            /* Alias.  */
+#define ELFOSABI_HPUX       1            /* HP-UX */
+#define ELFOSABI_NETBSD     2            /* NetBSD.  */
+#define ELFOSABI_GNU        3            /* Object uses GNU ELF extensions.  */
+#define ELFOSABI_LINUX      ELFOSABI_GNU /* Compatibility alias.  */
+#define ELFOSABI_SOLARIS    6            /* Sun Solaris.  */
+#define ELFOSABI_AIX        7            /* IBM AIX.  */
+#define ELFOSABI_IRIX       8            /* SGI Irix.  */
+#define ELFOSABI_FREEBSD    9            /* FreeBSD.  */
+#define ELFOSABI_TRU64      10           /* Compaq TRU64 UNIX.  */
+#define ELFOSABI_MODESTO    11           /* Novell Modesto.  */
+#define ELFOSABI_OPENBSD    12           /* OpenBSD.  */
+#define ELFOSABI_ARM_AEABI  64           /* ARM EABI */
+#define ELFOSABI_ARM        97           /* ARM */
+#define ELFOSABI_STANDALONE 255          /* Standalone (embedded) application */
+
+#define EI_NIDENT 16
+
+#define ET_NONE 0 /* No file type */
+#define ET_REL  1 /* Relocatable file */
+#define ET_EXEC 2 /* Executable file */
+#define ET_DYN  3 /* Shared object file */
+#define ET_CORE 4 /* Core file */
+#define ET_NUM  5 /* Number of defined types */
+
+#define SHT_SYMTAB 2
+#define SHT_STRTAB 3
+#define SHT_NOBITS 8
+#define SHT_REL    9
+#define SHT_DYNSYM 11
+#define SHT_LOPROC 0x70000000
+#define SHT_HIPROC 0x7fffffff
+#define SHT_LOUSER 0x80000000
+#define SHT_HIUSER 0xffffffff
+
+#define STT_LOPROC 13
+#define STT_HIPROC 15
+
+#define PT_LOAD      1
+#define PT_DYNAMIC   2
+#define PT_INTERP    3
+#define PT_NOTE      4
+#define PT_GNU_STACK 0x6474e551
+#define PT_LOPROC    0x70000000
+#define PT_HIPROC    0x7fffffff
+
+#define PF_X 0x1
+#define PF_W 0x2
+#define PF_R 0x4
+
+#define NT_PRSTATUS 1
+#define NT_FPREGSET 2
+#define NT_AUXV     6
+#define NT_ARM_VFP  0x400
+
+#define AT_HWCAP 16
+#define AT_NULL  0
+
+#define COMPAT_HWCAP_VFP      (1 << 6)
+#define COMPAT_HWCAP_NEON     (1 << 12)
+#define COMPAT_HWCAP_VFPv3    (1 << 13)
+#define COMPAT_HWCAP_VFPv3D16 (1 << 14)
+#define HWCAP_VFPv3           (COMPAT_HWCAP_VFP | COMPAT_HWCAP_NEON | COMPAT_HWCAP_VFPv3)
+#define HWCAP_VFPv3D16        (COMPAT_HWCAP_VFP | COMPAT_HWCAP_VFPv3 | COMPAT_HWCAP_VFPv3D16)
+
+#pragma pack(push, 1)
+
+typedef struct {
+	unsigned char e_ident[EI_NIDENT];
+	Elf32_Half e_type;
+	Elf32_Half e_machine;
+	Elf32_Word e_version;
+	Elf32_Addr e_entry;
+	Elf32_Off e_phoff;
+	Elf32_Off e_shoff;
+	Elf32_Word e_flags;
+	Elf32_Half e_ehsize;
+	Elf32_Half e_phentsize;
+	Elf32_Half e_phnum;
+	Elf32_Half e_shentsize;
+	Elf32_Half e_shnum;
+	Elf32_Half e_shstrndx;
+} Elf32_Ehdr;
+
+
+typedef struct {
+	Elf32_Word sh_name;
+	Elf32_Word sh_type;
+	Elf32_Word sh_flags;
+	Elf32_Addr sh_addr;
+	Elf32_Off sh_offset;
+	Elf32_Word sh_size;
+	Elf32_Word sh_link;
+	Elf32_Word sh_info;
+	Elf32_Word sh_addralign;
+	Elf32_Word sh_entsize;
+} Elf32_Shdr;
+
+
+typedef struct {
+	Elf32_Word p_type;
+	Elf32_Off p_offset;
+	Elf32_Addr p_vaddr;
+	Elf32_Addr p_paddr;
+	Elf32_Word p_filesz;
+	Elf32_Word p_memsz;
+	Elf32_Word p_flags;
+	Elf32_Word p_align;
+} Elf32_Phdr;
+
+
+typedef struct {
+	Elf32_Word n_namesz;
+	Elf32_Word n_descsz;
+	Elf32_Word n_type;
+} Elf32_Nhdr;
+
+
+typedef struct {
+	__u32 st_name;
+	Elf32_Addr st_value;
+	__u32 st_size;
+	unsigned char st_info;
+	unsigned char st_other;
+	__u16 st_shndx;
+} Elf32_Sym;
+
+
+typedef struct {
+	Elf32_Addr r_offset;
+	__u32 r_info;
+} Elf32_Rel;
+
+
+typedef struct {
+	Elf32_Addr r_offset;
+	__u32 r_info;
+	Elf32_Sword r_addend;
+} Elf32_Rela;
+
+
+typedef struct {
+	unsigned char e_ident[EI_NIDENT];
+	Elf64_Half e_type;
+	Elf64_Half e_machine;
+	Elf64_Word e_version;
+	Elf64_Addr e_entry;
+	Elf64_Off e_phoff;
+	Elf64_Off e_shoff;
+	Elf64_Word e_flags;
+	Elf64_Half e_ehsize;
+	Elf64_Half e_phentsize;
+	Elf64_Half e_phnum;
+	Elf64_Half e_shentsize;
+	Elf64_Half e_shnum;
+	Elf64_Half e_shstrndx;
+} Elf64_Ehdr;
+
+
+typedef struct {
+	Elf64_Word p_type;
+	Elf64_Word p_flags;
+	Elf64_Off p_offset;
+	Elf64_Addr p_vaddr;
+	Elf64_Addr p_paddr;
+	Elf64_Xword p_filesz;
+	Elf64_Xword p_memsz;
+	Elf64_Xword p_align;
+} Elf64_Phdr;
+
+
+typedef struct {
+	Elf64_Word n_namesz;
+	Elf64_Word n_descsz;
+	Elf64_Word n_type;
+} Elf64_Nhdr;
+
+
+typedef struct {
+	Elf64_Word sh_name;
+	Elf64_Word sh_type;
+	Elf64_Xword sh_flags;
+	Elf64_Addr sh_addr;
+	Elf64_Off sh_offset;
+	Elf64_Xword sh_size;
+	Elf64_Word sh_link;
+	Elf64_Word sh_info;
+	Elf64_Xword sh_addralign;
+	Elf64_Xword sh_entsize;
+} Elf64_Shdr;
+
+
+#pragma pack(pop)
+
+
+#define ELF32_R_SYM(info)       ((info) >> 8)
+#define ELF32_R_TYPE(info)      ((unsigned char)(info))
+#define ELF32_R_INFO(sym, type) (((sym) << 8) + (unsigned char)(type))
+
+
+#endif
