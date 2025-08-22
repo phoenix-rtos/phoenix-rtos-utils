@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <grp.h>
 #include <pwd.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,17 +39,21 @@
 #define DEV_COLOR "\033[33;40m" /* Yellow with black bg */
 
 
+/* clang-format off */
 enum { MODE_NORMAL, MODE_ONEPERLINE, MODE_LONG };
+/* clang-format on */
 
 
 typedef struct {
 	char *name;
 	size_t namelen;
 	size_t memlen;
-	struct stat stat;
+	time_t mtime;
+	size_t size;
+	nlink_t nlink;
+	mode_t mode;
 	struct passwd *pw;
 	struct group *gr;
-	uint32_t d_type;
 } fileinfo_t;
 
 
@@ -73,13 +78,13 @@ static int psh_ls_cmpname(const void *t1, const void *t2)
 
 static int psh_ls_cmpmtime(const void *t1, const void *t2)
 {
-	return (((fileinfo_t *)t2)->stat.st_mtime - ((fileinfo_t *)t1)->stat.st_mtime) * psh_ls_common.reverse;
+	return (((fileinfo_t *)t2)->mtime - ((fileinfo_t *)t1)->mtime) * psh_ls_common.reverse;
 }
 
 
 static int psh_ls_cmpsize(const void *t1, const void *t2)
 {
-	return (((fileinfo_t *)t2)->stat.st_size - ((fileinfo_t *)t1)->stat.st_size) * psh_ls_common.reverse;
+	return (((fileinfo_t *)t2)->size - ((fileinfo_t *)t1)->size) * psh_ls_common.reverse;
 }
 
 
@@ -146,16 +151,16 @@ static size_t *psh_ls_computerows(size_t *rows, size_t *cols, size_t nfiles)
 static void psh_ls_printfile(fileinfo_t *file, int width)
 {
 	unsigned char iscolor = 1;
-	if (S_ISREG(file->stat.st_mode) && file->stat.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) {
+	if (S_ISREG(file->mode) && file->mode & (S_IXUSR | S_IXGRP | S_IXOTH)) {
 		printf(EXE_COLOR);
 	}
-	else if (S_ISDIR(file->stat.st_mode)) {
+	else if (S_ISDIR(file->mode)) {
 		printf(DIR_COLOR);
 	}
-	else if (S_ISCHR(file->stat.st_mode) || S_ISBLK(file->stat.st_mode)) {
+	else if (S_ISCHR(file->mode) || S_ISBLK(file->mode)) {
 		printf(DEV_COLOR);
 	}
-	else if (S_ISLNK(file->stat.st_mode)) {
+	else if (S_ISLNK(file->mode)) {
 		printf(SYM_COLOR);
 	}
 	else {
@@ -190,6 +195,29 @@ static int psh_ls_copyname(fileinfo_t *file, const char *name)
 }
 
 
+static int psh_ls_statentry(fileinfo_t *file, const char *path, bool resolveSymlink)
+{
+	int ret;
+	struct stat st;
+
+	ret = resolveSymlink ? stat(path, &st) : lstat(path, &st);
+	if (ret < 0) {
+		return ret;
+	}
+
+	file->mtime = st.st_mtime;
+	file->size = st.st_size;
+	file->nlink = st.st_nlink;
+	file->mode = st.st_mode;
+	if (psh_ls_common.mode == MODE_LONG) {
+		file->pw = getpwuid(st.st_uid);
+		file->gr = getgrgid(st.st_gid);
+	}
+
+	return EOK;
+}
+
+
 static int psh_ls_readentry(fileinfo_t *file, struct dirent *dir, const char *path)
 {
 	size_t pathlen = strlen(path);
@@ -213,37 +241,14 @@ static int psh_ls_readentry(fileinfo_t *file, struct dirent *dir, const char *pa
 		strcpy(fullname + pathlen, dir->d_name);
 	}
 
-	if ((ret = lstat(fullname, &file->stat)) < 0) {
+	ret = psh_ls_statentry(file, fullname, false);
+	if (ret < 0) {
 		fprintf(stderr, "ls: can't stat file %s\n", dir->d_name);
-		free(fullname);
-		return ret;
 	}
 
-	if (psh_ls_common.mode == MODE_LONG) {
-		file->pw = getpwuid(file->stat.st_uid);
-		file->gr = getgrgid(file->stat.st_gid);
-	}
-
-	file->d_type = dir->d_type;
 	free(fullname);
 
-	return EOK;
-}
-
-
-static int psh_ls_readfile(fileinfo_t *file, char *path)
-{
-	int ret;
-
-	if ((ret = psh_ls_copyname(file, path)) < 0)
-		return ret;
-
-	if (psh_ls_common.mode == MODE_LONG) {
-		file->pw = getpwuid(file->stat.st_uid);
-		file->gr = getgrgid(file->stat.st_gid);
-	}
-
-	return EOK;
+	return ret;
 }
 
 
@@ -277,8 +282,8 @@ static void psh_ls_printlong(size_t nfiles)
 	}
 
 	for (i = 0; i < nfiles; i++) {
-		linksz = max(psh_ls_numplaces(files[i].stat.st_nlink), linksz);
-		sizesz = max(psh_ls_numplaces(files[i].stat.st_size), sizesz);
+		linksz = max(psh_ls_numplaces(files[i].nlink), linksz);
+		sizesz = max(psh_ls_numplaces(files[i].size), sizesz);
 
 		if (files[i].pw != NULL)
 			usersz = max(strlen(files[i].pw->pw_name), usersz);
@@ -286,7 +291,7 @@ static void psh_ls_printlong(size_t nfiles)
 		if (files[i].gr != NULL)
 			grpsz = max(strlen(files[i].gr->gr_name), grpsz);
 
-		localtime_r(&files[i].stat.st_mtime, &t);
+		localtime_r(&files[i].mtime, &t);
 		if (t.tm_mday >= 10)
 			daysz = 2;
 	}
@@ -296,40 +301,55 @@ static void psh_ls_printlong(size_t nfiles)
 			perms[j] = '-';
 		perms[10] = '\0';
 
-		if (S_ISDIR(files[i].stat.st_mode))
+		if (S_ISDIR(files[i].mode)) {
 			perms[0] = 'd';
-		else if (S_ISCHR(files[i].stat.st_mode))
+		}
+		else if (S_ISCHR(files[i].mode)) {
 			perms[0] = 'c';
-		else if (S_ISBLK(files[i].stat.st_mode))
+		}
+		else if (S_ISBLK(files[i].mode)) {
 			perms[0] = 'b';
-		else if (S_ISLNK(files[i].stat.st_mode))
+		}
+		else if (S_ISLNK(files[i].mode)) {
 			perms[0] = 'l';
-		else if (S_ISFIFO(files[i].stat.st_mode))
+		}
+		else if (S_ISFIFO(files[i].mode)) {
 			perms[0] = 'p';
-		else if (S_ISSOCK(files[i].stat.st_mode))
+		}
+		else if (S_ISSOCK(files[i].mode)) {
 			perms[0] = 's';
+		}
 
-		if (files[i].stat.st_mode & S_IRUSR)
+		if (files[i].mode & S_IRUSR) {
 			perms[1] = 'r';
-		if (files[i].stat.st_mode & S_IWUSR)
-			perms[2] = 'w';
-		if (files[i].stat.st_mode & S_IXUSR)
-			perms[3] = 'x';
-		if (files[i].stat.st_mode & S_IRGRP)
-			perms[4] = 'r';
-		if (files[i].stat.st_mode & S_IWGRP)
-			perms[5] = 'w';
-		if (files[i].stat.st_mode & S_IXGRP)
-			perms[6] = 'x';
-		if (files[i].stat.st_mode & S_IROTH)
-			perms[7] = 'r';
-		if (files[i].stat.st_mode & S_IWOTH)
-			perms[8] = 'w';
-		if (files[i].stat.st_mode & S_IXOTH)
-			perms[9] = 'x';
+		}
 
-		files[i].gr = getgrgid(files[i].stat.st_gid);
-		localtime_r(&files[i].stat.st_mtime, &t);
+		if (files[i].mode & S_IWUSR) {
+			perms[2] = 'w';
+		}
+		if (files[i].mode & S_IXUSR) {
+			perms[3] = 'x';
+		}
+		if (files[i].mode & S_IRGRP) {
+			perms[4] = 'r';
+		}
+		if (files[i].mode & S_IWGRP) {
+			perms[5] = 'w';
+		}
+		if (files[i].mode & S_IXGRP) {
+			perms[6] = 'x';
+		}
+		if (files[i].mode & S_IROTH) {
+			perms[7] = 'r';
+		}
+		if (files[i].mode & S_IWOTH) {
+			perms[8] = 'w';
+		}
+		if (files[i].mode & S_IXOTH) {
+			perms[9] = 'x';
+		}
+
+		localtime_r(&files[i].mtime, &t);
 		strftime(buff, 80, "%b ", &t);
 		sprintf(buff + 4, "%*d ", daysz, t.tm_mday);
 		if (t.tm_year == currentYear) {
@@ -339,10 +359,10 @@ static void psh_ls_printlong(size_t nfiles)
 			snprintf(buff + 5 + daysz, 75 - daysz, "%5d", t.tm_year + 1900);
 		}
 
-		printf("%s %*d ", perms, linksz, files[i].stat.st_nlink);
+		printf("%s %*d ", perms, linksz, files[i].nlink);
 		printf("%-*s ", usersz, (files[i].pw != NULL) ? files[i].pw->pw_name : "---");
 		printf("%-*s ", grpsz, (files[i].gr != NULL) ? files[i].gr->gr_name : "---");
-		printf("%*lld %s ", sizesz, (long long)files[i].stat.st_size, buff);
+		printf("%*lld %s ", sizesz, (long long)files[i].size, buff);
 
 		psh_ls_printfile(&files[i], files[i].namelen);
 		putchar('\n');
@@ -527,18 +547,21 @@ int psh_ls(int argc, char **argv)
 
 	/* Try to stat all the given paths */
 	for (i = 0; i < npaths; i++) {
-		if ((ret = stat(paths[i], &psh_ls_common.files[nfiles].stat)) < 0) {
+		ret = psh_ls_statentry(&psh_ls_common.files[nfiles], paths[i], true);
+		if (ret < 0) {
 			fprintf(stderr, "ls: can't access %s: no such file or directory\n", paths[i]);
 			continue;
 		}
 
-		if ((paths[i][strlen(paths[i]) - 1] == '/') && !S_ISDIR(psh_ls_common.files[nfiles].stat.st_mode)) {
+		size_t pathlen = strlen(paths[i]);
+		if ((paths[i][pathlen - 1] == '/') && !S_ISDIR(psh_ls_common.files[nfiles].mode)) {
 			fprintf(stderr, "ls: can't access %s: not a directory\n", paths[i]);
 			continue;
 		}
 
-		if (!S_ISDIR(psh_ls_common.files[nfiles].stat.st_mode) || psh_ls_common.dir) {
-			if ((ret = psh_ls_readfile(&psh_ls_common.files[nfiles], paths[i])) < 0) {
+		if (!S_ISDIR(psh_ls_common.files[nfiles].mode) || psh_ls_common.dir) {
+			ret = psh_ls_copyname(&psh_ls_common.files[nfiles], paths[i]);
+			if (ret < 0) {
 				psh_ls_free();
 				return ret;
 			}
