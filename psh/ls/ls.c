@@ -67,6 +67,8 @@ static struct {
 	int reverse;
 	int dir;
 	int (*cmp)(const void *, const void *);
+	char **paths;
+	int npaths;
 } psh_ls_common;
 
 
@@ -263,6 +265,80 @@ static unsigned int psh_ls_numplaces(unsigned int n)
 }
 
 
+/* do a low-memory fallback - a constant memory ls print without entry sorting */
+static int psh_ls_lowmem(void)
+{
+	DIR *stream;
+	struct dirent *dir;
+	int ret;
+	unsigned int i, nfiles = 0;
+	char *path;
+	char *currdir = ".";
+
+	fprintf(stderr, "ls: out of memory - not sorting entries\n");
+
+	unsigned int colsz = 0;
+
+	if (psh_ls_common.npaths == 0) {
+		psh_ls_common.paths = &currdir;
+		psh_ls_common.npaths++;
+	}
+
+	for (i = 0; i < psh_ls_common.npaths; i++) {
+		fileinfo_t file = { 0 };
+
+		path = psh_ls_common.paths[i];
+
+		ret = psh_ls_statentry(&file, path, true);
+		if (ret < 0) {
+			fprintf(stderr, "ls: stat failed\n");
+			return ret;
+		}
+
+		if (!S_ISDIR(file.mode)) {
+			continue;
+		}
+
+		stream = opendir(path);
+		if (stream == NULL) {
+			fprintf(stderr, "ls: failed to open directory %s\n", path);
+			return ret;
+		}
+
+		if (psh_ls_common.npaths > 1) {
+			printf("%s:\n", path);
+		}
+
+		nfiles = 0;
+
+		while ((dir = readdir(stream)) != NULL) {
+			if ((dir->d_name[0] == '.') && !psh_ls_common.all) {
+				continue;
+			}
+
+			memset(&file, 0, sizeof(file));
+			if ((ret = psh_ls_readentry(&file, dir, path)) < 0) {
+				closedir(stream);
+				return ret;
+			}
+
+			if (colsz + file.namelen + 1 > psh_ls_common.ws.ws_col) {
+				putchar('\n');
+				colsz = 0;
+			}
+			psh_ls_printfile(&file, file.namelen);
+			putchar(' ');
+			colsz += file.namelen + 1;
+
+			nfiles++;
+		}
+		putchar('\n');
+	}
+
+	return EOK;
+}
+
+
 static void psh_ls_printlong(size_t nfiles)
 {
 	fileinfo_t *files = psh_ls_common.files;
@@ -421,7 +497,6 @@ static int psh_ls_expandbuff(size_t size)
 	size_t i;
 
 	if ((rptr = realloc(psh_ls_common.files, size * sizeof(fileinfo_t))) == NULL) {
-		fprintf(stderr, "ls: out of memory\n");
 		return -ENOMEM;
 	}
 
@@ -457,9 +532,8 @@ void psh_lsinfo(void)
 
 int psh_ls(int argc, char **argv)
 {
-	unsigned int i, npaths = 0;
+	unsigned int i;
 	int c, nfiles = 0, ret = EOK;
-	char **paths = NULL;
 	char *currdir = NULL;
 	struct dirent *dir;
 	const char *path;
@@ -479,6 +553,8 @@ int psh_ls(int argc, char **argv)
 	psh_ls_common.all = 0;
 	psh_ls_common.dir = 0;
 	psh_ls_common.mode = MODE_NORMAL;
+	psh_ls_common.paths = NULL;
+	psh_ls_common.npaths = 0;
 
 	/* Parse arguments */
 	while ((c = getopt(argc, argv, "lad1htfSr")) != -1) {
@@ -525,42 +601,41 @@ int psh_ls(int argc, char **argv)
 
 	/* Treat rest of arguments as paths */
 	if (optind < argc) {
-		paths = &argv[optind];
-		npaths = argc - optind;
+		psh_ls_common.paths = &argv[optind];
+		psh_ls_common.npaths = argc - optind;
 	}
 
-	if (psh_ls_common.dir && (npaths == 0)) {
+	if (psh_ls_common.dir && (psh_ls_common.npaths == 0)) {
 		currdir = ".";
-		paths = &currdir;
-		npaths++;
+		psh_ls_common.paths = &currdir;
+		psh_ls_common.npaths++;
 	}
 
-	if ((npaths > 0) && ((psh_ls_common.odir = calloc(npaths, sizeof(int *))) == NULL)) {
-		fprintf(stderr, "ls: out of memory\n");
-		return -ENOMEM;
+	if ((psh_ls_common.npaths > 0) && ((psh_ls_common.odir = calloc(psh_ls_common.npaths, sizeof(int *))) == NULL)) {
+		return psh_ls_lowmem();
 	}
 
 	if ((ret = psh_ls_expandbuff(32)) < 0) {
 		free(psh_ls_common.odir);
-		return ret;
+		return psh_ls_lowmem();
 	}
 
 	/* Try to stat all the given paths */
-	for (i = 0; i < npaths; i++) {
-		ret = psh_ls_statentry(&psh_ls_common.files[nfiles], paths[i], true);
+	for (i = 0; i < psh_ls_common.npaths; i++) {
+		ret = psh_ls_statentry(&psh_ls_common.files[nfiles], psh_ls_common.paths[i], true);
 		if (ret < 0) {
-			fprintf(stderr, "ls: can't access %s: no such file or directory\n", paths[i]);
+			fprintf(stderr, "ls: can't access %s: no such file or directory\n", psh_ls_common.paths[i]);
 			continue;
 		}
 
-		size_t pathlen = strlen(paths[i]);
-		if ((paths[i][pathlen - 1] == '/') && !S_ISDIR(psh_ls_common.files[nfiles].mode)) {
-			fprintf(stderr, "ls: can't access %s: not a directory\n", paths[i]);
+		size_t pathlen = strlen(psh_ls_common.paths[i]);
+		if ((psh_ls_common.paths[i][pathlen - 1] == '/') && !S_ISDIR(psh_ls_common.files[nfiles].mode)) {
+			fprintf(stderr, "ls: can't access %s: not a directory\n", psh_ls_common.paths[i]);
 			continue;
 		}
 
 		if (!S_ISDIR(psh_ls_common.files[nfiles].mode) || psh_ls_common.dir) {
-			ret = psh_ls_copyname(&psh_ls_common.files[nfiles], paths[i]);
+			ret = psh_ls_copyname(&psh_ls_common.files[nfiles], psh_ls_common.paths[i]);
 			if (ret < 0) {
 				psh_ls_free();
 				return ret;
@@ -574,7 +649,7 @@ int psh_ls(int argc, char **argv)
 		if (nfiles == psh_ls_common.fileinfosz) {
 			if ((ret = psh_ls_expandbuff(psh_ls_common.fileinfosz * 2)) < 0) {
 				psh_ls_free();
-				return ret;
+				return psh_ls_lowmem();
 			}
 		}
 	}
@@ -591,11 +666,11 @@ int psh_ls(int argc, char **argv)
 
 	i = 0;
 	do {
-		if (npaths == 0) {
+		if (psh_ls_common.npaths == 0) {
 			path = ".";
 		}
 		else if (psh_ls_common.odir[i]) {
-			path = paths[i];
+			path = psh_ls_common.paths[i];
 		}
 		else {
 			i++;
@@ -608,7 +683,7 @@ int psh_ls(int argc, char **argv)
 		}
 
 		/* Print dir name if there are more files/dirs */
-		if (npaths > 1) {
+		if (psh_ls_common.npaths > 1) {
 			/* Print new line if there were entries already printed */
 			if (nfiles > 0)
 				putchar('\n');
@@ -631,7 +706,7 @@ int psh_ls(int argc, char **argv)
 				if ((ret = psh_ls_expandbuff(psh_ls_common.fileinfosz * 2)) < 0) {
 					closedir(stream);
 					psh_ls_free();
-					return ret;
+					return psh_ls_lowmem();
 				}
 			}
 		}
@@ -642,7 +717,7 @@ int psh_ls(int argc, char **argv)
 			psh_ls_printfiles(nfiles);
 		}
 		closedir(stream);
-	} while (++i < npaths);
+	} while (++i < psh_ls_common.npaths);
 
 	psh_ls_free();
 
