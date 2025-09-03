@@ -483,43 +483,43 @@ int psh_ls(int argc, char **argv)
 	/* Parse arguments */
 	while ((c = getopt(argc, argv, "lad1htfSr")) != -1) {
 		switch (c) {
-		case 'l':
-			psh_ls_common.mode = MODE_LONG;
-			break;
+			case 'l':
+				psh_ls_common.mode = MODE_LONG;
+				break;
 
-		case 'a':
-			psh_ls_common.all = 1;
-			break;
+			case 'a':
+				psh_ls_common.all = 1;
+				break;
 
-		case '1':
-			if (psh_ls_common.mode == MODE_NORMAL)
-				psh_ls_common.mode = MODE_ONEPERLINE;
-			break;
+			case '1':
+				if (psh_ls_common.mode == MODE_NORMAL)
+					psh_ls_common.mode = MODE_ONEPERLINE;
+				break;
 
-		case 't':
-			psh_ls_common.cmp = psh_ls_cmpmtime;
-			break;
+			case 't':
+				psh_ls_common.cmp = psh_ls_cmpmtime;
+				break;
 
-		case 'f':
-			psh_ls_common.cmp = NULL;
-			break;
+			case 'f':
+				psh_ls_common.cmp = NULL;
+				break;
 
-		case 'S':
-			psh_ls_common.cmp = psh_ls_cmpsize;
-			break;
+			case 'S':
+				psh_ls_common.cmp = psh_ls_cmpsize;
+				break;
 
-		case 'r':
-			psh_ls_common.reverse = -1;
-			break;
+			case 'r':
+				psh_ls_common.reverse = -1;
+				break;
 
-		case 'd':
-			psh_ls_common.dir = 1;
-			break;
+			case 'd':
+				psh_ls_common.dir = 1;
+				break;
 
-		case 'h':
-		default:
-			psh_ls_help();
-			return EOK;
+			case 'h':
+			default:
+				psh_ls_help();
+				return EOK;
 		}
 	}
 
@@ -652,6 +652,6 @@ int psh_ls(int argc, char **argv)
 
 void __attribute__((constructor)) ls_registerapp(void)
 {
-	static psh_appentry_t app = {.name = "ls", .run = psh_ls, .info = psh_lsinfo};
+	static psh_appentry_t app = { .name = "ls", .run = psh_ls, .info = psh_lsinfo };
 	psh_registerapp(&app);
 }
