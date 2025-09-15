@@ -3,8 +3,8 @@
  *
  * psd - Serial Download Protocol client
  *
- * Copyright 2019 Phoenix Systems
- * Author: Bartosz Ciesla, Pawel Pisarczyk, Hubert Buczynski
+ * Copyright 2019, 2026 Phoenix Systems
+ * Author: Bartosz Ciesla, Pawel Pisarczyk, Hubert Buczynski, Ziemowit Leszczynski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -36,8 +36,9 @@
 
 
 /* Control blocks */
-#define FCB 1
-#define DBBT 2
+#define FLASH_FCB    1
+#define FLASH_DBBT   2
+#define SCAN_PART_BB 3
 
 #define FILES_SIZE 16
 
@@ -79,7 +80,6 @@ struct {
 	int run;
 
 	dbbt_t* dbbt;
-	fcb_t *fcb;
 	flashsrv_info_t flash;
 
 	char rcvBuff[HID_REPORT_2_SIZE];
@@ -187,23 +187,35 @@ static int psd_changePartition(uint8_t number)
 static int psd_controlBlock(uint32_t block)
 {
 	int err = hidOK;
-	if (block == FCB) {
-		printf("PSD: Flash fcb.\n");
+	if (block == FLASH_FCB) {
+		printf("PSD: Flash FCB.\n");
 		err = fcb_flash(psd_common.f->oid, &psd_common.flash);
 	}
-	else if (block == DBBT) {
-		/* this should be done on whole chip or just kernel partitions */
-		printf("PSD: Check bad blocks - start: %u end: %llu.\n", 0, psd_common.flash.size / psd_common.flash.erasesz);
-		if ((err = flashmng_checkRange(psd_common.f->oid, 0, psd_common.flash.size, &psd_common.dbbt)) < 0)
-			return err;
+	else if (block == FLASH_DBBT) {
+		if (psd_common.dbbt == NULL) {
+			psd_common.dbbt = calloc(1, sizeof(dbbt_t));
+			if (psd_common.dbbt == NULL) {
+				printf("PSD: Failed to alloc memory for DBBT.");
+				return -ENOMEM;
+			}
+		}
 
-		/* Change to first partition for flashing */
-		psd_changePartition(1);
-		printf("PSD: Flash dbbt.\n");
-		if (psd_common.dbbt == NULL)
-			return -eControlBlock;
-
+		printf("PSD: Flash DBBT.\n");
 		err = dbbt_flash(psd_common.f->oid, psd_common.f->fd, psd_common.dbbt, &psd_common.flash);
+	}
+	else if (block == SCAN_PART_BB) {
+		if (psd_common.dbbt == NULL) {
+			psd_common.dbbt = calloc(1, sizeof(dbbt_t));
+			if (psd_common.dbbt == NULL) {
+				printf("PSD: Failed to alloc memory for DBBT.");
+				return -ENOMEM;
+			}
+		}
+
+		printf("PSD: Check partition for bad blocks - start: %u end: %llu.\n", 0, psd_common.partsz / psd_common.flash.erasesz);
+		if ((err = flashmng_checkRange(psd_common.f->oid, psd_common.partOffs, psd_common.partsz, psd_common.dbbt)) < 0) {
+			return err;
+		}
 	}
 	else {
 		return -eReport1;
