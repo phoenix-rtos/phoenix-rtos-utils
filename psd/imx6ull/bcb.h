@@ -5,8 +5,8 @@
  *
  * Boot control blocks
  *
- * Copyright 2018 Phoenix Systems
- * Author: Kamil Amanowicz
+ * Copyright 2018, 2025 Phoenix Systems
+ * Author: Kamil Amanowicz, Ziemowit Leszczynski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -21,11 +21,15 @@
 
 #include <imx6ull-flashsrv.h>
 
-#define BB_MAX	256
-
-#define BCB_CNT 4
-#define FCB_START 0x0
-#define DBBT_START 0x100
+#define BCB_CNT        4
+#define BCB_FCB_START  0x0
+#define BCB_DBBT_START 0x100
+#define BCB_DBBT_SIZE  1
+#define BCB_BB_MAX     (BCB_DBBT_SIZE * 1024 - 2)
+#define BCB_FW1_PART   2
+#define BCB_FW2_PART   3
+#define BCB_FW1_DEV    "/dev/mtd0p2"
+#define BCB_FW2_DEV    "/dev/mtd0p3"
 
 typedef struct _fcb_t {
 	uint32_t checksum;
@@ -91,18 +95,16 @@ typedef struct _dbbt_t {
 	uint32_t fingerprint;
 	uint32_t version;
 	uint32_t reserved1;
-	uint32_t size; /* pages */
+	uint32_t size; /* in pages, not including the initial 4 pages */
 	uint8_t reserved2[((4 * 4096) - 20)];
 	uint32_t reserved3;
 	uint32_t entries_num;
-	uint32_t bad_block[];
+	uint32_t bad_block[BCB_BB_MAX];
 } dbbt_t;
 
 
 int fcb_flash(oid_t oid, const flashsrv_info_t *info);
 
 int dbbt_flash(oid_t oid, int fd, dbbt_t *dbbt, const flashsrv_info_t *info);
-
-int dbbt_block_is_bad(dbbt_t *dbbt, uint32_t block_num);
 
 #endif /* _BCB_H_ */

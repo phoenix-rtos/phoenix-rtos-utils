@@ -5,8 +5,8 @@
  *
  * Boot control blocks
  *
- * Copyright 2018 Phoenix Systems
- * Author: Kamil Amanowicz
+ * Copyright 2018, 2025 Phoenix Systems
+ * Author: Kamil Amanowicz, Ziemowit Leszczynski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -42,7 +42,7 @@ uint32_t bcb_checksum(uint8_t *bcb, int size)
 
 void dbbt_fingerprint(dbbt_t *dbbt)
 {
-	dbbt->fingerprint = 0x54424244;//0x44424254;//
+	dbbt->fingerprint = 0x54424244;
 	dbbt->version = 0x01000000;
 }
 
@@ -63,12 +63,6 @@ int dbbt_block_is_bad(dbbt_t *dbbt, uint32_t block_num)
 }
 
 
-/* FIXME: current DBBT implementation isn't recognized as a valid one by the BootROM */
-/* The following DBBT test should pass (it currently fails): */
-/* 1. Enable DBBT usage in FCB by setting dbbt_start = 0x100 and disable_bbm_search = 1 */
-/* 2. Add FW1 block (8th block) to BBT in flashmng_checkRange() */
-/* 3. Flash FW1 onto the next block (9th block) */
-/* 4. BootROM should detect FW1 block as a badblock and load firmware from the next block */
 int dbbt_flash(oid_t oid, int fd, dbbt_t *dbbt, const flashsrv_info_t *info)
 {
 	unsigned int i, dbbt_failed = 0;
@@ -78,7 +72,7 @@ int dbbt_flash(oid_t oid, int fd, dbbt_t *dbbt, const flashsrv_info_t *info)
 	off_t partoff = BCB_CNT * info->erasesz;
 
 	dbbt_fingerprint(dbbt);
-	dbbt->size = 1;
+	dbbt->size = BCB_DBBT_SIZE;
 
 	for (i = 0; i < BCB_CNT; partoff += info->erasesz, i++) {
 		if ((err = lseek(fd, partoff, SEEK_SET)) < 0) {
@@ -87,29 +81,16 @@ int dbbt_flash(oid_t oid, int fd, dbbt_t *dbbt, const flashsrv_info_t *info)
 			continue;
 		}
 
-		if (write(fd, dbbt, info->writesz) != info->writesz) {
-			printf("DBBT%u FAIL: error writing dbbt page\n", i);
+		if (write(fd, dbbt, sizeof(dbbt_t)) != sizeof(dbbt_t)) {
+			printf("DBBT%u FAIL: error writing DBBT pages\n", i);
 			dbbt_failed++;
 			continue;
 		}
-
-		if (dbbt->entries_num) {
-			if ((err = lseek(fd, partoff + (4 * info->writesz), SEEK_SET)) < 0) {
-				printf("DBBT%u FAIL: lseek(2) to 0x%llx error, %d\n", i, partoff + (4 * info->writesz), err);
-				dbbt_failed++;
-				continue;
-			}
-
-			if (write(fd, (char *)dbbt + 4 * info->writesz, info->writesz) != info->writesz) {
-				printf("DBBT%u FAIL: error writing with offset dbbt page\n", i);
-				dbbt_failed++;
-				continue;
-			}
-		}
 	}
 
-	if (dbbt_failed > 0)
+	if (dbbt_failed > 0) {
 		printf("WARN: %u out of %u DBBT are broken\n", dbbt_failed, BCB_CNT);
+	}
 
 	return (dbbt_failed == BCB_CNT);
 }
@@ -140,7 +121,7 @@ void fcb_init(fcb_t *fcb, const flashsrv_info_t *info)
 	fcb->fw2_start = 24 * 64;
 	fcb->fw1_size = 0x1;
 	fcb->fw2_size = 0x1;
-	fcb->dbbt_start = 0x0; /* don't load DBBT, use badblock markers only */
+	fcb->dbbt_start = BCB_DBBT_START;
 	fcb->bbm_offset = 0x1000;
 	fcb->bbm_start = 0x0;
 	fcb->bbm_phys_offset = 0x1000;
@@ -155,7 +136,7 @@ void fcb_init(fcb_t *fcb, const flashsrv_info_t *info)
 	fcb->busy_timeout = 0xffff;
 	fcb->bbm_disabled = 1; /* disable badblock marker swapping */
 	fcb->bbm_spare_offset = 0;
-	fcb->disable_bbm_search = 0; /* use badblock markers when loading firmware */
+	fcb->disable_bbm_search = 1; /* don't use badblock markers when loading firmware */
 
 	fcb->checksum = bcb_checksum(((uint8_t *)fcb) + 4, sizeof(fcb_t) - 4);
 }
@@ -186,7 +167,7 @@ int fcb_flash(oid_t oid, const flashsrv_info_t *info)
 
 	for (i = 0; i < BCB_CNT; i++) {
 		/* TODO: check for badblock? */
-		if ((err = flashmng_writedev(oid, FCB_START + (i * pages_per_block * raw_page_size), tbuf, raw_page_size, flashsrv_devctl_writeraw)) < 0) {
+		if ((err = flashmng_writedev(oid, BCB_FCB_START + (i * pages_per_block * raw_page_size), tbuf, raw_page_size, flashsrv_devctl_writeraw)) < 0) {
 			printf("FCB%u FAIL: writeraw() error, %d\n", i, err);
 			fcb_failed++;
 			continue;
@@ -194,7 +175,7 @@ int fcb_flash(oid_t oid, const flashsrv_info_t *info)
 
 		/* verify by reading again */
 		memset(sbuf, 0, 2 * info->writesz);
-		if ((err = flashmng_readraw(oid, FCB_START + (i * pages_per_block * raw_page_size), sbuf, raw_page_size)) < 0) {
+		if ((err = flashmng_readraw(oid, BCB_FCB_START + (i * pages_per_block * raw_page_size), sbuf, raw_page_size)) < 0) {
 			printf("FCB%u FAIL: readraw() error, %d\n", i, err);
 			fcb_failed++;
 			continue;
