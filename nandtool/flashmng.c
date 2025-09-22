@@ -217,18 +217,13 @@ flashsrv_info_t *flashmng_info(oid_t oid)
 	if ((msgSend(oid.port, &msg) < 0) || (msg.o.err < 0))
 		return NULL;
 
-	flashmng_common.info.metasz = odevctl->info.metasz;
-	flashmng_common.info.writesz = odevctl->info.writesz;
-	flashmng_common.info.erasesz = odevctl->info.erasesz;
-	flashmng_common.info.size = odevctl->info.size;
+	flashmng_common.info = odevctl->info;
 
 	msg.type = mtGetAttr;
 	msg.i.attr.type = atSize;
 	msg.oid = oid;
 
 	if ((msgSend(oid.port, &msg) < 0) || (msg.o.err < 0)) {
-		flashmng_common.oid.port = 0;
-		flashmng_common.oid.id = 0;
 		return NULL;
 	}
 
@@ -237,4 +232,27 @@ flashsrv_info_t *flashmng_info(oid_t oid)
 	flashmng_common.oid.id = oid.id;
 
 	return &flashmng_common.info;
+}
+
+
+int flashmng_getAttr(int type, long long *val, oid_t oid)
+{
+	int err;
+	msg_t msg = { 0 };
+
+	msg.oid = oid;
+	msg.type = mtGetAttr;
+	msg.i.attr.type = type;
+
+	err = msgSend(oid.port, &msg);
+	if (err < 0) {
+		return err;
+	}
+	if (msg.o.err < 0) {
+		return msg.o.err;
+	}
+
+	*val = msg.o.attr.val;
+
+	return 0;
 }
