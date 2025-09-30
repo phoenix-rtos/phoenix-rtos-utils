@@ -3,8 +3,8 @@
  *
  * psd - Serial Download Protocol client
  *
- * Copyright 2019 Phoenix Systems
- * Author: Bartosz Ciesla, Pawel Pisarczyk, Hubert Buczynski
+ * Copyright 2019, 2025 Phoenix Systems
+ * Author: Bartosz Ciesla, Pawel Pisarczyk, Hubert Buczynski, Ziemowit Leszczynski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -79,7 +79,6 @@ struct {
 	int run;
 
 	dbbt_t* dbbt;
-	fcb_t *fcb;
 	flashsrv_info_t flash;
 
 	char rcvBuff[HID_REPORT_2_SIZE];
@@ -188,21 +187,33 @@ static int psd_controlBlock(uint32_t block)
 {
 	int err = hidOK;
 	if (block == FCB) {
-		printf("PSD: Flash fcb.\n");
+		printf("PSD: Flash FCB.\n");
 		err = fcb_flash(psd_common.f->oid, &psd_common.flash);
 	}
 	else if (block == DBBT) {
-		/* this should be done on whole chip or just kernel partitions */
-		printf("PSD: Check bad blocks - start: %u end: %llu.\n", 0, psd_common.flash.size / psd_common.flash.erasesz);
-		if ((err = flashmng_checkRange(psd_common.f->oid, 0, psd_common.flash.size, &psd_common.dbbt)) < 0)
+		if (psd_common.dbbt == NULL) {
+			psd_common.dbbt = calloc(1, sizeof(dbbt_t));
+			if (psd_common.dbbt == NULL) {
+				printf("PSD: Failed to alloc memory for DBBT.");
+				return -ENOMEM;
+			}
+		}
+
+		/* DBBT includes only bad blocks from firmware partitions */
+		printf("PSD: Check FW1 bad blocks - start: %u end: %llu.\n", 0, psd_common.partsz / psd_common.flash.erasesz);
+		psd_changePartition(BCB_FW1_PART);
+		if ((err = flashmng_checkRange(psd_common.f->oid, 0, psd_common.partsz, psd_common.partOffs, psd_common.dbbt)) < 0) {
 			return err;
+		}
+		printf("PSD: Check FW2 bad blocks - start: %u end: %llu.\n", 0, psd_common.partsz / psd_common.flash.erasesz);
+		psd_changePartition(BCB_FW2_PART);
+		if ((err = flashmng_checkRange(psd_common.f->oid, 0, psd_common.partsz, psd_common.partOffs, psd_common.dbbt)) < 0) {
+			return err;
+		}
 
 		/* Change to first partition for flashing */
 		psd_changePartition(1);
-		printf("PSD: Flash dbbt.\n");
-		if (psd_common.dbbt == NULL)
-			return -eControlBlock;
-
+		printf("PSD: Flash DBBT.\n");
 		err = dbbt_flash(psd_common.f->oid, psd_common.f->fd, psd_common.dbbt, &psd_common.flash);
 	}
 	else {
@@ -530,7 +541,9 @@ int main(int argc, char **argv)
 		close(psd_common.files[i].fd);
 	}
 
-	free(psd_common.dbbt);
+	if (psd_common.dbbt != NULL) {
+		free(psd_common.dbbt);
+	}
 
 	/* TODO: clean persistent bit to boot from NAND ? */
 	reboot(PHOENIX_REBOOT_MAGIC);
