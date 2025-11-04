@@ -38,3 +38,6 @@ int flashmng_cleanMarkers(oid_t oid, unsigned int start, unsigned int size);
 
 
 flashsrv_info_t *flashmng_info(oid_t oid);
+
+
+int flashmng_getAttr(int type, long long *val, oid_t oid);
