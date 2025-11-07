@@ -16,6 +16,9 @@ PSH_SYSEXECWL ?=
 
 LOCAL_CFLAGS := -DPSH_DEFUSRPWDHASH=\"$(PSH_DEFUSRPWDHASH)\"
 LOCAL_CFLAGS += -DPSH_SYSEXECWL='"$(PSH_SYSEXECWL)"'
+ifeq ($(PSH_IPV6_SUPPORT),y)
+  LOCAL_CFLAGS += -DPSH_IPV6_SUPPORT
+endif	
 LOCAL_LDFLAGS := -z stack-size=4096 -z noexecstack
 
 # TODO: search for dirs?
@@ -43,4 +46,3 @@ $(NAME)-install:
 	done
 
 include $(binary.mk)
-
