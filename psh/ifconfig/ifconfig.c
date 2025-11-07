@@ -22,6 +22,8 @@
 #include <arpa/inet.h>
 #include <net/if_arp.h>
 #include <ifaddrs.h>
+#include <net/if.h>
+#include <net/if6.h>
 
 #include "../psh.h"
 
@@ -84,6 +86,22 @@ static inline const char *psh_ifconfigPrintFlag(unsigned int flag)
 }
 
 
+static inline unsigned short psh_calculatePrefixLen(const struct sockaddr_in6 *netmask)
+{
+	unsigned short prefixlen = 0;
+
+	for (unsigned short byte = 0; byte < 16; byte++) {
+		for (unsigned short bit = 0; bit < 8; bit++, prefixlen++) {
+			if ((netmask->sin6_addr.s6_addr[byte] & (1U << (7U - bit))) == 0) {
+				return prefixlen;
+			}
+		}
+	}
+
+	return prefixlen;
+}
+
+
 static inline int psh_ifconfigPrintInterface(const struct ifaddrs *interface, int sd)
 {
 	static const char errMsg[] = "unavailable";
@@ -91,8 +109,14 @@ static inline int psh_ifconfigPrintInterface(const struct ifaddrs *interface, in
 	unsigned int interfaceFlags, i;
 	int ret;
 	struct ifreq ioctlInterface;
-
-	(void)strncpy(ioctlInterface.ifr_name, interface->ifa_name, IFNAMSIZ - 1);
+#ifdef PSH_IPV6_SUPPORT
+	const struct ifaddrs *currIface = interface;
+	const char *ifaceName = interface->ifa_name;
+	struct sockaddr_in6 *ifaceAddr;
+	char in6addrBuff[INET6_ADDRSTRLEN];
+	unsigned short prefixlen = 0;
+#endif
+	(void)strncpy(ioctlInterface.ifr_name, interface->ifa_name, sizeof(ioctlInterface.ifr_name) - 1);
 	printf("%-10s", interface->ifa_name);
 	ioctlInterface.ifr_name[IFNAMSIZ - 1] = '\0';
 
@@ -175,6 +199,56 @@ static inline int psh_ifconfigPrintInterface(const struct ifaddrs *interface, in
 	}
 	printf("Mask:%s\n", msg);
 
+#ifdef PSH_IPV6_SUPPORT
+	/* Get IPv6 interface parameters */
+	for (; currIface != NULL; currIface = currIface->ifa_next) {
+
+		/*
+		 * All netif's addresses are fetched at once, first v4, then v6.
+		 * Check if iface name didn't change, if it did - all addresses
+		 * were already printed.
+		 */
+		if (strcmp(ifaceName, currIface->ifa_name) != 0) {
+			break;
+		}
+
+		ifaceAddr = (struct sockaddr_in6 *)currIface->ifa_addr;
+		if (ifaceAddr->sin6_family != AF_INET6 || IN6_IS_ADDR_UNSPECIFIED(&ifaceAddr->sin6_addr)) {
+			continue;
+		}
+
+		/* Print the address */
+		if (inet_ntop(AF_INET6, &ifaceAddr->sin6_addr, in6addrBuff, sizeof(in6addrBuff)) == NULL) {
+			continue;
+		}
+		printf("%10s", "");
+		printf("inet6 addr:%s", in6addrBuff);
+
+		/* Calculate prefix length from netmask */
+		prefixlen = psh_calculatePrefixLen((struct sockaddr_in6 *)currIface->ifa_netmask);
+		printf("/%u", prefixlen);
+
+		/* Print address scope */
+		if (IN6_IS_ADDR_LOOPBACK(&ifaceAddr->sin6_addr)) {
+			msg = "loopback";
+		}
+		else if (IN6_IS_ADDR_LINKLOCAL(&ifaceAddr->sin6_addr)) {
+			msg = "link-local";
+		}
+		else if (IN6_IS_ADDR_ULA(&ifaceAddr->sin6_addr)) {
+			msg = "unique-local";
+		}
+		else if (IN6_IS_ADDR_GLOBAL(&ifaceAddr->sin6_addr)) {
+			msg = "global";
+		}
+		else {
+			msg = errMsg;
+		}
+
+		printf(" scope:%s\n", msg);
+	}
+#endif  // PSH_IPV6_SUPPORT
+
 	if (interfaceFlags != 0u) {
 		printf("%10s", "");
 		for (i = 0u; i < sizeof(ioctlInterface.ifr_flags) * 8u; ++i) {
@@ -205,27 +279,44 @@ static inline int psh_ifconfigPrintInterface(const struct ifaddrs *interface, in
 
 static inline int psh_ifconfigDisplay(unsigned int flags, const char *interfaceName, int sd)
 {
-	struct ifaddrs *interface;
+	struct ifaddrs *interfaces, *currIface;
 	int ret, found = 0;
+	const char *prevIfaceName = "";
 
-	ret = getifaddrs(&interface);
+	ret = getifaddrs(&interfaces);
 	if (ret != 0) {
 		perror("getifaddrs");
 		return ret;
 	}
 
-	for (; interface != NULL; interface = interface->ifa_next) {
-		if ((interfaceName == NULL) || (strcmp(interfaceName, interface->ifa_name) == 0)) {
+	for (currIface = interfaces; currIface != NULL; currIface = currIface->ifa_next) {
+
+		if ((interfaceName != NULL) && (strcmp(interfaceName, currIface->ifa_name) != 0)) {
+			/* skip printing interfaces other than requested*/
+			continue;
+		}
+
+		if (strcmp(prevIfaceName, currIface->ifa_name) == 0) {
+			/*
+			 * since psh_ifconfigPrintInterface() prints all
+			 * netif's addresses at once, skip calling it with
+			 * the same netif name again.
+			 */
+			continue;
+		}
+
+		if (((flags & IFCONFIG_ALL) != 0) || (((currIface->ifa_flags & IFF_UP) != 0)) || (interfaceName != NULL)) {
 			found = 1;
-			if (((flags & IFCONFIG_ALL) != 0) || (((interface->ifa_flags & IFF_UP) != 0)) || (interfaceName != NULL)) {
-				ret = psh_ifconfigPrintInterface(interface, sd);
-				if (ret < 0) {
-					break;
-				}
+			ret = psh_ifconfigPrintInterface(currIface, sd);
+			prevIfaceName = currIface->ifa_name;
+			if (ret < 0) {
+				break;
 			}
 		}
 	}
-	freeifaddrs(interface);
+
+	freeifaddrs(interfaces);
+
 	if (found == 0) {
 		ret = -EIO;
 	}
