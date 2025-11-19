@@ -1,9 +1,0 @@
-#
-# Makefile for Phoenix-RTOS 3 device drivers
-#
-# iMX RT tool set
-#
-# Copyright 2019 Phoenix Systems
-#
-
-DEFAULT_COMPONENTS := psh
