@@ -207,7 +207,7 @@ static int ping_reply(int fd, uint8_t *data, size_t len, char *addrstr, int addr
 	struct sockaddr_in rsin;
 	socklen_t rlen = sizeof(rsin);
 	struct icmphdr *icmphdr;
-	int bytes;
+	ssize_t bytes;
 	uint16_t rcvdChksum, calChksum;
 
 	for (;;) {
@@ -220,13 +220,13 @@ static int ping_reply(int fd, uint8_t *data, size_t len, char *addrstr, int addr
 			return -EIO;
 		}
 
-		if (bytes < (int)(sizeof(struct iphdr) + sizeof(struct icmphdr))) {
-			fprintf(stderr, "ping: Received msg too short (%d)!\n", bytes);
+		if (bytes < (sizeof(struct iphdr) + sizeof(struct icmphdr))) {
+			fprintf(stderr, "ping: Received msg too short (%zd)!\n", bytes);
 			return -EIO;
 		}
 
 		icmphdr = (struct icmphdr *)(data + sizeof(struct iphdr));
-		bytes -= sizeof(struct iphdr);
+		bytes -= (ssize_t)sizeof(struct iphdr);
 
 		if ((icmphdr->un.echo.id == htons(pingCommon.myid)) && (icmphdr->type == ICMP_ECHOREPLY)) {
 			break;
@@ -246,7 +246,7 @@ static int ping_reply(int fd, uint8_t *data, size_t len, char *addrstr, int addr
 
 	rcvdChksum = ntohs(icmphdr->checksum);
 	icmphdr->checksum = 0;
-	calChksum = ping_chksum((uint8_t *)icmphdr, bytes);
+	calChksum = ping_chksum((uint8_t *)icmphdr, (int)bytes);
 	if (rcvdChksum != calChksum) {
 		fprintf(stderr, "ping: Response invalid checksum!\n");
 		return -EIO;
@@ -286,7 +286,7 @@ static int ping_reply6(int fd, uint8_t *data, size_t len, char *addrstr, int add
 		}
 
 		if (bytes < sizeof(struct icmp6_hdr)) {
-			fprintf(stderr, "ping: Received msg too short (%ld)!\n", bytes);
+			fprintf(stderr, "ping: Received msg too short (%zd)!\n", bytes);
 			return -EIO;
 		}
 
@@ -308,7 +308,7 @@ static int ping_reply6(int fd, uint8_t *data, size_t len, char *addrstr, int add
 			return -EIO;
 		}
 
-		msgChksum = ping_chksum(data + sizeof(struct icmp6_hdr), bytes - (int)sizeof(struct icmp6_hdr));
+		msgChksum = ping_chksum(data + sizeof(struct icmp6_hdr), (int)(bytes - sizeof(struct icmp6_hdr)));
 		if (msgChksum != pingCommon.dataChksum) {
 			fprintf(stderr, "ping: Response invalid checksum!\n");
 			return -EIO;
