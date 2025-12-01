@@ -265,7 +265,7 @@ static int ping_reply(int fd, uint8_t *data, size_t len, char *addrstr, int addr
 static int ping_reply6(int fd, uint8_t *data, size_t len, char *addrstr, int addrlen)
 {
 	int ret;
-	ssize_t bytes;
+	int bytes;
 	struct icmp6_hdr *icmp6hdr;
 	struct sockaddr_in6 rsin6;
 	socklen_t rsin6Len;
@@ -286,7 +286,7 @@ static int ping_reply6(int fd, uint8_t *data, size_t len, char *addrstr, int add
 		}
 
 		if (bytes < sizeof(struct icmp6_hdr)) {
-			fprintf(stderr, "ping: Received msg too short (%ld)!\n", bytes);
+			fprintf(stderr, "ping: Received msg too short (%d)!\n", bytes);
 			return -EIO;
 		}
 
