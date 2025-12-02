@@ -80,10 +80,10 @@ void jitterTask(void *arg)
 	gettime(&now, NULL);
 	for (int i = 0; (i < JITTER_SAMPLES) && !common.taskEnd; i++) {
 		now += sleep;
-		uint64_t start = bench_getTime();
+		uint64_t start = bench_plat_getTime();
 		/* condWait - we're able to use absolute timeout */
 		condWait(common.jitterCond[n], common.jitterMutex[n], now);
-		uint64_t end = bench_getTime();
+		uint64_t end = bench_plat_getTime();
 
 		common.jitter[n][i] = end - start;
 	}
@@ -161,6 +161,11 @@ int main(int argc, char *argv[])
 {
 	int scenario;
 	puts("Starting benchmark");
+
+	if (bench_plat_initTimer() < 0) {
+		puts("Platform timer init fail");
+		return 1;
+	}
 
 	if (argc > 1) {
 		scenario = atoi(argv[1]);
