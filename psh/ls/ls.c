@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <grp.h>
 #include <pwd.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,17 +39,21 @@
 #define DEV_COLOR "\033[33;40m" /* Yellow with black bg */
 
 
+/* clang-format off */
 enum { MODE_NORMAL, MODE_ONEPERLINE, MODE_LONG };
+/* clang-format on */
 
 
 typedef struct {
 	char *name;
 	size_t namelen;
 	size_t memlen;
-	struct stat stat;
+	time_t mtime;
+	size_t size;
+	nlink_t nlink;
+	mode_t mode;
 	struct passwd *pw;
 	struct group *gr;
-	uint32_t d_type;
 } fileinfo_t;
 
 
@@ -62,6 +67,8 @@ static struct {
 	int reverse;
 	int dir;
 	int (*cmp)(const void *, const void *);
+	char **paths;
+	int npaths;
 } psh_ls_common;
 
 
@@ -73,13 +80,13 @@ static int psh_ls_cmpname(const void *t1, const void *t2)
 
 static int psh_ls_cmpmtime(const void *t1, const void *t2)
 {
-	return (((fileinfo_t *)t2)->stat.st_mtime - ((fileinfo_t *)t1)->stat.st_mtime) * psh_ls_common.reverse;
+	return (((fileinfo_t *)t2)->mtime - ((fileinfo_t *)t1)->mtime) * psh_ls_common.reverse;
 }
 
 
 static int psh_ls_cmpsize(const void *t1, const void *t2)
 {
-	return (((fileinfo_t *)t2)->stat.st_size - ((fileinfo_t *)t1)->stat.st_size) * psh_ls_common.reverse;
+	return (((fileinfo_t *)t2)->size - ((fileinfo_t *)t1)->size) * psh_ls_common.reverse;
 }
 
 
@@ -146,16 +153,16 @@ static size_t *psh_ls_computerows(size_t *rows, size_t *cols, size_t nfiles)
 static void psh_ls_printfile(fileinfo_t *file, int width)
 {
 	unsigned char iscolor = 1;
-	if (S_ISREG(file->stat.st_mode) && file->stat.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) {
+	if (S_ISREG(file->mode) && file->mode & (S_IXUSR | S_IXGRP | S_IXOTH)) {
 		printf(EXE_COLOR);
 	}
-	else if (S_ISDIR(file->stat.st_mode)) {
+	else if (S_ISDIR(file->mode)) {
 		printf(DIR_COLOR);
 	}
-	else if (S_ISCHR(file->stat.st_mode) || S_ISBLK(file->stat.st_mode)) {
+	else if (S_ISCHR(file->mode) || S_ISBLK(file->mode)) {
 		printf(DEV_COLOR);
 	}
-	else if (S_ISLNK(file->stat.st_mode)) {
+	else if (S_ISLNK(file->mode)) {
 		printf(SYM_COLOR);
 	}
 	else {
@@ -190,6 +197,29 @@ static int psh_ls_copyname(fileinfo_t *file, const char *name)
 }
 
 
+static int psh_ls_statentry(fileinfo_t *file, const char *path, bool resolveSymlink)
+{
+	int ret;
+	struct stat st;
+
+	ret = resolveSymlink ? stat(path, &st) : lstat(path, &st);
+	if (ret < 0) {
+		return ret;
+	}
+
+	file->mtime = st.st_mtime;
+	file->size = st.st_size;
+	file->nlink = st.st_nlink;
+	file->mode = st.st_mode;
+	if (psh_ls_common.mode == MODE_LONG) {
+		file->pw = getpwuid(st.st_uid);
+		file->gr = getgrgid(st.st_gid);
+	}
+
+	return EOK;
+}
+
+
 static int psh_ls_readentry(fileinfo_t *file, struct dirent *dir, const char *path)
 {
 	size_t pathlen = strlen(path);
@@ -213,37 +243,14 @@ static int psh_ls_readentry(fileinfo_t *file, struct dirent *dir, const char *pa
 		strcpy(fullname + pathlen, dir->d_name);
 	}
 
-	if ((ret = lstat(fullname, &file->stat)) < 0) {
+	ret = psh_ls_statentry(file, fullname, false);
+	if (ret < 0) {
 		fprintf(stderr, "ls: can't stat file %s\n", dir->d_name);
-		free(fullname);
-		return ret;
 	}
 
-	if (psh_ls_common.mode == MODE_LONG) {
-		file->pw = getpwuid(file->stat.st_uid);
-		file->gr = getgrgid(file->stat.st_gid);
-	}
-
-	file->d_type = dir->d_type;
 	free(fullname);
 
-	return EOK;
-}
-
-
-static int psh_ls_readfile(fileinfo_t *file, char *path)
-{
-	int ret;
-
-	if ((ret = psh_ls_copyname(file, path)) < 0)
-		return ret;
-
-	if (psh_ls_common.mode == MODE_LONG) {
-		file->pw = getpwuid(file->stat.st_uid);
-		file->gr = getgrgid(file->stat.st_gid);
-	}
-
-	return EOK;
+	return ret;
 }
 
 
@@ -255,6 +262,80 @@ static unsigned int psh_ls_numplaces(unsigned int n)
 		r++;
 
 	return r;
+}
+
+
+/* do a low-memory fallback - a constant memory ls print without entry sorting */
+static int psh_ls_lowmem(void)
+{
+	DIR *stream;
+	struct dirent *dir;
+	int ret;
+	unsigned int i, nfiles = 0;
+	char *path;
+	char *currdir = ".";
+
+	fprintf(stderr, "ls: out of memory - not sorting entries\n");
+
+	unsigned int colsz = 0;
+
+	if (psh_ls_common.npaths == 0) {
+		psh_ls_common.paths = &currdir;
+		psh_ls_common.npaths++;
+	}
+
+	for (i = 0; i < psh_ls_common.npaths; i++) {
+		fileinfo_t file = { 0 };
+
+		path = psh_ls_common.paths[i];
+
+		ret = psh_ls_statentry(&file, path, true);
+		if (ret < 0) {
+			fprintf(stderr, "ls: stat failed\n");
+			return ret;
+		}
+
+		if (!S_ISDIR(file.mode)) {
+			continue;
+		}
+
+		stream = opendir(path);
+		if (stream == NULL) {
+			fprintf(stderr, "ls: failed to open directory %s\n", path);
+			return ret;
+		}
+
+		if (psh_ls_common.npaths > 1) {
+			printf("%s:\n", path);
+		}
+
+		nfiles = 0;
+
+		while ((dir = readdir(stream)) != NULL) {
+			if ((dir->d_name[0] == '.') && !psh_ls_common.all) {
+				continue;
+			}
+
+			memset(&file, 0, sizeof(file));
+			if ((ret = psh_ls_readentry(&file, dir, path)) < 0) {
+				closedir(stream);
+				return ret;
+			}
+
+			if (colsz + file.namelen + 1 > psh_ls_common.ws.ws_col) {
+				putchar('\n');
+				colsz = 0;
+			}
+			psh_ls_printfile(&file, file.namelen);
+			putchar(' ');
+			colsz += file.namelen + 1;
+
+			nfiles++;
+		}
+		putchar('\n');
+	}
+
+	return EOK;
 }
 
 
@@ -277,8 +358,8 @@ static void psh_ls_printlong(size_t nfiles)
 	}
 
 	for (i = 0; i < nfiles; i++) {
-		linksz = max(psh_ls_numplaces(files[i].stat.st_nlink), linksz);
-		sizesz = max(psh_ls_numplaces(files[i].stat.st_size), sizesz);
+		linksz = max(psh_ls_numplaces(files[i].nlink), linksz);
+		sizesz = max(psh_ls_numplaces(files[i].size), sizesz);
 
 		if (files[i].pw != NULL)
 			usersz = max(strlen(files[i].pw->pw_name), usersz);
@@ -286,7 +367,7 @@ static void psh_ls_printlong(size_t nfiles)
 		if (files[i].gr != NULL)
 			grpsz = max(strlen(files[i].gr->gr_name), grpsz);
 
-		localtime_r(&files[i].stat.st_mtime, &t);
+		localtime_r(&files[i].mtime, &t);
 		if (t.tm_mday >= 10)
 			daysz = 2;
 	}
@@ -296,40 +377,55 @@ static void psh_ls_printlong(size_t nfiles)
 			perms[j] = '-';
 		perms[10] = '\0';
 
-		if (S_ISDIR(files[i].stat.st_mode))
+		if (S_ISDIR(files[i].mode)) {
 			perms[0] = 'd';
-		else if (S_ISCHR(files[i].stat.st_mode))
+		}
+		else if (S_ISCHR(files[i].mode)) {
 			perms[0] = 'c';
-		else if (S_ISBLK(files[i].stat.st_mode))
+		}
+		else if (S_ISBLK(files[i].mode)) {
 			perms[0] = 'b';
-		else if (S_ISLNK(files[i].stat.st_mode))
+		}
+		else if (S_ISLNK(files[i].mode)) {
 			perms[0] = 'l';
-		else if (S_ISFIFO(files[i].stat.st_mode))
+		}
+		else if (S_ISFIFO(files[i].mode)) {
 			perms[0] = 'p';
-		else if (S_ISSOCK(files[i].stat.st_mode))
+		}
+		else if (S_ISSOCK(files[i].mode)) {
 			perms[0] = 's';
+		}
 
-		if (files[i].stat.st_mode & S_IRUSR)
+		if (files[i].mode & S_IRUSR) {
 			perms[1] = 'r';
-		if (files[i].stat.st_mode & S_IWUSR)
-			perms[2] = 'w';
-		if (files[i].stat.st_mode & S_IXUSR)
-			perms[3] = 'x';
-		if (files[i].stat.st_mode & S_IRGRP)
-			perms[4] = 'r';
-		if (files[i].stat.st_mode & S_IWGRP)
-			perms[5] = 'w';
-		if (files[i].stat.st_mode & S_IXGRP)
-			perms[6] = 'x';
-		if (files[i].stat.st_mode & S_IROTH)
-			perms[7] = 'r';
-		if (files[i].stat.st_mode & S_IWOTH)
-			perms[8] = 'w';
-		if (files[i].stat.st_mode & S_IXOTH)
-			perms[9] = 'x';
+		}
 
-		files[i].gr = getgrgid(files[i].stat.st_gid);
-		localtime_r(&files[i].stat.st_mtime, &t);
+		if (files[i].mode & S_IWUSR) {
+			perms[2] = 'w';
+		}
+		if (files[i].mode & S_IXUSR) {
+			perms[3] = 'x';
+		}
+		if (files[i].mode & S_IRGRP) {
+			perms[4] = 'r';
+		}
+		if (files[i].mode & S_IWGRP) {
+			perms[5] = 'w';
+		}
+		if (files[i].mode & S_IXGRP) {
+			perms[6] = 'x';
+		}
+		if (files[i].mode & S_IROTH) {
+			perms[7] = 'r';
+		}
+		if (files[i].mode & S_IWOTH) {
+			perms[8] = 'w';
+		}
+		if (files[i].mode & S_IXOTH) {
+			perms[9] = 'x';
+		}
+
+		localtime_r(&files[i].mtime, &t);
 		strftime(buff, 80, "%b ", &t);
 		sprintf(buff + 4, "%*d ", daysz, t.tm_mday);
 		if (t.tm_year == currentYear) {
@@ -339,10 +435,10 @@ static void psh_ls_printlong(size_t nfiles)
 			snprintf(buff + 5 + daysz, 75 - daysz, "%5d", t.tm_year + 1900);
 		}
 
-		printf("%s %*d ", perms, linksz, files[i].stat.st_nlink);
+		printf("%s %*d ", perms, linksz, files[i].nlink);
 		printf("%-*s ", usersz, (files[i].pw != NULL) ? files[i].pw->pw_name : "---");
 		printf("%-*s ", grpsz, (files[i].gr != NULL) ? files[i].gr->gr_name : "---");
-		printf("%*lld %s ", sizesz, (long long)files[i].stat.st_size, buff);
+		printf("%*lld %s ", sizesz, (long long)files[i].size, buff);
 
 		psh_ls_printfile(&files[i], files[i].namelen);
 		putchar('\n');
@@ -401,7 +497,6 @@ static int psh_ls_expandbuff(size_t size)
 	size_t i;
 
 	if ((rptr = realloc(psh_ls_common.files, size * sizeof(fileinfo_t))) == NULL) {
-		fprintf(stderr, "ls: out of memory\n");
 		return -ENOMEM;
 	}
 
@@ -437,9 +532,8 @@ void psh_lsinfo(void)
 
 int psh_ls(int argc, char **argv)
 {
-	unsigned int i, npaths = 0;
+	unsigned int i;
 	int c, nfiles = 0, ret = EOK;
-	char **paths = NULL;
 	char *currdir = NULL;
 	struct dirent *dir;
 	const char *path;
@@ -459,86 +553,90 @@ int psh_ls(int argc, char **argv)
 	psh_ls_common.all = 0;
 	psh_ls_common.dir = 0;
 	psh_ls_common.mode = MODE_NORMAL;
+	psh_ls_common.paths = NULL;
+	psh_ls_common.npaths = 0;
 
 	/* Parse arguments */
 	while ((c = getopt(argc, argv, "lad1htfSr")) != -1) {
 		switch (c) {
-		case 'l':
-			psh_ls_common.mode = MODE_LONG;
-			break;
+			case 'l':
+				psh_ls_common.mode = MODE_LONG;
+				break;
 
-		case 'a':
-			psh_ls_common.all = 1;
-			break;
+			case 'a':
+				psh_ls_common.all = 1;
+				break;
 
-		case '1':
-			if (psh_ls_common.mode == MODE_NORMAL)
-				psh_ls_common.mode = MODE_ONEPERLINE;
-			break;
+			case '1':
+				if (psh_ls_common.mode == MODE_NORMAL)
+					psh_ls_common.mode = MODE_ONEPERLINE;
+				break;
 
-		case 't':
-			psh_ls_common.cmp = psh_ls_cmpmtime;
-			break;
+			case 't':
+				psh_ls_common.cmp = psh_ls_cmpmtime;
+				break;
 
-		case 'f':
-			psh_ls_common.cmp = NULL;
-			break;
+			case 'f':
+				psh_ls_common.cmp = NULL;
+				break;
 
-		case 'S':
-			psh_ls_common.cmp = psh_ls_cmpsize;
-			break;
+			case 'S':
+				psh_ls_common.cmp = psh_ls_cmpsize;
+				break;
 
-		case 'r':
-			psh_ls_common.reverse = -1;
-			break;
+			case 'r':
+				psh_ls_common.reverse = -1;
+				break;
 
-		case 'd':
-			psh_ls_common.dir = 1;
-			break;
+			case 'd':
+				psh_ls_common.dir = 1;
+				break;
 
-		case 'h':
-		default:
-			psh_ls_help();
-			return EOK;
+			case 'h':
+			default:
+				psh_ls_help();
+				return EOK;
 		}
 	}
 
 	/* Treat rest of arguments as paths */
 	if (optind < argc) {
-		paths = &argv[optind];
-		npaths = argc - optind;
+		psh_ls_common.paths = &argv[optind];
+		psh_ls_common.npaths = argc - optind;
 	}
 
-	if (psh_ls_common.dir && (npaths == 0)) {
+	if (psh_ls_common.dir && (psh_ls_common.npaths == 0)) {
 		currdir = ".";
-		paths = &currdir;
-		npaths++;
+		psh_ls_common.paths = &currdir;
+		psh_ls_common.npaths++;
 	}
 
-	if ((npaths > 0) && ((psh_ls_common.odir = calloc(npaths, sizeof(int *))) == NULL)) {
-		fprintf(stderr, "ls: out of memory\n");
-		return -ENOMEM;
+	if ((psh_ls_common.npaths > 0) && ((psh_ls_common.odir = calloc(psh_ls_common.npaths, sizeof(int *))) == NULL)) {
+		return psh_ls_lowmem();
 	}
 
 	if ((ret = psh_ls_expandbuff(32)) < 0) {
 		free(psh_ls_common.odir);
-		return ret;
+		return psh_ls_lowmem();
 	}
 
 	/* Try to stat all the given paths */
-	for (i = 0; i < npaths; i++) {
-		if ((ret = stat(paths[i], &psh_ls_common.files[nfiles].stat)) < 0) {
-			fprintf(stderr, "ls: can't access %s: no such file or directory\n", paths[i]);
+	for (i = 0; i < psh_ls_common.npaths; i++) {
+		ret = psh_ls_statentry(&psh_ls_common.files[nfiles], psh_ls_common.paths[i], true);
+		if (ret < 0) {
+			fprintf(stderr, "ls: can't access %s: no such file or directory\n", psh_ls_common.paths[i]);
 			continue;
 		}
 
-		if ((paths[i][strlen(paths[i]) - 1] == '/') && !S_ISDIR(psh_ls_common.files[nfiles].stat.st_mode)) {
-			fprintf(stderr, "ls: can't access %s: not a directory\n", paths[i]);
+		size_t pathlen = strlen(psh_ls_common.paths[i]);
+		if ((psh_ls_common.paths[i][pathlen - 1] == '/') && !S_ISDIR(psh_ls_common.files[nfiles].mode)) {
+			fprintf(stderr, "ls: can't access %s: not a directory\n", psh_ls_common.paths[i]);
 			continue;
 		}
 
-		if (!S_ISDIR(psh_ls_common.files[nfiles].stat.st_mode) || psh_ls_common.dir) {
-			if ((ret = psh_ls_readfile(&psh_ls_common.files[nfiles], paths[i])) < 0) {
+		if (!S_ISDIR(psh_ls_common.files[nfiles].mode) || psh_ls_common.dir) {
+			ret = psh_ls_copyname(&psh_ls_common.files[nfiles], psh_ls_common.paths[i]);
+			if (ret < 0) {
 				psh_ls_free();
 				return ret;
 			}
@@ -551,7 +649,7 @@ int psh_ls(int argc, char **argv)
 		if (nfiles == psh_ls_common.fileinfosz) {
 			if ((ret = psh_ls_expandbuff(psh_ls_common.fileinfosz * 2)) < 0) {
 				psh_ls_free();
-				return ret;
+				return psh_ls_lowmem();
 			}
 		}
 	}
@@ -568,11 +666,11 @@ int psh_ls(int argc, char **argv)
 
 	i = 0;
 	do {
-		if (npaths == 0) {
+		if (psh_ls_common.npaths == 0) {
 			path = ".";
 		}
 		else if (psh_ls_common.odir[i]) {
-			path = paths[i];
+			path = psh_ls_common.paths[i];
 		}
 		else {
 			i++;
@@ -585,7 +683,7 @@ int psh_ls(int argc, char **argv)
 		}
 
 		/* Print dir name if there are more files/dirs */
-		if (npaths > 1) {
+		if (psh_ls_common.npaths > 1) {
 			/* Print new line if there were entries already printed */
 			if (nfiles > 0)
 				putchar('\n');
@@ -608,7 +706,7 @@ int psh_ls(int argc, char **argv)
 				if ((ret = psh_ls_expandbuff(psh_ls_common.fileinfosz * 2)) < 0) {
 					closedir(stream);
 					psh_ls_free();
-					return ret;
+					return psh_ls_lowmem();
 				}
 			}
 		}
@@ -619,7 +717,7 @@ int psh_ls(int argc, char **argv)
 			psh_ls_printfiles(nfiles);
 		}
 		closedir(stream);
-	} while (++i < npaths);
+	} while (++i < psh_ls_common.npaths);
 
 	psh_ls_free();
 
@@ -629,6 +727,6 @@ int psh_ls(int argc, char **argv)
 
 void __attribute__((constructor)) ls_registerapp(void)
 {
-	static psh_appentry_t app = {.name = "ls", .run = psh_ls, .info = psh_lsinfo};
+	static psh_appentry_t app = { .name = "ls", .run = psh_ls, .info = psh_lsinfo };
 	psh_registerapp(&app);
 }
