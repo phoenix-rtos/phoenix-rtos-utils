@@ -51,11 +51,11 @@ static int psh_pm_cmppid(const void *t1, const void *t2)
 
 static int psh_pm_getThreads(threadinfo_t **pinfo, int *n)
 {
-	int tcnt, m = *n;
+	int tcnt, m = *n, tid = -1;
 	threadinfo_t *info = *pinfo, *rinfo;
 
 	if (info == NULL) {
-		m = 32;
+		m = threadsinfo(&tid, PH_THREADINFO_OPT_THREADCOUNT, 0, NULL) * 2;
 		info = malloc(m * sizeof(threadinfo_t));
 		if (info == NULL) {
 			fprintf(stderr, "pm: out of memory\n");
@@ -63,7 +63,7 @@ static int psh_pm_getThreads(threadinfo_t **pinfo, int *n)
 		}
 	}
 
-	while ((tcnt = threadsinfo(m, info)) >= m) {
+	while ((tcnt = threadsinfo(&tid, PH_THREADINFO_ALL, m, info)) >= m) {
 		m *= 2;
 		if ((rinfo = realloc(info, m * sizeof(threadinfo_t))) == NULL) {
 			fprintf(stderr, "pm: out of memory\n");
