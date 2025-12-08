@@ -258,8 +258,8 @@ void psh_topinfo(void)
 
 int psh_top(int argc, char **argv)
 {
-	int c, err = 0, cmd = 0, itermode = 1, run = 1, ret = EOK;
-	unsigned int totcnt, n = 32, delay = 3, niter = 0;
+	int c, err = 0, cmd = 0, itermode = 1, run = 1, ret = EOK, n = 32, totcnt;
+	unsigned int delay = 3, niter = 0;
 	threadinfo_t *info, *rinfo, *previnfo;
 	time_t prev_time = 0;
 	struct timespec ts;
@@ -298,6 +298,8 @@ int psh_top(int argc, char **argv)
 		}
 	}
 
+	n = max(threadcount() * 2, n);
+
 	if ((info = malloc(n * sizeof(threadinfo_t))) == NULL) {
 		fprintf(stderr, "top: out of memory\n");
 		return -ENOMEM;
@@ -324,27 +326,33 @@ int psh_top(int argc, char **argv)
 
 		clock_gettime(CLOCK_MONOTONIC, &ts);
 		/* Reallocate buffers if number of threads exceeds n */
-		while ((totcnt = threadsinfo(n, info)) >= n) {
-			n *= 2;
+		while ((totcnt = threadsinfo(n, PH_THREADINFO_ALL, info)) >= n) {
+			n = totcnt * 2;
 			if ((rinfo = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
-				fprintf(stderr, "ps: out of memory\n");
+				fprintf(stderr, "top: out of memory\n");
 				psh_top_free(info, previnfo);
 				return -ENOMEM;
 			}
 			info = rinfo;
 			if ((rinfo = realloc(previnfo, n * sizeof(threadinfo_t))) == NULL) {
-				fprintf(stderr, "ps: out of memory\n");
+				fprintf(stderr, "top: out of memory\n");
 				psh_top_free(info, previnfo);
 				return -ENOMEM;
 			}
 			previnfo = rinfo;
 		}
 
+		if (totcnt < 0) {
+			fprintf(stderr, "top: threadsinfo() returned: %s", strerror(-totcnt));
+			psh_top_free(info, previnfo);
+			return totcnt;
+		}
+
 		now = ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 		delta = now - prev_time;
 		prev_time = now;
 
-		psh_top_refresh(err, info, previnfo, totcnt, delta);
+		psh_top_refresh(err, info, previnfo, (unsigned int)totcnt, delta);
 		fflush(stdout);
 		err = 0;
 
