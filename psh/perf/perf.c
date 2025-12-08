@@ -32,7 +32,7 @@ int psh_perf(int argc, char **argv)
 	time_t timeout = 0, elapsed = 0, sleeptime = 200 * 1000;
 	threadinfo_t *info, *rinfo;
 	const size_t bufsz = 4 << 20;
-	int bcount, tcnt, n = 32;
+	int bcount, tcnt, n = 32, resthrds;
 	perf_event_t *buffer;
 	char *end;
 
@@ -46,13 +46,18 @@ int psh_perf(int argc, char **argv)
 		timeout *= 1000 * 1000;
 	}
 
+	resthrds = threadsinfo(PH_THREADINFO_THREADS_ALL, PH_THREADINFO_OPT_THREADCOUNT, 0, NULL);
+	if (resthrds * 2 > n) {
+		n = resthrds * 2;
+	}
+
 	if ((info = malloc(n * sizeof(threadinfo_t))) == NULL) {
 		fprintf(stderr, "perf: out of memory\n");
 		return -ENOMEM;
 	}
 
-	while ((tcnt = threadsinfo(n, info)) >= n) {
-		n *= 2;
+	while ((tcnt = threadsinfo(PH_THREADINFO_THREADS_ALL, PH_THREADINFO_ALL, n, info)) >= n) {
+		n = tcnt * 2;
 		if ((rinfo = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
 			fprintf(stderr, "perf: out of memory\n");
 			free(info);
