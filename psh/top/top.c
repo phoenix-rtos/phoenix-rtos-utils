@@ -298,6 +298,8 @@ int psh_top(int argc, char **argv)
 		}
 	}
 
+	n = max(threadcount() * 2, n);
+
 	if ((info = malloc(n * sizeof(threadinfo_t))) == NULL) {
 		fprintf(stderr, "top: out of memory\n");
 		return -ENOMEM;
@@ -324,8 +326,8 @@ int psh_top(int argc, char **argv)
 
 		clock_gettime(CLOCK_MONOTONIC, &ts);
 		/* Reallocate buffers if number of threads exceeds n */
-		while ((totcnt = threadsinfo(n, info)) >= n) {
-			n *= 2;
+		while ((totcnt = threadsinfo(n, PH_THREADINFO_ALL, info)) >= n) {
+			n = totcnt * 2;
 			if ((rinfo = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
 				fprintf(stderr, "ps: out of memory\n");
 				psh_top_free(info, previnfo);

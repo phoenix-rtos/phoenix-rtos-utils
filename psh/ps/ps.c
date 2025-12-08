@@ -102,13 +102,16 @@ static int psh_ps(int argc, char **argv)
 		}
 	}
 
+	tcnt = threadcount();
+	n = max(tcnt * 2, n);
+
 	if ((info = malloc(n * sizeof(threadinfo_t))) == NULL) {
 		fprintf(stderr, "ps: out of memory\n");
 		return -ENOMEM;
 	}
 
-	while ((tcnt = threadsinfo(n, info)) >= n) {
-		n *= 2;
+	while ((tcnt = threadsinfo(n, PH_THREADINFO_ALL, info)) >= n) {
+		n = tcnt * 2;
 		if ((rinfo = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
 			fprintf(stderr, "ps: out of memory\n");
 			free(info);
