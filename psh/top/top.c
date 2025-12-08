@@ -259,7 +259,7 @@ void psh_topinfo(void)
 int psh_top(int argc, char **argv)
 {
 	int c, err = 0, cmd = 0, itermode = 1, run = 1, ret = EOK;
-	unsigned int totcnt, n = 32, delay = 3, niter = 0;
+	unsigned int totcnt, n = 32, resthrds = 0, delay = 3, niter = 0;
 	threadinfo_t *info, *rinfo, *previnfo;
 	time_t prev_time = 0;
 	struct timespec ts;
@@ -298,6 +298,11 @@ int psh_top(int argc, char **argv)
 		}
 	}
 
+	resthrds = threadsinfo(PH_THREADINFO_THREADS_ALL, PH_THREADINFO_OPT_THREADCOUNT, 0, NULL);
+	if (resthrds * 2 > n) {
+		n = resthrds * 2;
+	}
+
 	if ((info = malloc(n * sizeof(threadinfo_t))) == NULL) {
 		fprintf(stderr, "top: out of memory\n");
 		return -ENOMEM;
@@ -324,8 +329,8 @@ int psh_top(int argc, char **argv)
 
 		clock_gettime(CLOCK_MONOTONIC, &ts);
 		/* Reallocate buffers if number of threads exceeds n */
-		while ((totcnt = threadsinfo(n, info)) >= n) {
-			n *= 2;
+		while ((totcnt = threadsinfo(PH_THREADINFO_THREADS_ALL, PH_THREADINFO_ALL, n, info)) >= n) {
+			n = totcnt * 2;
 			if ((rinfo = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
 				fprintf(stderr, "ps: out of memory\n");
 				psh_top_free(info, previnfo);

@@ -65,7 +65,7 @@ static void usage(const char *progname)
 static int psh_ps(int argc, char **argv)
 {
 	int (*cmp)(const void *, const void *) = psh_ps_cmppid;
-	int c, tcnt, i, j, n = 32;
+	int c, tcnt, i, j, n = 32, resthrds;
 	unsigned int threads = 0, fullcmd = 0;
 	threadinfo_t *info, *rinfo;
 	unsigned int d, h, m, s;
@@ -102,13 +102,18 @@ static int psh_ps(int argc, char **argv)
 		}
 	}
 
+	resthrds = threadsinfo(PH_THREADINFO_THREADS_ALL, PH_THREADINFO_OPT_THREADCOUNT, 0, NULL);
+	if (resthrds * 2 > n) {
+		n = resthrds * 2;
+	}
+
 	if ((info = malloc(n * sizeof(threadinfo_t))) == NULL) {
 		fprintf(stderr, "ps: out of memory\n");
 		return -ENOMEM;
 	}
 
-	while ((tcnt = threadsinfo(n, info)) >= n) {
-		n *= 2;
+	while ((tcnt = threadsinfo(PH_THREADINFO_THREADS_ALL, PH_THREADINFO_ALL, n, info)) >= n) {
+		n = tcnt * 2;
 		if ((rinfo = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
 			fprintf(stderr, "ps: out of memory\n");
 			free(info);
