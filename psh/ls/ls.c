@@ -265,7 +265,7 @@ static unsigned int psh_ls_numplaces(unsigned int n)
 }
 
 
-/* do a low-memory fallback - a constant memory ls print without entry sorting */
+/* do a low-memory fallback - a constant (w.r.t. filecount) memory ls print without entry sorting */
 static int psh_ls_lowmem(void)
 {
 	DIR *stream;
@@ -316,9 +316,9 @@ static int psh_ls_lowmem(void)
 				continue;
 			}
 
-			memset(&file, 0, sizeof(file));
 			if ((ret = psh_ls_readentry(&file, dir, path)) < 0) {
 				closedir(stream);
+				free(file.name);
 				return ret;
 			}
 
@@ -333,6 +333,9 @@ static int psh_ls_lowmem(void)
 			nfiles++;
 		}
 		putchar('\n');
+
+		closedir(stream);
+		free(file.name);
 	}
 
 	return EOK;
