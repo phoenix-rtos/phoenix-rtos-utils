@@ -5,8 +5,8 @@
  *
  * Flash Server Manager.
  *
- * Copyright 2019 Phoenix Systems
- * Author: Hubert Buczynski
+ * Copyright 2019, 2025 Phoenix Systems
+ * Author: Hubert Buczynski, Ziemowit Leszczynski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -26,7 +26,6 @@
 
 static struct {
 	flashsrv_info_t info;
-
 } flashmng_common;
 
 /* jffs2 cleanmarker - write it on clean blocks to mount faster */
@@ -142,50 +141,32 @@ int flashmng_getAttr(int type, long long *val, oid_t oid)
 }
 
 
-int flashmng_checkRange(oid_t oid, unsigned int start, unsigned int size, dbbt_t **dbbt)
+int flashmng_checkRange(oid_t oid, unsigned int start, unsigned int size, unsigned int offs, dbbt_t *dbbt)
 {
-	uint32_t *bbt;
-	uint32_t bbtn = 0;
-	int dbbtsz;
+	uint32_t bbcnt = 0;
 	uint32_t addr;
 
-	bbt = calloc(BB_MAX, sizeof(uint32_t));
-	if (bbt == NULL) {
-		printf("Failed to alloc memory for BBT");
-		return -1;
-	}
-
 	for (addr = start; addr < start + size; addr += flashmng_common.info.erasesz) {
-		unsigned int blockno = addr / flashmng_common.info.erasesz;
+		unsigned int blockno = (offs + addr) / flashmng_common.info.erasesz;
 
 		if (flashmng_isBadBlock(oid, addr)) {
 			printf("Block %u is marked as bad\n", blockno);
-			bbt[bbtn++] = blockno;
+			dbbt->bad_block[dbbt->entries_num] = blockno;
+			dbbt->entries_num++;
+			bbcnt++;
 		}
 
-		if (bbtn >= BB_MAX) {
+		if (dbbt->entries_num >= BCB_BB_MAX) {
 			printf("Too many bad blocks. Flash is not useable\n");
-			/* TODO: no -  we need only kernel partitions badblocks in DBBT */
-			/* TODO2: we could have more than one page with bad block numbers */
 			break;
 		}
 	}
 
-	printf("Total blocks checked: %u\n", size / flashmng_common.info.erasesz);
-	printf("Number of bad blocks:  %u\n", bbtn);
+	printf("Total blocks checked: %u\n", addr / flashmng_common.info.erasesz);
+	printf("Number of bad blocks:  %u\n", bbcnt);
 	printf("------------------\n");
 
-	/* FIXME: memory leak if dbbt already allocated */
-	if (dbbt != NULL && bbtn < BB_MAX) {
-		dbbtsz = (sizeof(dbbt_t) + (sizeof(uint32_t) * bbtn) + flashmng_common.info.writesz - 1) & ~(flashmng_common.info.writesz - 1);
-		*dbbt = malloc(dbbtsz);
-		memset(*dbbt, 0, dbbtsz);
-		memcpy(&((*dbbt)->bad_block), bbt, sizeof(uint32_t) * bbtn);
-		(*dbbt)->entries_num = bbtn;
-	}
-
-	free(bbt);
-	return (bbtn >= BB_MAX ? -1 : 0);
+	return (dbbt->entries_num >= BCB_BB_MAX ? -1 : 0);
 }
 
 

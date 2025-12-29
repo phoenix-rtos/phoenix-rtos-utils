@@ -167,7 +167,7 @@ int fcb_flash(oid_t oid, const flashsrv_info_t *info)
 
 	for (i = 0; i < BCB_CNT; i++) {
 		/* TODO: check for badblock? */
-		if ((err = flashmng_writedev(oid, BCB_FCB_START + (i * pages_per_block * raw_page_size), tbuf, raw_page_size, flashsrv_devctl_writeraw)) < 0) {
+		if ((err = flashmng_writeraw(oid, BCB_FCB_START + (i * pages_per_block), tbuf, raw_page_size)) < 0) {
 			printf("FCB%u FAIL: writeraw() error, %d\n", i, err);
 			fcb_failed++;
 			continue;

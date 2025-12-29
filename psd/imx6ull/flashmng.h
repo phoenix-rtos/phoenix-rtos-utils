@@ -33,7 +33,7 @@ int flashmng_eraseBlocks(oid_t oid, unsigned int start, unsigned int size);
 int flashmng_getAttr(int type, long long *val, oid_t oid);
 
 
-int flashmng_checkRange(oid_t oid, unsigned int start, unsigned int size, dbbt_t **dbbt);
+int flashmng_checkRange(oid_t oid, unsigned int start, unsigned int size, unsigned int offs, dbbt_t *dbbt);
 
 
 int flashmng_cleanMarkers(oid_t oid, unsigned int start, unsigned int size);
