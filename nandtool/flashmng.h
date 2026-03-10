@@ -15,7 +15,11 @@
 
 #include <sys/types.h>
 
+#if defined(__CPU_IMX6ULL)
 #include <imx6ull-flashsrv.h>
+#elif defined(__CPU_GR765)
+#include <nandfctrl2-flashsrv.h>
+#endif
 
 
 int flashmng_readraw(oid_t oid, off_t addr, void *data, size_t size);
