@@ -240,10 +240,10 @@ static int nandtool_dump(const char *outpath, unsigned int start, unsigned int n
 		endaddr = addr + nblocks * blocksz;
 	}
 
-	printf("nandtool_dump: %spartition size: %llu, erase block size: %d, write size: %d\n",
-		(oob == 1) ? "raw " : "", partsz, info->erasesz, info->writesz);
+	printf("nandtool_dump: %spartition size: %ju, erase block size: %d, write size: %d\n",
+			(oob == 1) ? "raw " : "", (uintmax_t)partsz, info->erasesz, info->writesz);
 
-	printf("nandtool_dump: Reading from address: 0x%llx to 0x%llx\n", addr, endaddr);
+	printf("nandtool_dump: Reading from address: 0x%jx to 0x%jx\n", (uintmax_t)addr, (uintmax_t)endaddr);
 
 	bytes = 0;
 	while (addr + bytes < endaddr) {
@@ -255,14 +255,14 @@ static int nandtool_dump(const char *outpath, unsigned int start, unsigned int n
 		}
 
 		if (len != pagesz) {
-			fprintf(stderr, "nandtool_dump: Fail to read a block at offset: %llx, %s\n", addr + bytes, strerror(errno));
+			fprintf(stderr, "nandtool_dump: Fail to read a block at offset: %jx, %s\n", (uintmax_t)(addr + bytes), strerror(errno));
 			ret = -EIO;
 			break;
 		}
 
 		len = write(outfd, buf, pagesz);
 		if (len != pagesz) {
-			fprintf(stderr, "nandtool_dump: Fail to write to output file at offset: %llx, %s\n", bytes, strerror(errno));
+			fprintf(stderr, "nandtool_dump: Fail to write to output file at offset: %jx, %s\n", (uintmax_t)bytes, strerror(errno));
 			ret = -EIO;
 			break;
 		}
@@ -270,7 +270,7 @@ static int nandtool_dump(const char *outpath, unsigned int start, unsigned int n
 		bytes += len;
 	}
 
-	printf("nandtool_dump: Written %lld bytes to %s file\n", bytes, outpath);
+	printf("nandtool_dump: Written %jd bytes to %s file\n", (intmax_t)bytes, outpath);
 
 	close(outfd);
 	free(buf);
