@@ -42,11 +42,12 @@ static struct cleanmarker {
 };
 
 
-int flashmng_readraw(oid_t oid, offs_t addr, void *data, size_t size)
+int flashmng_readraw(oid_t oid, off_t addr, void *data, size_t size)
 {
 	msg_t msg = { 0 };
 	flash_i_devctl_t *idevctl = (flash_i_devctl_t *)msg.i.raw;
 	flash_o_devctl_t *odevctl = (flash_o_devctl_t *)msg.o.raw;
+	int err;
 
 	msg.type = mtDevCtl;
 	msg.o.data = data;
@@ -58,8 +59,9 @@ int flashmng_readraw(oid_t oid, offs_t addr, void *data, size_t size)
 	/* FIXME: Now imx6ull nand DevCtl API supports only 32-bit offsets */
 	idevctl->read.address = (uint32_t)addr;
 
-	if (msgSend(oid.port, &msg) < 0) {
-		return -1;
+	err = msgSend(oid.port, &msg);
+	if (err < 0) {
+		return err;
 	}
 
 	return odevctl->err;
@@ -81,11 +83,14 @@ static int write_ex(oid_t oid, uint32_t addr, const void *data, size_t size, int
 	idevctl->write.address = addr;
 	idevctl->write.size = size;
 
-	if (((err = msgSend(oid.port, &msg)) < 0) || ((err = odevctl->err) < 0))
+	err = msgSend(oid.port, &msg);
+	if (err < 0) {
 		return err;
+	}
 
-	if (err != size)
+	if (odevctl->err != size) {
 		return -EIO;
+	}
 
 	return EOK;
 }
@@ -116,8 +121,9 @@ int flashmng_erase(oid_t oid, unsigned int start, unsigned int size)
 	flashsrv_info_t *info;
 	int err;
 
-	if ((info = flashmng_info(oid)) == NULL)
+	if ((info = flashmng_info(oid)) == NULL) {
 		return -EFAULT;
+	}
 
 	msg.type = mtDevCtl;
 	idevctl->type = flashsrv_devctl_erase;
@@ -125,8 +131,14 @@ int flashmng_erase(oid_t oid, unsigned int start, unsigned int size)
 	idevctl->erase.address = start * info->erasesz;
 	idevctl->erase.size = size * info->erasesz;
 
-	if (((err = msgSend(oid.port, &msg)) < 0) || ((err = odevctl->err) < 0))
+	err = msgSend(oid.port, &msg);
+	if (err < 0) {
 		return err;
+	}
+
+	if (odevctl->err < 0) {
+		return -EIO;
+	}
 
 	return EOK;
 }
@@ -199,8 +211,10 @@ int flashmng_isbad(oid_t oid, unsigned int block)
 	idevctl->badblock.oid = oid;
 	idevctl->badblock.address = block * info->erasesz;
 
-	if (((err = msgSend(oid.port, &msg)) < 0) || ((err = odevctl->err) < 0))
+	err = msgSend(oid.port, &msg);
+	if (err < 0) {
 		return err;
+	}
 
 	return odevctl->err;
 }
@@ -211,6 +225,7 @@ flashsrv_info_t *flashmng_info(oid_t oid)
 	msg_t msg = { 0 };
 	flash_i_devctl_t *idevctl = (flash_i_devctl_t *)msg.i.raw;
 	flash_o_devctl_t *odevctl = (flash_o_devctl_t *)msg.o.raw;
+	int err;
 
 	if ((flashmng_common.oid.port == oid.port) && (flashmng_common.oid.id == oid.id))
 		return &flashmng_common.info;
@@ -218,19 +233,19 @@ flashsrv_info_t *flashmng_info(oid_t oid)
 	msg.type = mtDevCtl;
 	idevctl->type = flashsrv_devctl_info;
 
-	if ((msgSend(oid.port, &msg) < 0) || (odevctl->err < 0))
+	err = msgSend(oid.port, &msg);
+	if (err < 0) {
 		return NULL;
+	}
 
-	flashmng_common.info.metasz = odevctl->info.metasz;
-	flashmng_common.info.writesz = odevctl->info.writesz;
-	flashmng_common.info.erasesz = odevctl->info.erasesz;
-	flashmng_common.info.size = odevctl->info.size;
+	flashmng_common.info = odevctl->info;
 
 	msg.type = mtGetAttr;
 	msg.i.attr.type = atSize;
 	msg.i.attr.oid = oid;
 
-	if ((msgSend(oid.port, &msg) < 0) || (msg.o.attr.err < 0)) {
+	err = msgSend(oid.port, &msg);
+	if ((err < 0) || (msg.o.attr.err < 0)) {
 		flashmng_common.oid.port = 0;
 		flashmng_common.oid.id = 0;
 		return NULL;
@@ -241,4 +256,24 @@ flashsrv_info_t *flashmng_info(oid_t oid)
 	flashmng_common.oid.id = oid.id;
 
 	return &flashmng_common.info;
+}
+
+
+int flashmng_getAttr(int type, long long *val, oid_t oid)
+{
+	int err;
+	msg_t msg = { 0 };
+
+	msg.type = mtGetAttr;
+	msg.i.attr.type = type;
+	msg.i.attr.oid = oid;
+
+	err = msgSend(oid.port, &msg);
+	if ((err < 0) || (msg.o.attr.err < 0)) {
+		return -1;
+	}
+
+	*val = msg.o.attr.val;
+
+	return 0;
 }
