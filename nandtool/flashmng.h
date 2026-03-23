@@ -18,7 +18,7 @@
 #include <imx6ull-flashsrv.h>
 
 
-int flashmng_readraw(oid_t oid, offs_t addr, void *data, size_t size);
+int flashmng_readraw(oid_t oid, off_t addr, void *data, size_t size);
 
 
 int flashmng_writeraw(oid_t oid, unsigned int page, const void *data, size_t size);
@@ -38,3 +38,6 @@ int flashmng_cleanMarkers(oid_t oid, unsigned int start, unsigned int size);
 
 
 flashsrv_info_t *flashmng_info(oid_t oid);
+
+
+int flashmng_getAttr(int type, long long *val, oid_t oid);

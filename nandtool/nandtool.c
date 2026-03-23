@@ -5,8 +5,8 @@
  *
  * Allows to program/erase NAND flash memory
  *
- * Copyright 2018, 2021 Phoenix Systems
- * Author: Kamil Amanowicz, Lukasz Kosinski
+ * Copyright 2018, 2021, 2026 Phoenix Systems
+ * Author: Kamil Amanowicz, Lukasz Kosinski, Ziemowit Leszczynski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -25,7 +25,11 @@
 #include <sys/stat.h>
 
 #include "flashmng.h"
+#ifdef HAS_BCB
+#include "bcb.h"
+#endif
 
+#define SCAN_DEVICES_MAX_CNT 4
 
 static struct {
 	oid_t oid;
@@ -181,8 +185,8 @@ static int nandtool_dump(const char *outpath, unsigned int start, unsigned int n
 {
 	const flashsrv_info_t *info;
 	ssize_t len;
-	offs_t blocksz, partsz, pagesz;
-	offs_t addr, endaddr, bytes;
+	off_t blocksz, partsz, pagesz;
+	off_t addr, endaddr, bytes;
 	uint8_t *buf;
 	int ret = 0;
 	int outfd;
@@ -275,6 +279,134 @@ static int nandtool_dump(const char *outpath, unsigned int start, unsigned int n
 }
 
 
+#ifdef HAS_BCB
+static int nandtool_write_fcb(void)
+{
+	int err;
+
+	printf("nandtool: flashing FCB\n");
+
+	err = fcb_erase_and_flash(nandtool_common.oid, nandtool_common.info);
+	if (err < 0) {
+		perror("nandtool: failed to flash FCB");
+		return err;
+	}
+
+	return 0;
+}
+
+
+static int nandtool_scan(const char *dev, dbbt_t *dbbt)
+{
+	int err;
+	oid_t oid;
+	const flashsrv_info_t *info;
+	long long offs;
+	uint32_t bbcnt = 0;
+	unsigned int idx;
+
+	err = lookup(dev, NULL, &oid);
+	if (err < 0) {
+		fprintf(stderr, "nandtool: failed to lookup device (%s), err: %d\n", dev, err);
+		return err;
+	}
+
+	info = flashmng_info(oid);
+	if (info == NULL) {
+		fprintf(stderr, "nandtool: failed to get device info (%s)\n", dev);
+		return -EFAULT;
+	}
+
+	err = flashmng_getAttr(atDev, &offs, oid);
+	if (err < 0) {
+		return err;
+	}
+
+	printf("nandtool: scanning %s bad blocks\n", dev);
+
+	for (idx = 0; idx < info->size / info->erasesz; idx++) {
+		unsigned int blockno = (offs / info->erasesz) + idx;
+
+		if (flashmng_isbad(oid, idx)) {
+			printf("nandtool: block %u is marked as bad\n", blockno);
+			if (dbbt != NULL) {
+				dbbt->bad_block[dbbt->entries_num] = blockno;
+				dbbt->entries_num++;
+			}
+			bbcnt++;
+		}
+
+		if ((dbbt != NULL) && (dbbt->entries_num >= BCB_BB_MAX)) {
+			printf("nandtool: too many bad blocks\n");
+			break;
+		}
+	}
+
+	printf("nandtool: total blocks checked: %u\n", idx);
+	printf("nandtool: number of bad blocks:  %u\n", bbcnt);
+	printf("nandtool: ------------------\n");
+
+	if (dbbt != NULL) {
+		return (dbbt->entries_num >= BCB_BB_MAX ? -1 : 0);
+	}
+
+	return 0;
+}
+
+
+static int nandtool_write_dbbt(const char *dev[], int cnt)
+{
+	int i, err;
+	dbbt_t *dbbt;
+
+	dbbt = calloc(1, sizeof(dbbt_t));
+	if (dbbt == NULL) {
+		fprintf(stderr, "nandtool: failed to alloc memory for DBBT\n");
+		return -ENOMEM;
+	}
+
+	/* DBBT includes only bad blocks from specified partitions */
+	for (i = 0; i < cnt; i++) {
+		err = nandtool_scan(dev[i], dbbt);
+		if (err < 0) {
+			fprintf(stderr, "nandtool: failed to scan %s for bad blocks\n", dev[i]);
+			free(dbbt);
+			return err;
+		}
+	}
+
+	printf("nandtool: flashing DBBT\n");
+
+	err = dbbt_erase_and_flash(nandtool_common.oid, nandtool_common.fd, dbbt, nandtool_common.info);
+	if (err < 0) {
+		perror("nandtool: failed to flash DBBT");
+		free(dbbt);
+		return err;
+	}
+
+	free(dbbt);
+
+	return 0;
+}
+
+
+static int nandtool_scan_only(const char *dev[], int cnt)
+{
+	int i, err;
+
+	for (i = 0; i < cnt; i++) {
+		err = nandtool_scan(dev[i], NULL);
+		if (err < 0) {
+			fprintf(stderr, "nandtool: failed to scan %s for bad blocks\n", dev[i]);
+			return err;
+		}
+	}
+
+	return 0;
+}
+#endif
+
+
 static void nandtool_help(const char *prog)
 {
 	printf("Usage: %s [options] <device>\n", prog);
@@ -291,6 +423,12 @@ static void nandtool_help(const char *prog)
 	printf("\t-i <path>         - path of the file to flash (requires -s option)\n");
 	printf("\t-r                - flash raw data\n");
 	printf("\t-s <block>        - start flashing from given block (requires -i)\n");
+#ifdef HAS_BCB
+	printf("\t-f                - write FCB (dangerous)\n");
+	printf("\t-t                - write DBBT (use -l to scan specified partitions for bad blocks)\n");
+	printf("\t-l <device>       - partition to scan for bad blocks (can be specified up to %d times)\n", SCAN_DEVICES_MAX_CNT);
+	printf("\t                    (use alone to scan and report bad blocks without writing DBBT)\n");
+#endif
 	printf("\t-h                - print this help message\n");
 	printf("\t-q                - quiet: don't print flashing progress\n");
 }
@@ -324,6 +462,12 @@ int main(int argc, char **argv)
 {
 	int check = 0, raw = 0, flash_start = -1, erase_start = -1, erase_size = -1, write_cleanmarkers = 0;
 	int dump_start = -1, dump_size = -1, oob = 0;
+#ifdef HAS_BCB
+	int write_fcb = 0;
+	int write_dbbt = 0;
+	int scan_bb_cnt = 0;
+	const char *scan_bb_dev[SCAN_DEVICES_MAX_CNT];
+#endif
 	const char *ipath = NULL, *opath = NULL;
 	char *dev;
 	int c, err;
@@ -331,7 +475,7 @@ int main(int argc, char **argv)
 	if (isatty(STDOUT_FILENO))
 		nandtool_common.interactive = 1;
 
-	while ((c = getopt(argc, argv, "e:d:i:o:rs:bchjq")) != -1) {
+	while ((c = getopt(argc, argv, "e:d:i:o:rs:bchjqftl:")) != -1) {
 		switch (c) {
 			case 'e':
 				if (nandtool_parseRange(optarg, &erase_start, &erase_size) < 0) {
@@ -346,6 +490,24 @@ int main(int argc, char **argv)
 					return 1;
 				}
 				break;
+
+#ifdef HAS_BCB
+			case 'f':
+				write_fcb = 1;
+				break;
+
+			case 't':
+				write_dbbt = 1;
+				break;
+
+			case 'l':
+				if (scan_bb_cnt >= SCAN_DEVICES_MAX_CNT) {
+					fprintf(stderr, "nandtool: too many -l options (max %d)\n", SCAN_DEVICES_MAX_CNT);
+					return 1;
+				}
+				scan_bb_dev[scan_bb_cnt++] = optarg;
+				break;
+#endif
 
 			case 'j':
 				write_cleanmarkers = 1;
@@ -428,6 +590,20 @@ int main(int argc, char **argv)
 
 		if ((flash_start >= 0) && (ipath != NULL) && ((err = nandtool_flash(ipath, flash_start, raw)) < 0))
 			break;
+
+#ifdef HAS_BCB
+		if ((write_fcb != 0) && ((err = nandtool_write_fcb()) < 0)) {
+			break;
+		}
+
+		if ((write_dbbt != 0) && ((err = nandtool_write_dbbt(scan_bb_dev, scan_bb_cnt)) < 0)) {
+			break;
+		}
+
+		if ((write_dbbt == 0) && (scan_bb_cnt > 0) && ((err = nandtool_scan_only(scan_bb_dev, scan_bb_cnt)) < 0)) {
+			break;
+		}
+#endif
 	} while (0);
 
 	if ((dump_start >= 0) && (opath != NULL)) {
