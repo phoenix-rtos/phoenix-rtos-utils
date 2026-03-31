@@ -1285,7 +1285,6 @@ static int psh_streamRestore(struct psh_redir *redir)
 
 static int psh_runscript(char *path)
 {
-	static const char *scriptCmds[] = { "export", "unset" };
 	char **argv = NULL, *line = NULL;
 	int i, err = 0, argc = 0;
 	size_t n = 0;
@@ -1310,10 +1309,16 @@ static int psh_runscript(char *path)
 		}
 
 		/* Check script magic */
-		if ((i == 1) && (strcmp(line, SCRIPT_MAGIC) != 0)) {
-			fprintf(stderr, "psh: %s is not a psh script\n", path);
-			err = -EINVAL;
-			break;
+		if (i == 1) {
+			if (strcmp(line, SCRIPT_MAGIC) != 0) {
+				fprintf(stderr, "psh: %s is not a psh script\n", path);
+				err = -EINVAL;
+				break;
+			}
+			else {
+				/* Skip further parsing for magic line */
+				continue;
+			}
 		}
 
 		/* Skip empty lines */
@@ -1363,35 +1368,22 @@ static int psh_runscript(char *path)
 			argv = NULL;
 		}
 		else {
-			for (size_t j = 0; j < sizeof(scriptCmds) / sizeof(scriptCmds[0]); j++) {
-				size_t len = strlen(scriptCmds[j]);
-				if (len > (size_t)lineLen) {
-					continue;
-				}
-
-				if ((line[len] != '\0') && (isspace(line[len]) == 0) && (strncmp(line, scriptCmds[j], len) != 0)) {
-					continue;
-				}
-
-				err = psh_parsecmd(line, &argc, &argv);
-				if (err < 0) {
-					fprintf(stderr, "psh: failed to parse line %d\n", i);
-					break;
-				}
-
-				const psh_appentry_t *app = psh_findapp(argv[0]);
-				if (app != NULL) {
-					(void)app->run(argc, argv);
-				}
-				else {
-					fprintf(stderr, "psh: %s not found\n", argv[0]);
-				}
-
-				free(argv);
-				argv = NULL;
-
+			err = psh_parsecmd(line, &argc, &argv);
+			if (err < 0) {
+				fprintf(stderr, "psh: failed to parse line %d\n", i);
 				break;
 			}
+
+			const psh_appentry_t *app = psh_findapp(argv[0]);
+			if (app != NULL) {
+				(void)app->run(argc, argv);
+			}
+			else {
+				fprintf(stderr, "psh: %s not found\n", argv[0]);
+			}
+
+			free(argv);
+			argv = NULL;
 		}
 
 		if (err < 0) {
