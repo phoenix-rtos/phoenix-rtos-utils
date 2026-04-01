@@ -23,7 +23,19 @@ uint64_t bench_printResult(uint64_t start, uint64_t end, int loops, uint64_t loo
 {
 	uint64_t elapsed = end - start - loopOverhead;
 	uint64_t time = (elapsed / loops) - singleOverhead;
-	printf("Result: %" PRIu64 " cycles\n", time);
+
+	/* Temporary nanosecond calculation - only imx6ull and zynqmp are supported.
+	 * Other platforms will fail to compile until proper CPU frequency is added. */
+#if defined(__CPU_IMX6ULL)
+	int cpuMHz = 792;
+#elif defined(__CPU_ZYNQMP)
+	int cpuMHz = 600;
+#else
+#error "bench_printResult: unsupported platform, add CPU frequency for nanosecond calculation"
+#endif
+	uint64_t timeNs = (uint64_t)((double)time / ((double)cpuMHz * 1e6) * 1e9);
+
+	printf("Result: %" PRIu64 " cycles (%" PRIu64 " ns)\n", time, timeNs);
 
 	return elapsed;
 }
