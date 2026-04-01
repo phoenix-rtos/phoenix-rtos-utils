@@ -25,6 +25,7 @@ DEP_LIBS := bench_common
 include $(binary.mk)
 
 NAME := rh_preemption
+LOCAL_CFLAGS += -O0
 LOCAL_SRCS := preemption.c
 DEP_LIBS := bench_common
 
