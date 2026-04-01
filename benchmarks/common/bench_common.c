@@ -23,7 +23,13 @@ uint64_t bench_printResult(uint64_t start, uint64_t end, int loops, uint64_t loo
 {
 	uint64_t elapsed = end - start - loopOverhead;
 	uint64_t time = (elapsed / loops) - singleOverhead;
-	printf("Result: %" PRIu64 " cycles\n", time);
+
+	/* temporary nanosecond calculation */
+	// int cpuMHz = 792;  // imx6ull
+	int cpuMHz = 600;  // zynqmp-r5
+	uint64_t timeNs = (uint64_t)((double)time / ((double)cpuMHz * 1e6) * 1e9);
+
+	printf("Result: %" PRIu64 " cycles (%" PRIu64 " ns)\n", time, timeNs);
 
 	return elapsed;
 }

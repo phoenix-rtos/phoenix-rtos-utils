@@ -14,6 +14,10 @@ ifeq ($(TARGET_SUBFAMILY),gr740)
   LOCAL_SRCS += bench_plat_gr740.c
 else ifeq ($(TARGET_SUBFAMILY),tda4vm)
   LOCAL_SRCS += bench_plat_tda4vm.c
+else ifeq ($(TARGET_SUBFAMILY),imx6ull)
+  LOCAL_SRCS += bench_plat_imx6ull.c
+else ifeq ($(TARGET_SUBFAMILY),zynqmp)
+  LOCAL_SRCS += bench_plat_zynqmp.c
 endif
 
 include $(static-lib.mk)

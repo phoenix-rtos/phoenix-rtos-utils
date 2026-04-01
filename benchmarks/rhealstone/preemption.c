@@ -23,7 +23,7 @@
 
 #include "bench_common.h"
 
-#define MAX_LOOPS 4000
+#define MAX_LOOPS 10000
 
 static struct {
 	uint32_t one_tick;
@@ -37,15 +37,19 @@ static struct {
 /* Function for testing if one_tick_avg is set correctly. This is not part of the benchmark. */
 void one_tick_timing_test(void)
 {
+	common.one_tick_avg = bench_plat_getOneTickAvg();
+
 	for (int i = 0; i < 10; i++) {
 		uint64_t start1 = bench_plat_getTime();
-		for (common.delay = 0; common.delay < common.one_tick_avg * 1000; common.delay++) {
-			__asm__ volatile("nop");
-			/* Delay loop */
+		for (volatile int cnt1 = 0; cnt1 < 1000; cnt1++) {
+			for (common.delay = 0; common.delay < common.one_tick_avg; common.delay++) {
+				__asm__ volatile("nop");
+				/* Delay loop */
+			}
 		}
 
 		uint64_t end1 = bench_plat_getTime();
-		printf("Ticks per loop*1000: %u\n", (unsigned int)(end1 - start1));
+		printf("Ticks per loop*1000: %llu\n", (end1 - start1));
 	}
 }
 
@@ -98,7 +102,7 @@ int main(int argc, char *argv[])
 	uint64_t overhead = bench_plat_getTime();
 
 	for (volatile int cnt1 = 0; cnt1 < MAX_LOOPS; cnt1++) {
-		for (atomic_int i = 0; i < common.one_tick_avg; i++) {
+		for (common.delay = 0; common.delay < common.one_tick_avg; common.delay++) {
 			__asm__ volatile("nop");
 			/* Delay loop */
 		}
