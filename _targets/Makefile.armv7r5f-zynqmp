@@ -6,4 +6,4 @@
 # Copyright 2024 Phoenix Systems
 #
 
-DEFAULT_COMPONENTS := psh bench_common rh_msg_latency rh_preemption
+DEFAULT_COMPONENTS := psh bench_common rh_msg_latency rh_msg_latency_send rh_preemption
