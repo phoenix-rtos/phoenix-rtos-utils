@@ -18,6 +18,12 @@ DEP_LIBS := bench_common
 
 include $(binary.mk)
 
+NAME := rh_msg_latency_send
+LOCAL_SRCS := msg_latency_send.c
+DEP_LIBS := bench_common
+
+include $(binary.mk)
+
 NAME := rh_msg_latency
 LOCAL_SRCS := msg_latency.c
 DEP_LIBS := bench_common
