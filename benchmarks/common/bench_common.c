@@ -39,13 +39,14 @@ uint64_t bench_getTime(void)
 
 #else
 
-
 uint64_t bench_getTime(void)
 {
 	/* TODO: implement per platform
 	 * this function needs to work in interrupts!
 	 */
-	return 0;
+	uint64_t _val;
+        __asm__ volatile("mrs %0, cntpct_el0" : "=r" (_val));
+        return _val;
 }
 
 
