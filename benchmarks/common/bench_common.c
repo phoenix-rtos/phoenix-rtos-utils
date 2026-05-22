@@ -45,7 +45,15 @@ uint64_t bench_getTime(void)
 	/* TODO: implement per platform
 	 * this function needs to work in interrupts!
 	 */
-	return 0;
+	uint64_t ticks = 0;
+	// The "isb" ensures we don't read the timer out of order
+	asm volatile(
+			"isb\n"
+			"mrs %0, pmccntr_el0\n"
+			: "=r"(ticks)
+			:
+			: "memory");
+	return ticks;
 }
 
 
