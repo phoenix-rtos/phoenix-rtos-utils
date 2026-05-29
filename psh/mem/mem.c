@@ -29,13 +29,14 @@ static int psh_mem_summary(void)
 
 	memset(&info, 0, sizeof(info));
 
-	info.page.mapsz = -1;
+	info.page.mapidx = -1;
+	info.page.map.mapsz = -1;
 	info.entry.mapsz = -1;
 	info.entry.kmapsz = -1;
 	info.maps.mapsz = -1;
 
 	meminfo(&info);
-	printf("(%d+%d)/%dKB ", (info.page.alloc - info.page.boot) / 1024, info.page.boot / 1024, (info.page.alloc + info.page.free) / 1024);
+	printf("(%d+%d)/%dKB ", (info.page.alloc - info.page.boot) / 1024, info.page.boot / 1024, info.page.total / 1024);
 	printf("%d/%d entries\n", info.entry.total - info.entry.free, info.entry.total);
 
 	return 0;
@@ -104,9 +105,10 @@ static int psh_mem_process(char *memarg)
 
 	memset(&info, 0, sizeof(info));
 
-	info.page.mapsz = -1;
+	info.page.mapidx = -1;
+	info.page.map.mapsz = -1;
 
-	if (memarg && !strcmp("kernel", memarg))  {
+	if (memarg && !strcmp("kernel", memarg)) {
 		/* Show memory map of the kernel */
 		info.entry.mapsz = -1;
 		info.entry.kmapsz = 16;
@@ -146,7 +148,7 @@ static int psh_mem_process(char *memarg)
 			mapsz = info.entry.mapsz;
 			if ((rmap = realloc(info.entry.map, mapsz * sizeof(entryinfo_t))) == NULL) {
 				fprintf(stderr, "mem: out of memory\n");
-				free(info.page.map);
+				free(info.entry.map);
 				return -ENOMEM;
 			}
 			info.entry.map = rmap;
@@ -172,7 +174,7 @@ static int psh_mem_process(char *memarg)
 
 static int psh_mem_page(void)
 {
-	int i, mapsz = 0;
+	int i, j, mapsz = 0;
 	pageinfo_t *p = NULL;
 	unsigned int n;
 	meminfo_t info;
@@ -183,47 +185,53 @@ static int psh_mem_page(void)
 	/* Show page map */
 	info.entry.mapsz = ~0;
 	info.entry.kmapsz = ~0;
-	info.page.mapsz = 16;
+	info.page.mapsz = 1;
+	info.page.map.mapsz = 0;
+	meminfo(&info);
 
-	do {
-		mapsz = info.page.mapsz;
-		if ((rmap = realloc(info.page.map, mapsz * sizeof(pageinfo_t))) == NULL) {
-			fprintf(stderr, "mem: out of memory\n");
-			free(info.page.map);
-			return -ENOMEM;
-		}
-		info.page.map = rmap;
-		meminfo(&info);
-	}
-	while (info.page.mapsz > mapsz);
-
-	for (i = 0, p = info.page.map; i < info.page.mapsz; ++i, ++p) {
-		if ((p != info.page.map) && (n = (p->addr - (p - 1)->addr) / _PAGE_SIZE - (p - 1)->count)) {
-			if (n > 3) {
-				printf("[%ux]", n);
+	info.page.map.mapsz = 16;
+	for (j = 0; j < info.page.mapsz; ++j) {
+		printf("Map #%d: ", j);
+		info.page.mapidx = j;
+		do {
+			mapsz = info.page.map.mapsz;
+			if ((rmap = realloc(info.page.map.map, mapsz * sizeof(pageinfo_t))) == NULL) {
+				fprintf(stderr, "mem: out of memory\n");
+				free(info.page.map.map);
+				return -ENOMEM;
 			}
-			else {
-				while (n-- > 0)
-					printf("x");
+			info.page.map.map = rmap;
+			meminfo(&info);
+		} while (info.page.map.mapsz > mapsz);
+
+		for (i = 0, p = info.page.map.map; i < info.page.map.mapsz; ++i, ++p) {
+			if ((p != info.page.map.map) && (n = (p->addr - (p - 1)->addr) / _PAGE_SIZE - (p - 1)->count)) {
+				if (n > 3) {
+					printf("[%ux]", n);
+				}
+				else {
+					while (n-- > 0)
+						printf("x");
+				}
 			}
+
+			if ((n = p->count) > 3) {
+				printf("[%u%c]", p->count, p->marker);
+				continue;
+			}
+
+			while (n-- > 0)
+				printf("%c", p->marker);
 		}
-
-		if ((n = p->count) > 3) {
-			printf("[%u%c]", p->count, p->marker);
-			continue;
+		if (info.page.map.mapsz < 0) {
+			fprintf(stderr, "mem: Page view unavailable\n");
 		}
-
-		while (n-- > 0)
-			printf("%c", p->marker);
-	}
-	if (info.page.mapsz < 0) {
-		fprintf(stderr, "mem: Page view unavailable\n");
-	}
-	else {
-		printf("\n");
+		else {
+			printf("\n");
+		}
 	}
 
-	free(info.page.map);
+	free(info.page.map.map);
 	return 0;
 }
 
@@ -270,7 +278,7 @@ static int psh_sharedMaps(void)
 	int i;
 	char buff[32];
 
-	info.page.mapsz = -1;
+	info.page.map.mapsz = -1;
 	info.entry.kmapsz = -1;
 	info.entry.mapsz = -1;
 	info.maps.mapsz = 0;
