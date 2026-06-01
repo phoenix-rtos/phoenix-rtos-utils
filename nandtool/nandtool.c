@@ -505,7 +505,10 @@ int main(int argc, char **argv)
 					fprintf(stderr, "nandtool: too many -l options (max %d)\n", SCAN_DEVICES_MAX_CNT);
 					return 1;
 				}
-				scan_bb_dev[scan_bb_cnt++] = optarg;
+				if ((scan_bb_dev[scan_bb_cnt++] = realpath(optarg, NULL)) == NULL) {
+					fprintf(stderr, "nandtool: failed to resolve path (%s): %s\n", optarg, strerror(errno));
+					return 1;
+				}
 				break;
 #endif
 
