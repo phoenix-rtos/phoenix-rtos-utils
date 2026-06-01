@@ -6,7 +6,7 @@
  * Allows to program/erase NAND flash memory
  *
  * Copyright 2018, 2021, 2026 Phoenix Systems
- * Author: Kamil Amanowicz, Lukasz Kosinski, Ziemowit Leszczynski
+ * Author: Kamil Amanowicz, Lukasz Kosinski, Ziemowit Leszczynski, Katarzyna Wojciechowska
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -354,7 +354,7 @@ static int nandtool_scan(const char *dev, dbbt_t *dbbt)
 }
 
 
-static int nandtool_write_dbbt(const char *dev[], int cnt)
+static int nandtool_write_dbbt(char *dev[], int cnt)
 {
 	int i, err;
 	dbbt_t *dbbt;
@@ -390,7 +390,7 @@ static int nandtool_write_dbbt(const char *dev[], int cnt)
 }
 
 
-static int nandtool_scan_only(const char *dev[], int cnt)
+static int nandtool_scan_only(char *dev[], int cnt)
 {
 	int i, err;
 
@@ -403,6 +403,14 @@ static int nandtool_scan_only(const char *dev[], int cnt)
 	}
 
 	return 0;
+}
+
+
+static void nandtool_freeBbDev(char *dev[], int cnt)
+{
+	for (int i = 0; i < cnt; i++) {
+		free(dev[i]);
+	}
 }
 #endif
 
@@ -467,6 +475,7 @@ int main(int argc, char **argv)
 	int write_dbbt = 0;
 	int scan_bb_cnt = 0;
 	const char *scan_bb_dev[SCAN_DEVICES_MAX_CNT];
+	char *scan_bb_dev_real[SCAN_DEVICES_MAX_CNT];
 #endif
 	const char *ipath = NULL, *opath = NULL;
 	char *dev;
@@ -559,15 +568,33 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
+#ifdef HAS_BCB
+	for (int i = 0; i < scan_bb_cnt; i++) {
+		char *resolved = realpath(scan_bb_dev[i], NULL);
+		if (resolved == NULL) {
+			fprintf(stderr, "nandtool: failed to resolve path (%s): %s\n", scan_bb_dev[i], strerror(errno));
+			nandtool_freeBbDev(scan_bb_dev_real, i);
+			free(dev);
+			return 1;
+		}
+		scan_bb_dev_real[i] = resolved;
+	}
+#endif
 
 	if ((err = lookup(dev, NULL, &nandtool_common.oid)) < 0) {
 		fprintf(stderr, "nandtool: failed to lookup device (%s), err: %d\n", dev, err);
+#ifdef HAS_BCB
+		nandtool_freeBbDev(scan_bb_dev_real, scan_bb_cnt);
+#endif
 		free(dev);
 		return 1;
 	}
 
 	if ((err = open(dev, O_RDWR)) < 0) {
 		fprintf(stderr, "nandtool: failed to open device (%s), err: %d\n", dev, err);
+#ifdef HAS_BCB
+		nandtool_freeBbDev(scan_bb_dev_real, scan_bb_cnt);
+#endif
 		free(dev);
 		return 1;
 	}
@@ -577,6 +604,9 @@ int main(int argc, char **argv)
 		err = -EFAULT;
 		fprintf(stderr, "nandtool: failed to get device info (%s), err: %d\n", dev, err);
 		close(nandtool_common.fd);
+#ifdef HAS_BCB
+		nandtool_freeBbDev(scan_bb_dev_real, scan_bb_cnt);
+#endif
 		free(dev);
 		return 1;
 	}
@@ -596,11 +626,11 @@ int main(int argc, char **argv)
 			break;
 		}
 
-		if ((write_dbbt != 0) && ((err = nandtool_write_dbbt(scan_bb_dev, scan_bb_cnt)) < 0)) {
+		if ((write_dbbt != 0) && ((err = nandtool_write_dbbt(scan_bb_dev_real, scan_bb_cnt)) < 0)) {
 			break;
 		}
 
-		if ((write_dbbt == 0) && (scan_bb_cnt > 0) && ((err = nandtool_scan_only(scan_bb_dev, scan_bb_cnt)) < 0)) {
+		if ((write_dbbt == 0) && (scan_bb_cnt > 0) && ((err = nandtool_scan_only(scan_bb_dev_real, scan_bb_cnt)) < 0)) {
 			break;
 		}
 #endif
@@ -612,6 +642,9 @@ int main(int argc, char **argv)
 
 	close(nandtool_common.fd);
 
+#ifdef HAS_BCB
+	nandtool_freeBbDev(scan_bb_dev_real, scan_bb_cnt);
+#endif
 	free(dev);
 	return (err < 0) ? 1 : 0;
 }
