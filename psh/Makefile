@@ -18,13 +18,13 @@ LOCAL_CFLAGS := -DPSH_DEFUSRPWDHASH=\"$(PSH_DEFUSRPWDHASH)\"
 LOCAL_CFLAGS += -DPSH_SYSEXECWL='"$(PSH_SYSEXECWL)"'
 ifeq ($(PSH_IPV6_SUPPORT),y)
   LOCAL_CFLAGS += -DPSH_IPV6_SUPPORT
-endif	
+endif
 LOCAL_LDFLAGS := -z stack-size=4096 -z noexecstack
 
 # TODO: search for dirs?
 PSH_ALLCOMMANDS := bind cat cd chmod cp date dd df dmesg echo edit exec hm hd \
 ifconfig kill ln ls mem mkdir mount nc nslookup ntpclient perf ping pm printenv \
-ps pwd reboot rm rmdir runfile route sync sysexec top touch tty umount uptime wget
+ps pwd reboot rm rmdir runfile route sync sysexec top touch tty umount uptime wait wget
 PSH_COMMANDS ?= $(PSH_ALLCOMMANDS)
 PSH_INTERNAL_APPLETS := pshapp help $(filter $(PSH_ALLCOMMANDS), $(PSH_COMMANDS))
 

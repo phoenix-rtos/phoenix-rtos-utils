@@ -38,6 +38,8 @@
 
 #include "../psh.h"
 
+#define EXIT_AFTER_SCRIPT        0
+#define INTERACTIVE_AFTER_SCRIPT 1
 
 /* Shell definitions */
 #define PROMPT       "(psh)% " /* Shell prompt */
@@ -1285,9 +1287,8 @@ static int psh_streamRestore(struct psh_redir *redir)
 
 static int psh_runscript(char *path)
 {
-	static const char *scriptCmds[] = { "export", "unset" };
 	char **argv = NULL, *line = NULL;
-	int i, err = 0, argc = 0;
+	int i, err = EXIT_AFTER_SCRIPT, argc = 0;
 	size_t n = 0;
 	FILE *stream;
 	pid_t pid;
@@ -1310,10 +1311,16 @@ static int psh_runscript(char *path)
 		}
 
 		/* Check script magic */
-		if ((i == 1) && (strcmp(line, SCRIPT_MAGIC) != 0)) {
-			fprintf(stderr, "psh: %s is not a psh script\n", path);
-			err = -EINVAL;
-			break;
+		if (i == 1) {
+			if (strcmp(line, SCRIPT_MAGIC) != 0) {
+				fprintf(stderr, "psh: %s is not a psh script\n", path);
+				err = -EINVAL;
+				break;
+			}
+			else {
+				/* Skip further parsing for magic line */
+				continue;
+			}
 		}
 
 		/* Skip empty lines */
@@ -1362,36 +1369,28 @@ static int psh_runscript(char *path)
 			free(argv);
 			argv = NULL;
 		}
+		else if (strcmp(line, "I") == 0) {
+			/* Request to go into interactive mode */
+			err = INTERACTIVE_AFTER_SCRIPT;
+			break;
+		}
 		else {
-			for (size_t j = 0; j < sizeof(scriptCmds) / sizeof(scriptCmds[0]); j++) {
-				size_t len = strlen(scriptCmds[j]);
-				if (len > (size_t)lineLen) {
-					continue;
-				}
-
-				if ((line[len] != '\0') && (isspace(line[len]) == 0) && (strncmp(line, scriptCmds[j], len) != 0)) {
-					continue;
-				}
-
-				err = psh_parsecmd(line, &argc, &argv);
-				if (err < 0) {
-					fprintf(stderr, "psh: failed to parse line %d\n", i);
-					break;
-				}
-
-				const psh_appentry_t *app = psh_findapp(argv[0]);
-				if (app != NULL) {
-					(void)app->run(argc, argv);
-				}
-				else {
-					fprintf(stderr, "psh: %s not found\n", argv[0]);
-				}
-
-				free(argv);
-				argv = NULL;
-
+			err = psh_parsecmd(line, &argc, &argv);
+			if (err < 0) {
+				fprintf(stderr, "psh: failed to parse line %d\n", i);
 				break;
 			}
+
+			const psh_appentry_t *app = psh_findapp(argv[0]);
+			if (app != NULL) {
+				(void)app->run(argc, argv);
+			}
+			else {
+				fprintf(stderr, "psh: %s not found\n", argv[0]);
+			}
+
+			free(argv);
+			argv = NULL;
 		}
 
 		if (err < 0) {
@@ -1800,8 +1799,16 @@ int psh_pshapp(int argc, char **argv)
 		if (optind < argc)
 			path = argv[optind];
 
-		if (path != NULL)
-			return psh_runscript(path) < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
+		if (path != NULL) {
+			int ret = psh_runscript(path);
+			if (ret < 0) {
+				return EXIT_FAILURE;
+			}
+
+			if (ret == EXIT_AFTER_SCRIPT) {
+				return EXIT_SUCCESS;
+			}
+		}
 	}
 	/* Run shell interactively */
 	return psh_run(1, psh_common.consolePath) < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
