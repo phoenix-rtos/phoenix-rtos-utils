@@ -29,6 +29,7 @@ static void psh_echoinfo(void)
 static void psh_echo_help(const char *prog)
 {
 	printf("Usage: %s [options] [string]\n", prog);
+	printf("  -n:  do not output the trailing newline\n");
 	printf("  -h:  shows this help message\n");
 	printf("\nAvailable variables:\n");
 	printf("  $?:  Exit code of the previous command\n");
@@ -57,14 +58,18 @@ static size_t psh_echo_printVar(const char *var)
 
 static int psh_echo(int argc, char **argv)
 {
-	int c, i, argend = argc;
+	int c, i, argend = argc, newline = 1;
 	size_t j;
 
-	while ((c = getopt(argc, argv, "h")) != -1) {
+	while ((c = getopt(argc, argv, "hn")) != -1) {
 		switch (c) {
 			case 'h':
 				psh_echo_help(argv[0]);
 				return EXIT_SUCCESS;
+
+			case 'n':
+				newline = 0;
+				break;
 
 			default:
 				psh_echo_help(argv[0]);
@@ -87,7 +92,9 @@ static int psh_echo(int argc, char **argv)
 		}
 	}
 
-	putchar('\n');
+	if (newline != 0) {
+		putchar('\n');
+	}
 	fflush(stdout);
 
 	return EOK;
