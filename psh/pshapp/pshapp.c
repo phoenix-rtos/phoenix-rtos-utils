@@ -597,7 +597,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 	/* Enable raw mode for command processing */
 	cfmakeraw(&raw);
 
-	if ((err = tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw)) < 0) {
+	if ((err = tcsetattr(STDIN_FILENO, TCSADRAIN, &raw)) < 0) {
 		fprintf(stderr, "\npsh: failed to enable raw mode\n");
 		free(*cmd);
 		return err;
@@ -1025,7 +1025,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 	}
 
 	/* Restore original terminal settings */
-	if ((esc = tcsetattr(STDIN_FILENO, TCSAFLUSH, orig)) < 0) {
+	if ((esc = tcsetattr(STDIN_FILENO, TCSADRAIN, orig)) < 0) {
 		fprintf(stderr, "\r\npsh: failed to restore terminal settings\r\n");
 		if (err >= 0)
 			err = esc;
@@ -1452,7 +1452,7 @@ static int psh_reset(int argc, char **argv)
 	term.c_iflag |= IXON | BRKINT | PARMRK;
 	term.c_oflag |= OPOST;
 
-	if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &term) < 0) {
+	if (tcsetattr(STDIN_FILENO, TCSADRAIN, &term) < 0) {
 		fprintf(stderr, "reset: failed to set cooked mode\n");
 		return EXIT_FAILURE;
 	}
