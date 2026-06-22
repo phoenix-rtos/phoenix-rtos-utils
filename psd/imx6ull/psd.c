@@ -49,17 +49,18 @@
 
 /* OTP PARAMETERS */
 #define OTP_BASE_ADDR 0x21BC000
-#define IPG_CLK_RATE (66 * 1000 * 1000)
+#define IPG_CLK_RATE  (66 * 1000 * 1000)
 
-#define OTP_BUSY	0x100
-#define OTP_ERROR	0x200
-#define OTP_RELOAD	0x400
+#define OTP_BUSY      0x100
+#define OTP_ERROR     0x200
+#define OTP_RELOAD    0x400
 #define OTP_WR_UNLOCK (0x3e77 << 16)
 
 /* FUSE BITS */
 #define FUSE_WATCHDOG 0x1
 
 
+/* clang-format off */
 enum { ocotp_ctrl, ocotp_ctrl_set, ocotp_ctrl_clr, ocotp_ctrl_tog, ocotp_timing, ocotp_data = 0x8, ocotp_read_ctrl = 0xc,
 	ocotp_read_fuse_data = 0x10, ocotp_sw_sticky = 0x14, ocotp_scs = 0x18, ocotp_scs_set, ocotp_scs_clr, ocotp_scs_tog,
 	ocotp_crc_addr = 0x1c, ocotp_crc_value = 0x20, ocotp_version = 0x24, ocotp_timing2 = 0x40, ocotp_lock = 0x100,
@@ -67,6 +68,7 @@ enum { ocotp_ctrl, ocotp_ctrl_set, ocotp_ctrl_clr, ocotp_ctrl_tog, ocotp_timing,
 	ocotp_cfg6 = 0x11c, ocotp_mem0 = 0x120, ocotp_mem1 = 0x124, ocotp_mem2 = 0x128, ocotp_mem3 = 0x12c, ocotp_mem4 = 0x130,
 	ocotp_ana0 = 0x134, ocotp_ana1 = 0x138, ocotp_ana2 = 0x13c //TODO: rest of otp shadow regs
 	};
+/* clang-format on */
 
 
 struct filedes {
@@ -79,7 +81,7 @@ struct filedes {
 struct {
 	int run;
 
-	dbbt_t* dbbt;
+	dbbt_t *dbbt;
 	flashsrv_info_t flash;
 
 	char rcvBuff[HID_REPORT_2_SIZE];
@@ -94,6 +96,7 @@ struct {
 } psd_common;
 
 
+/* clang-format off */
 const usb_hid_dev_setup_t hid_setup = {
 	 .dDevice = {
 		.bLength = sizeof(usb_device_desc_t), .bDescriptorType = USB_DESC_DEVICE, .bcdUSB = 0x200,
@@ -113,6 +116,7 @@ const usb_hid_dev_setup_t hid_setup = {
 		.wData = { 'S', 0, 'E', 0, ' ', 0, 'B', 0, 'l', 0, 'a', 0, 'n', 0, 'k', 0, ' ', 0, '6', 0, 'U', 0, 'L', 0, 'L', 0 }
 	}
 };
+/* clang-format on */
 
 
 static int psd_hidResponse(int err, int type)
@@ -127,22 +131,22 @@ static int psd_hidResponse(int err, int type)
 
 		/* Report 4 device to host */
 		switch (type) {
-		case SDP_WRITE_FILE :
-			SET_FILE_COMPLETE(psd_common.buff);
-			memset(psd_common.buff + 5, 0, HID_REPORT_4_SIZE - 5);
-			if ((res = sdp_send(psd_common.buff[0], psd_common.buff, HID_REPORT_4_SIZE)) < 0)
-				err = -eReport4;
-			break;
+			case SDP_WRITE_FILE:
+				SET_FILE_COMPLETE(psd_common.buff);
+				memset(psd_common.buff + 5, 0, HID_REPORT_4_SIZE - 5);
+				if ((res = sdp_send(psd_common.buff[0], psd_common.buff, HID_REPORT_4_SIZE)) < 0)
+					err = -eReport4;
+				break;
 
-		case SDP_WRITE_REGISTER :
-			SET_COMPLETE(psd_common.buff);
-			memset(psd_common.buff + 5, 0, HID_REPORT_4_SIZE - 5);
-			if ((res = sdp_send(psd_common.buff[0], psd_common.buff, HID_REPORT_4_SIZE)) < 0)
-				err = -eReport4;
-			break;
+			case SDP_WRITE_REGISTER:
+				SET_COMPLETE(psd_common.buff);
+				memset(psd_common.buff + 5, 0, HID_REPORT_4_SIZE - 5);
+				if ((res = sdp_send(psd_common.buff[0], psd_common.buff, HID_REPORT_4_SIZE)) < 0)
+					err = -eReport4;
+				break;
 
-		default :
-			err = -eReport4;
+			default:
+				err = -eReport4;
 		}
 	}
 	else {
@@ -264,7 +268,8 @@ static int psd_blowFuses(uint32_t fuse)
 		munmap(base, _PAGE_SIZE);
 		return -1;
 	}
-	while (*(base + ocotp_ctrl) & OTP_BUSY) usleep(10000);
+	while (*(base + ocotp_ctrl) & OTP_BUSY)
+		usleep(10000);
 
 	/* [4] BT_FUSE_SEL = 1 -> boot from fuses */
 	uint32_t val = 0x6;
@@ -282,14 +287,16 @@ static int psd_blowFuses(uint32_t fuse)
 		munmap(base, _PAGE_SIZE);
 		return -1;
 	}
-	while (*(base + ocotp_ctrl) & OTP_BUSY) usleep(10000);
+	while (*(base + ocotp_ctrl) & OTP_BUSY)
+		usleep(10000);
 	/* Due to internal electrical characteristics of the OTP during writes,
 	 * all OTP operations following a write must be separated by 2 us
 	 * after the clearing of HW_OCOTP_CTRL_BUSY following the write. */
 	usleep(100000);
 
 	*(base + ocotp_ctrl_clr) = val | OTP_WR_UNLOCK;
-	while (*(base + ocotp_ctrl) & OTP_BUSY) usleep(10000);
+	while (*(base + ocotp_ctrl) & OTP_BUSY)
+		usleep(10000);
 	usleep(100000);
 
 	/* [BOOT_CFG4][BOOT_CFG3][BOOT_CFG2][BOOT_CFG1] -> use raw NAND for internal boot, 64 pages per block, boot search count = 4 (4 FCB blocks) */
@@ -301,7 +308,8 @@ static int psd_blowFuses(uint32_t fuse)
 		munmap(base, _PAGE_SIZE);
 		return -1;
 	}
-	while (*(base + ocotp_ctrl) & OTP_BUSY) usleep(10000);
+	while (*(base + ocotp_ctrl) & OTP_BUSY)
+		usleep(10000);
 	usleep(100000);
 
 	*(base + ocotp_ctrl_set) = OTP_RELOAD;
@@ -311,7 +319,8 @@ static int psd_blowFuses(uint32_t fuse)
 		munmap(base, _PAGE_SIZE);
 		return -1;
 	}
-	while (*(base + ocotp_ctrl) & OTP_BUSY) usleep(10000);
+	while (*(base + ocotp_ctrl) & OTP_BUSY)
+		usleep(10000);
 	usleep(100000);
 
 	printf("PSD: Fuses blown.\n");
@@ -390,7 +399,7 @@ static int psd_writeFile(sdp_cmd_t *cmd)
 		buffOffset = 0;
 
 		while ((buffOffset < psd_common.flash.writesz) && (writesz + buffOffset < cmd->datasz)) {
-			if ((res = sdp_recv(1, psd_common.rcvBuff, HID_REPORT_2_SIZE, &outdata)) < 0 ) {
+			if ((res = sdp_recv(1, psd_common.rcvBuff, HID_REPORT_2_SIZE, &outdata)) < 0) {
 				err = -eReport2;
 				break;
 			}
