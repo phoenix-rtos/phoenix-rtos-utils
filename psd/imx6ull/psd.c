@@ -59,6 +59,8 @@
 #define OTP_UNLOCK_MASK (0xffffu << 16)
 #define OTP_ADDR_MASK   0x7f
 
+#define OTP_N_FUSE_BYTES 512U
+
 #define PSD_FUSE_POLL_US       (10 * 1000)
 #define PSD_FUSE_EXTRA_WAIT_US (100 * 1000)
 #define PSD_FUSE_TIMEOUT_US    (10 * 1000 * 1000)
@@ -102,9 +104,19 @@ struct {
 	off_t partOffs;
 
 	unsigned int nfiles;
-	struct filedes *f;
+	const struct filedes *f;
 	struct filedes files[FILES_SIZE];
 } psd_common;
+
+
+static const struct filedes psd_otpDescr = {
+	.fd = -1,
+	.oid = {
+		.port = 0,
+		.id = 0,
+	},
+	.name = "OTP",
+};
 
 
 /* clang-format off */
@@ -183,9 +195,14 @@ static int psd_hidResponse(int err, int type)
 }
 
 
-static int psd_changePartition(uint8_t number)
+static int psd_changePartition(uint32_t number)
 {
-	if (number > psd_common.nfiles) {
+	if (number == PARTITON_NUM_OTP) {
+		psd_common.f = &psd_otpDescr;
+		psd_common.partOffs = 0;
+		psd_common.partsz = OTP_N_FUSE_BYTES;
+	}
+	else if (number > psd_common.nfiles) {
 		return -eReport1;
 	}
 	else {
@@ -207,6 +224,10 @@ static int psd_changePartition(uint8_t number)
 
 static int psd_controlBlock(uint32_t block)
 {
+	if (psd_common.f->fd < 0) {
+		return -eReport1;
+	}
+
 	int err = hidOK;
 	if (block == FLASH_FCB) {
 		printf("PSD: Flash FCB.\n");
@@ -248,6 +269,10 @@ static int psd_controlBlock(uint32_t block)
 
 static int psd_erasePartition(uint32_t size, uint8_t format)
 {
+	if (psd_common.f->fd < 0) {
+		return -eReport1;
+	}
+
 	int err = hidOK;
 
 	if (format != 16) {
@@ -383,6 +408,26 @@ static int psd_blowFuses(uint32_t fuse)
 }
 
 
+static int psd_programFuse(uint8_t addr, uint32_t val)
+{
+	int ret;
+	psd_fuseState_t f;
+
+	ret = psd_fuseInit(&f);
+	ret = (ret < 0) ? ret : psd_fuseProgram(&f, addr, val);
+	ret = (ret < 0) ? ret : psd_fuseReload(&f);
+	psd_fuseDone(&f);
+
+	if (ret < 0) {
+		printf("PSD: Fuse programming failed (%d).\n", ret);
+		return -1;
+	}
+
+	printf("PSD: Fuse 0x%02x programmed.\n", addr);
+	return hidOK;
+}
+
+
 static int psd_writeRegister(sdp_cmd_t *cmd)
 {
 	int err = hidOK;
@@ -410,6 +455,9 @@ static int psd_writeRegister(sdp_cmd_t *cmd)
 	else if (address == BLOW_FUSES) {
 		err = psd_blowFuses(data);
 	}
+	else if (address == PROGRAM_FUSE) {
+		err = psd_programFuse(format, data);
+	}
 	else if (address == CLOSE_PSD) {
 		psd_common.run = 0;
 	}
@@ -424,11 +472,58 @@ static int psd_writeRegister(sdp_cmd_t *cmd)
 }
 
 
+static int psd_writeFusesFile(sdp_cmd_t *cmd)
+{
+	int ret = 0;
+	size_t i = 0;
+	while (i < cmd->datasz) {
+		char *outdata = NULL;
+		int recv = sdp_recv(1, psd_common.rcvBuff, HID_REPORT_2_SIZE, &outdata);
+		if (recv < 0) {
+			return -eReport2;
+		}
+
+		memcpy(psd_common.buff + i, outdata, recv);
+		i += recv;
+	};
+
+	psd_fuseState_t f;
+	ret = psd_fuseInit(&f);
+	for (i = 0; (ret >= 0) && (i < cmd->datasz); i += 4) {
+		uint32_t addr = cmd->address + (i / 4);
+		uint32_t val;
+		memcpy(&val, psd_common.buff + i, 4);
+		printf("PSD: Programming fuse word 0x%02x.\n", addr);
+		ret = psd_fuseProgram(&f, addr, val);
+	}
+
+	ret = (ret < 0) ? ret : psd_fuseReload(&f);
+	psd_fuseDone(&f);
+	return ret;
+}
+
+
 static int psd_writeFile(sdp_cmd_t *cmd)
 {
 	int res, err = hidOK, buffOffset = 0, badBlock = 0;
 	off_t writesz, fileOffs = cmd->address;
 	char *outdata = NULL;
+
+	if (psd_common.f == &psd_otpDescr) {
+		if (((cmd->datasz % 4) != 0) ||
+				(cmd->datasz == 0) ||
+				((cmd->address * 4) >= OTP_N_FUSE_BYTES) ||
+				(cmd->datasz > OTP_N_FUSE_BYTES) ||
+				(((cmd->address * 4) + cmd->datasz) > OTP_N_FUSE_BYTES)) {
+			return -eReport1;
+		}
+
+		err = psd_writeFusesFile(cmd);
+		return psd_hidResponse(err, SDP_WRITE_FILE);
+	}
+	else if (psd_common.f->fd < 0) {
+		return -eReport1;
+	}
 
 	/* Check command parameters */
 	if (fileOffs % psd_common.flash.writesz != 0) {
