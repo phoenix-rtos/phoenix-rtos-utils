@@ -289,7 +289,7 @@ static int psh_ls_lowmem(void)
 
 		path = psh_ls_common.paths[i];
 
-		ret = psh_ls_statentry(&file, path, true);
+		ret = psh_ls_statentry(&file, path, false);
 		if (ret < 0) {
 			fprintf(stderr, "ls: stat failed\n");
 			return ret;
@@ -625,7 +625,7 @@ int psh_ls(int argc, char **argv)
 
 	/* Try to stat all the given paths */
 	for (i = 0; i < psh_ls_common.npaths; i++) {
-		ret = psh_ls_statentry(&psh_ls_common.files[nfiles], psh_ls_common.paths[i], true);
+		ret = psh_ls_statentry(&psh_ls_common.files[nfiles], psh_ls_common.paths[i], false);
 		if (ret < 0) {
 			fprintf(stderr, "ls: can't access %s: no such file or directory\n", psh_ls_common.paths[i]);
 			continue;
