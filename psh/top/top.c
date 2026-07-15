@@ -298,7 +298,7 @@ int psh_top(int argc, char **argv)
 		}
 	}
 
-	resthrds = threadsinfo(PH_THREADINFO_THREADS_ALL, PH_THREADINFO_OPT_THREADCOUNT, 0, NULL);
+	resthrds = threadsinfo(0, PH_THREADINFO_OPT_THREADCOUNT, NULL);
 	if (resthrds * 2 > n) {
 		n = resthrds * 2;
 	}
@@ -329,7 +329,7 @@ int psh_top(int argc, char **argv)
 
 		clock_gettime(CLOCK_MONOTONIC, &ts);
 		/* Reallocate buffers if number of threads exceeds n */
-		while ((totcnt = threadsinfo(PH_THREADINFO_THREADS_ALL, PH_THREADINFO_ALL, n, info)) >= n) {
+		while ((totcnt = threadsinfo(n, PH_THREADINFO_ALL, info)) >= n) {
 			n = totcnt * 2;
 			if ((rinfo = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
 				fprintf(stderr, "ps: out of memory\n");

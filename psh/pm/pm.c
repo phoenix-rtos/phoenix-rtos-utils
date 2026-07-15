@@ -55,7 +55,7 @@ static int psh_pm_getThreads(threadinfo_t **pinfo, int *n)
 	threadinfo_t *info = *pinfo, *rinfo;
 
 	if (info == NULL) {
-		ret = threadsinfo(PH_THREADINFO_THREADS_ALL, PH_THREADINFO_OPT_THREADCOUNT, 0, NULL);
+		ret = threadsinfo(0, PH_THREADINFO_OPT_THREADCOUNT, NULL);
 		m = 32;
 		if (ret * 2 > m) {
 			m = ret * 2;
@@ -67,7 +67,7 @@ static int psh_pm_getThreads(threadinfo_t **pinfo, int *n)
 		}
 	}
 
-	while ((tcnt = threadsinfo(PH_THREADINFO_THREADS_ALL, PH_THREADINFO_ALL, m, info)) >= m) {
+	while ((tcnt = threadsinfo(m, PH_THREADINFO_ALL, info)) >= m) {
 		m = tcnt * 2;
 		if ((rinfo = realloc(info, m * sizeof(threadinfo_t))) == NULL) {
 			fprintf(stderr, "pm: out of memory\n");

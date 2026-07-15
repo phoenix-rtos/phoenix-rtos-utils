@@ -102,7 +102,7 @@ static int psh_ps(int argc, char **argv)
 		}
 	}
 
-	resthrds = threadsinfo(PH_THREADINFO_THREADS_ALL, PH_THREADINFO_OPT_THREADCOUNT, 0, NULL);
+	resthrds = threadsinfo(0, PH_THREADINFO_OPT_THREADCOUNT, NULL);
 	if (resthrds * 2 > n) {
 		n = resthrds * 2;
 	}
@@ -112,7 +112,7 @@ static int psh_ps(int argc, char **argv)
 		return -ENOMEM;
 	}
 
-	while ((tcnt = threadsinfo(PH_THREADINFO_THREADS_ALL, PH_THREADINFO_ALL, n, info)) >= n) {
+	while ((tcnt = threadsinfo(n, PH_THREADINFO_ALL, info)) >= n) {
 		n = tcnt * 2;
 		if ((rinfo = realloc(info, n * sizeof(threadinfo_t))) == NULL) {
 			fprintf(stderr, "ps: out of memory\n");

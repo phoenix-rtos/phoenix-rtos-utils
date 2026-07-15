@@ -39,17 +39,28 @@ int psh_bind(int argc, char **argv)
 		return -EINVAL;
 	}
 
-	if (lookup(argv[1], NULL, &soid) < 0)
+	err = lookup(argv[1], NULL, &soid);
+	if (err < 0) {
+		fprintf(stderr, "bind: lookup(source) = %d\n", err);
 		return -ENOENT;
+	}
 
-	if (lookup(argv[2], NULL, &doid) < 0)
+	err = lookup(argv[2], NULL, &doid);
+	if (err < 0) {
+		fprintf(stderr, "bind: lookup(target) = %d\n", err);
 		return -ENOENT;
+	}
 
-	if ((err = stat(argv[2], &buf)))
+	err = stat(argv[2], &buf);
+	if (err != 0) {
+		fprintf(stderr, "bind: stat failed with %d\n", err);
 		return err;
+	}
 
-	if (!S_ISDIR(buf.st_mode))
+	if (!S_ISDIR(buf.st_mode)) {
+		fprintf(stderr, "bind: target is not a directory\n");
 		return -ENOTDIR;
+	}
 
 	msg.type = mtSetAttr;
 	msg.oid = doid;
@@ -59,7 +70,16 @@ int psh_bind(int argc, char **argv)
 
 	err = msgSend(doid.port, &msg);
 
-	return (err < 0) ? err : msg.o.err;
+	if (err != 0) {
+		fprintf(stderr, "bind: msgSend failed with %d\n", err);
+		return err;
+	}
+	else if (msg.o.err != 0) {
+		fprintf(stderr, "bind: server responded with %d\n", msg.o.err);
+		return msg.o.err;
+	}
+
+	return EOK;
 }
 
 
