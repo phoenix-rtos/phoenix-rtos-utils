@@ -653,6 +653,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 				}
 				else if (!(n + m)) {
 					printf("exit\r\n");
+					tcsetpgrp(STDIN_FILENO, -1);
 					free(*cmd);
 					*cmd = NULL;
 					break;
