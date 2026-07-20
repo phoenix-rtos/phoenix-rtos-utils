@@ -66,6 +66,7 @@ static int psh_ps(int argc, char **argv)
 {
 	int (*cmp)(const void *, const void *) = psh_ps_cmppid;
 	int c, tcnt, i, j, n = 32;
+	time_t cputime;
 	unsigned int threads = 0, fullcmd = 0;
 	threadinfo_t *info, *rinfo;
 	unsigned int d, h, m, s;
@@ -125,7 +126,8 @@ static int psh_ps(int argc, char **argv)
 			for (j = i + 1; j < tcnt && info[j].pid == info[i].pid; j++) {
 				info[i].tid++;
 				info[i].load += info[j].load;
-				info[i].cpuTime += info[j].cpuTime;
+				info[i].userTime += info[j].userTime;
+				info[i].systemTime += info[j].systemTime;
 				info[i].priority = min(info[i].priority, info[j].priority);
 				info[i].state = min(info[i].state, info[j].state);
 				info[i].wait = max(info[i].wait, info[j].wait);
@@ -149,7 +151,8 @@ static int psh_ps(int argc, char **argv)
 		printf("%8u %8u %2d %5s %3u.%u %6ss ", info[i].pid, info[i].ppid, info[i].priority, (info[i].state) ? "sleep" : "ready",
 			info[i].load / 10, info[i].load % 10, buff);
 
-		s = (info[i].cpuTime + 500000) / 1000000;
+		cputime = info[i].userTime + info[i].systemTime;
+		s = (cputime + 500000) / 1000000;
 		d = s / 86400;
 		s %= 86400;
 		h = s / 3600;
