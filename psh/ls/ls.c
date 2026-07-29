@@ -271,7 +271,7 @@ static int psh_ls_lowmem(void)
 	DIR *stream;
 	struct dirent *dir;
 	int ret;
-	unsigned int i, nfiles = 0;
+	unsigned int i;
 	char *path;
 	char *currdir = ".";
 
@@ -309,8 +309,6 @@ static int psh_ls_lowmem(void)
 			printf("%s:\n", path);
 		}
 
-		nfiles = 0;
-
 		while ((dir = readdir(stream)) != NULL) {
 			if ((dir->d_name[0] == '.') && !psh_ls_common.all) {
 				continue;
@@ -329,8 +327,6 @@ static int psh_ls_lowmem(void)
 			psh_ls_printfile(&file, file.namelen);
 			putchar(' ');
 			colsz += file.namelen + 1;
-
-			nfiles++;
 		}
 		putchar('\n');
 

@@ -904,7 +904,6 @@ static int edit_open(char *filename)
 static void edit_save(void)
 {
 	int len, n = -1;
-	size_t total = 0;
 	row_t *row;
 
 	if (edit_common.filename == NULL)
@@ -928,8 +927,6 @@ static void edit_save(void)
 				n = -1;
 				break;
 			}
-
-			total += len;
 		}
 
 		fclose(f);
