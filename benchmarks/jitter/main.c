@@ -175,7 +175,7 @@ int main(int argc, char *argv[])
 	}
 
 	for (int i = 0; i < MAX_JITTER_TASKS; i++) {
-		struct condAttr attr = { .clock = PH_CLOCK_MONOTONIC };
+		struct condAttr attr = { .clock = PH_CLOCK_MONOTONIC, .type = PH_COND_NORMAL };
 		if (condCreateWithAttr(&common.jitterCond[i], &attr) != 0) {
 			puts("condCreate fail");
 			exit(EXIT_FAILURE);
