@@ -37,6 +37,27 @@ uint64_t bench_getTime(void)
 }
 
 
+#elif defined(__CPU_ZYNQMP)
+
+
+uint64_t bench_getTime(void)
+{
+	uint64_t ticks = 0;
+	// The "isb" ensures we don't read the timer out of order
+	asm volatile(
+			"isb\n"
+#if defined(ZYNQMP_VIRT)
+			"mrs %0, cntpct_el0\n"
+#else
+			"mrs %0, pmccntr_el0\n"
+#endif
+			: "=r"(ticks)
+			:
+			: "memory");
+	return ticks;
+}
+
+
 #else
 
 
