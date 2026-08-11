@@ -37,6 +37,22 @@ uint64_t bench_getTime(void)
 }
 
 
+#elif defined(__CPU_ZYNQMP)
+
+
+uint64_t bench_getTime(void)
+{
+	uint64_t ticks = 0;
+	asm volatile(
+			"isb\n"
+			"mrs %0, cntpct_el0\n"
+			: "=r"(ticks)
+			:
+			: "memory");
+	return ticks;
+}
+
+
 #else
 
 
