@@ -45,7 +45,7 @@ static int psh_mem_summary(void)
 
 static void psh_mem_procprint(entryinfo_t *e, int mapsz)
 {
-	char flags[5], prot[4];
+	char flags[4], prot[4];
 	unsigned int i;
 
 	printf("%-*s  PROT  FLAGS  %*s  OBJECT\n", (int)(4 * sizeof(e->vaddr) + 1), "SEGMENT", (int)(2 * sizeof(e->offs)), "OFFSET");
@@ -53,15 +53,13 @@ static void psh_mem_procprint(entryinfo_t *e, int mapsz)
 	e += mapsz - 1;
 	for (i = 0; i < mapsz; ++i, --e) {
 		memset(flags, ' ', sizeof(flags));
-		if (e->flags & MAP_NEEDSCOPY)
-			flags[0] = 'C';
 		if (e->flags & MAP_PRIVATE)
-			flags[1] = 'P';
+			flags[0] = 'P';
 		if (e->flags & MAP_FIXED)
-			flags[2] = 'F';
+			flags[1] = 'F';
 		if (e->flags & MAP_ANONYMOUS)
-			flags[3] = 'A';
-		flags[4] = '\0';
+			flags[2] = 'A';
+		flags[3] = '\0';
 
 		memset(prot, '-', sizeof(prot));
 		if (e->prot & PROT_READ)
