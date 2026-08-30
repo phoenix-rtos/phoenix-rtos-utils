@@ -49,18 +49,18 @@ static struct {
 static void task3(void *arg)
 {
 	common.t3_started = true;
-	uint64_t time = bench_getTime();
+	uint64_t time = bench_plat_getTime();
 	if (common.deadBrk) {
 		mutexLock(common.mutex);
 	}
 
 	if (common.deadBrk) {
 		mutexUnlock(common.mutex);
-		time = bench_getTime() - time;
+		time = bench_plat_getTime() - time;
 		common.totalDeadBrk += time;
 	}
 	else {
-		time = bench_getTime() - time;
+		time = bench_plat_getTime() - time;
 		common.totalNoDeadBrk += time;
 	}
 	common.done = true;
@@ -136,6 +136,11 @@ static int doTest(void)
 int main(int argc, char *argv[])
 {
 	puts("Rhealstone benchmark suite:\nDeadlock breaking");
+
+	if (bench_plat_initTimer() < 0) {
+		puts("Platform timer init fail");
+		return 1;
+	}
 
 	priority(0);
 

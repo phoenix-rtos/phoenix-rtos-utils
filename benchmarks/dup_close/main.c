@@ -51,10 +51,10 @@ static void benchmark_thread(void *arg)
 		usleep(0);
 	}
 
-	uint64_t start_cycles = bench_getTime();
+	uint64_t start_cycles = bench_plat_getTime();
 	uint64_t end_cycles = start_cycles + (BENCHMARK_DURATION_SEC * 250000000ULL);  // 250 MHz * 1 second
 
-	while (bench_getTime() < end_cycles) {
+	while (bench_plat_getTime() < end_cycles) {
 		dup_fd = dup(fd);
 		if (dup_fd < 0) {
 			perror("dup");
@@ -75,6 +75,10 @@ int main(int argc, char *argv[])
 	static thread_arg thread_args[MAX_THREADS];
 
 	priority(0);
+	if (bench_plat_initTimer() < 0) {
+		puts("Platform timer init fail");
+		return 1;
+	}
 
 	int nthreads = MAX_THREADS;
 
