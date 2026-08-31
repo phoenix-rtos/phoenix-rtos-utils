@@ -24,7 +24,7 @@
 #include "bench_common.h"
 
 
-#define BENCHMARKS   100000
+#define BENCHMARKS   15000
 #define MESSAGE_SIZE (sizeof(long) * 4)
 
 

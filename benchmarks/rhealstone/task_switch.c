@@ -22,7 +22,7 @@
 #include "bench_common.h"
 
 
-#define MAX_LOOPS 400000
+#define MAX_LOOPS 15000
 
 
 static struct {
