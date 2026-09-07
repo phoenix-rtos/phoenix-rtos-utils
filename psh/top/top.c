@@ -195,8 +195,8 @@ static void psh_top_refresh(char cmd, threadinfo_t *info, threadinfo_t *previnfo
 		printf("\033[K\n");
 
 	/* Set CMD field width */
-	if (ws.ws_col > 61) {
-		w = ws.ws_col - 61;
+	if (ws.ws_col > 63) {
+		w = ws.ws_col - 63;
 	}
 	else {
 		w = 0;
@@ -204,7 +204,7 @@ static void psh_top_refresh(char cmd, threadinfo_t *info, threadinfo_t *previnfo
 
 	/* Set header style */
 	printf("\033[0;30;47m");
-	printf("%8s %8s %2s %5s %5s %7s %10s %8s %-*.*s", (psh_top_common.threads) ? "TID" : "PID", "PPID", "PR", "STATE", "%CPU", "WAIT", "TIME", "VMEM", w, w, "CMD");
+	printf("%8s %8s %4s %5s %5s %7s %10s %8s %-*.*s", (psh_top_common.threads) ? "TID" : "PID", "PPID", "PR", "STATE", "%CPU", "WAIT", "TIME", "VMEM", w, w, "CMD");
 
 	/* Reset style */
 	printf("\033[0m");
@@ -219,9 +219,9 @@ static void psh_top_refresh(char cmd, threadinfo_t *info, threadinfo_t *previnfo
 		m = info[i].cpuTime / (60 * 1000000);
 		s = info[i].cpuTime / 1000000 - 60 * m;
 		hs = info[i].cpuTime / 10000 - 60 * 100 * m - 100 * s;
-		printf("\n%8u %8u %2d %5s %3u.%u %6ss %4u:%02u.%02u ", (psh_top_common.threads) ? info[i].tid : info[i].pid,
-			info[i].ppid, info[i].priority, (info[i].state) ? "sleep" : "ready",
-			info[i].load / 10, info[i].load % 10, buff, m, s, hs);
+		printf("\n%8u %8u %4d %5s %3u.%u %6ss %4u:%02u.%02u ", (psh_top_common.threads) ? info[i].tid : info[i].pid,
+				info[i].ppid, info[i].priority, (info[i].state) ? "sleep" : "ready",
+				info[i].load / 10, info[i].load % 10, buff, m, s, hs);
 
 		psh_prefix(2, info[i].vmem, 0, 1, buff);
 		printf("%8s ", buff);
