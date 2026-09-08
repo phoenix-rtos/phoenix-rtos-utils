@@ -653,7 +653,11 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 				}
 				else if (!(n + m)) {
 					printf("exit\r\n");
-					tcsetpgrp(STDIN_FILENO, -1);
+					/*
+					 * Give up the terminal. tcsetpgrp() cannot express this: its argument
+					 * must be a real process group.
+					 */
+					(void)ioctl(STDIN_FILENO, TIOCNOTTY);
 					free(*cmd);
 					*cmd = NULL;
 					break;
@@ -1622,6 +1626,21 @@ static int psh_run(int exitable, const char *console)
 		return err;
 	}
 
+	/*
+	 * TODO: psh should lead its own session and acquire the console explicitly.
+	 * It currently stays in init's session and never calls setsid(), so it
+	 * cannot take the console as a controlling terminal the POSIX way - only a
+	 * session leader without one may do that. The tty driver works around it by
+	 * letting the first session that calls tcsetpgrp() below claim an unowned
+	 * terminal, which means the shell never actually owns the console and the
+	 * driver cannot tell it apart from any other process in session 1.
+	 *
+	 * Doing it properly means reordering this startup: call setsid() instead of
+	 * setpgid() (it already sets pgid == pid, and setpgid() would then fail with
+	 * EPERM because a session leader may not change its group), then claim the
+	 * console with ioctl(STDIN_FILENO, TIOCSCTTY, 0).
+	 */
+
 	/* Save original terminal settings */
 	err = tcgetattr(STDIN_FILENO, &orig);
 	if (err < 0) {
@@ -1758,7 +1777,8 @@ static int psh_run(int exitable, const char *console)
 
 int psh_pshappexit(int argc, char **argv)
 {
-	tcsetpgrp(STDIN_FILENO, -1);
+	/* Give up the terminal, so that the next shell can claim it */
+	(void)ioctl(STDIN_FILENO, TIOCNOTTY);
 	return 0;
 }
 
