@@ -74,7 +74,7 @@ int main(int argc, char *argv[])
 	static handle_t threads[MAX_THREADS];
 	static thread_arg thread_args[MAX_THREADS];
 
-	priority(0);
+	setPriority(0);
 
 	int nthreads = MAX_THREADS;
 
@@ -104,7 +104,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	priority(4);
+	setPriority(4);
 	common.taskStart = 1;
 
 	for (int i = 0; i < nthreads; i++) {

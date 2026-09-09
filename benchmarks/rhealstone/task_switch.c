@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
 {
 	puts("Rhealstone benchmark suite:\nTask Switching");
 
-	priority(1);
+	setPriority(1);
 
 	uint64_t overhead = bench_getTime();
 
@@ -83,7 +83,7 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	priority(3);
+	setPriority(3);
 
 	usleep(0);
 

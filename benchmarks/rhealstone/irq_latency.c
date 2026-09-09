@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
 
 	volatile uint32_t *irqCtrl = mmap(NULL, _PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_DEVICE | MAP_PHYSMEM | MAP_ANONYMOUS, -1, (uintptr_t)INT_CTRL_BASE);
 
-	priority(1);
+	setPriority(1);
 
 	interrupt(IRQ_UNUSED, irqHandler, NULL, 0, NULL);
 

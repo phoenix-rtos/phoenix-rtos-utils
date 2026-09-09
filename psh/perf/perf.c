@@ -153,7 +153,10 @@ static int psh_perf(int argc, char **argv)
 					log_error("bad prio: %s", optarg);
 					return -EINVAL;
 				}
-				priority(prio);
+				if (setPriority(prio) < 0) {
+					log_error("failed to set priority to %d", prio);
+					return -EINVAL;
+				}
 			} break;
 			case 'j':
 				if (strcmp(optarg, "start") == 0) {
