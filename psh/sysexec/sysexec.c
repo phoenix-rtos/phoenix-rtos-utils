@@ -42,7 +42,7 @@ static void psh_sysexecUsage(void)
 		"\t-m datamap   select data memory map\n"
 		"\t-M codemap   select code memory map\n"
 		"\t-d           daemonize\n"
-		"\t-s           do not close stdin on daemonization\n", stderr);
+		"\t-s           do not detach stdin on daemonization\n", stderr);
 }
 
 
@@ -183,16 +183,22 @@ static int psh_sysexec(int argc, char **argv)
 
 	/* Forked path */
 	if (pid == 0) {
+		if (!keepStdin) {
+			int fd = open("/dev/null", O_RDONLY);
+			if (fd < 0) {
+				fprintf(stderr, "psh: opening /dev/null failed: %s\n", strerror(errno));
+				exit(EXIT_FAILURE);
+			}
+			/* Do not allow daemon to interfere with shell's stdin */
+			dup2(fd, STDIN_FILENO);
+			close(fd);
+		}
+
 		/* Create a new SID for the child process */
 		pid_t sid = setsid();
 		if (sid < 0) {
 			fprintf(stderr, "psh: setsid failed: %s\n", strerror(errno));
 			exit(EXIT_FAILURE);
-		}
-
-		if (!keepStdin) {
-			/* Do not allow daemon to interfere with shell's stdin */
-			close(STDIN_FILENO);
 		}
 
 		pid = spawnSyspage(codeMapName, dataMapName, progName, &argv[optind]);
