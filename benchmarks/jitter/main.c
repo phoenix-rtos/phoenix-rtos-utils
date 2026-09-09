@@ -186,7 +186,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (priority(0) < 0) {
+	if (setPriority(0) < 0) {
 		puts("priority fail");
 		exit(EXIT_FAILURE);
 	}

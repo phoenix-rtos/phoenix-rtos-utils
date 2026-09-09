@@ -100,7 +100,7 @@ int main(int argc, char *argv[])
 {
 	puts("Rhealstone benchmark suite:\nSemaphore shuffle");
 
-	priority(1);
+	setPriority(1);
 
 	mutexCreate(&common.mutex);
 
@@ -110,13 +110,13 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	priority(3);
+	setPriority(3);
 
 	usleep(0);
 
 	threadJoin(tid1, 0);
 
-	priority(1);
+	setPriority(1);
 
 	common.semExe = true;
 
@@ -125,7 +125,7 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	priority(3);
+	setPriority(3);
 
 	usleep(0);
 

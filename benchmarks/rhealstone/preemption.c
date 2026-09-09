@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
 {
 	puts("Rhealstone benchmark suite:\nPreemption");
 
-	priority(1);
+	setPriority(1);
 
 	uint64_t overhead = bench_getTime();
 
@@ -95,7 +95,7 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	priority(4);
+	setPriority(4);
 
 	usleep(0);
 

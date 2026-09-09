@@ -121,13 +121,13 @@ static int doTest(void)
 		return -1;
 	}
 
-	priority(4);
+	setPriority(4);
 
 	usleep(0);
 
 	threadJoin(tid1, 0);
 
-	priority(0);
+	setPriority(0);
 
 	return 0;
 }
@@ -137,7 +137,7 @@ int main(int argc, char *argv[])
 {
 	puts("Rhealstone benchmark suite:\nDeadlock breaking");
 
-	priority(0);
+	setPriority(0);
 
 	mutexCreate(&common.mutex);
 
