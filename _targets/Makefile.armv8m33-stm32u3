@@ -1,0 +1,9 @@
+#
+# Makefile for Phoenix-RTOS 3 device drivers
+#
+# STM32U3 tool set
+#
+# Copyright 2026 Apator Metrix
+#
+
+DEFAULT_COMPONENTS := psh
