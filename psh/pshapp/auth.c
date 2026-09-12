@@ -41,7 +41,7 @@ static int psh_authcredentget(char *buff, int ispasswd, int maxinlen)
 	else
 		ttyattr.c_lflag |= (ICANON | ECHO | ISIG);
 
-	if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &ttyattr) < 0) {
+	if (tcsetattr(STDIN_FILENO, TCSADRAIN, &ttyattr) < 0) {
 		fprintf(stderr, "psh: setting tty attributes fail\n");
 		return -ENOTTY;
 	}
@@ -90,11 +90,11 @@ static int psh_authcredentget(char *buff, int ispasswd, int maxinlen)
 	if (ispasswd || inputlen < 0)
 		fprintf(stdout, "\n");
 
-	if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &origattr) < 0) {
+	if (tcsetattr(STDIN_FILENO, TCSADRAIN, &origattr) < 0) {
 		fprintf(stderr, "psh: setting tty attributes fail\n");
 		return -ENOTTY;
 	}
-	
+
 	if (inputlen >= 0)
 		return inputlen;
 
