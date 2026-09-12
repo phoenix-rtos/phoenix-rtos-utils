@@ -1111,9 +1111,7 @@ static int psh_parseRedirections(int *argc, char ***argv, struct psh_redir *redi
 	int flags, eat, marker;
 	char *path;
 
-	for (int i = 0; i < PSH_REDIRSZ; ++i) {
-		redir->red[i] = -1;
-	}
+	memset(redir, -1, sizeof(*redir));
 
 	int i = 0;
 	while (i < *argc) {
