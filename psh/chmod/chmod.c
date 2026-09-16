@@ -314,6 +314,7 @@ static int psh_chmod(int argc, char **argv)
 	}
 	else {
 		common.u_mask = umask(0);
+		umask(common.u_mask);
 	}
 
 	common.path = calloc(1, PATH_MAX);
