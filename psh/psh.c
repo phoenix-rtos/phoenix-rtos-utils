@@ -81,17 +81,6 @@ const psh_appentry_t *psh_findapp(char *appname)
 }
 
 
-static char *psh_stralloc(char *oldstr, const char *str)
-{
-	size_t len = strlen(str) + sizeof('\0');
-	char *newstr = realloc(oldstr, len);
-	if (newstr != NULL) {
-		memcpy(newstr, str, len);
-	}
-	return newstr;
-}
-
-
 size_t psh_write(int fd, const void *buf, size_t count)
 {
 	ssize_t res;
@@ -138,10 +127,26 @@ size_t psh_read(int fd, void *buf, size_t count)
 }
 
 
+/*
+ * Takes ownership of fd and of ttydev, which must be heap allocated. Cannot fail,
+ * so a caller may switch the controlling terminal first and install afterwards.
+ */
+void psh_ttyinstall(int fd, char *ttydev)
+{
+	free(psh_common.ttydev);
+	psh_common.ttydev = ttydev;
+
+	dup2(fd, STDIN_FILENO);
+	dup2(fd, STDOUT_FILENO);
+	dup2(fd, STDERR_FILENO);
+
+	close(fd);
+}
+
+
 int psh_ttyopen(const char *ttydev)
 {
-	char *newPath;
-
+	char *path;
 	int fd = open(ttydev, O_RDWR);
 	if (fd < 0) {
 		return -errno;
@@ -152,19 +157,13 @@ int psh_ttyopen(const char *ttydev)
 		return -ENOTTY;
 	}
 
-	newPath = psh_stralloc(psh_common.ttydev, ttydev);
-	if (newPath == NULL) {
+	path = strdup(ttydev);
+	if (path == NULL) {
 		close(fd);
 		return -ENOMEM;
 	}
 
-	psh_common.ttydev = newPath;
-
-	dup2(fd, STDIN_FILENO);
-	dup2(fd, STDOUT_FILENO);
-	dup2(fd, STDERR_FILENO);
-
-	close(fd);
+	psh_ttyinstall(fd, path);
 
 	return EOK;
 }
