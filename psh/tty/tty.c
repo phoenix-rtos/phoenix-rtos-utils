@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <sys/ioctl.h>
 #include <sys/types.h>
 #include <termios.h>
 #include <unistd.h>
@@ -48,13 +49,23 @@ static int psh_ttyMain(int argc, char **argv)
 		return EOK;
 	}
 
-	pgrp = getpid();
+	pgrp = getpgrp();
 	if (pgrp < 0) {
-		fprintf(stderr, "psh: tty invalid pid\n");
+		fprintf(stderr, "psh: tty invalid process group\n");
 		return -EINVAL;
 	}
 
+	if (getsid(0) != getpid()) {
+		fprintf(stderr, "psh: only a session leader can change its tty device\n");
+		return -EPERM;
+	}
+
 	printf("Changing psh tty device '%s' to '%s'\n", psh_common.ttydev, argv[1]);
+
+	if (ioctl(STDIN_FILENO, TIOCNOTTY, 0) < 0) {
+		fprintf(stderr, "psh: failed to release the current tty device\n");
+		return -errno;
+	}
 
 	ret = psh_ttyopen(argv[1]);
 	if (ret < 0) {
@@ -62,8 +73,13 @@ static int psh_ttyMain(int argc, char **argv)
 		return ret;
 	}
 
-	if (tcsetpgrp(STDIN_FILENO, pgrp) < 0) {
+	if (ioctl(STDIN_FILENO, TIOCSCTTY, 0) < 0) {
 		/* TODO: handle this as fatal error due to dup2() in psh_ttyopen() */
+		fprintf(stderr, "psh: failed to acquire %s as the controlling terminal\n", argv[1]);
+		return -errno;
+	}
+
+	if (tcsetpgrp(STDIN_FILENO, pgrp) < 0) {
 		fprintf(stderr, "psh: failed to set terminal control\n");
 		return -errno;
 	}

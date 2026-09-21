@@ -87,6 +87,7 @@ typedef struct {
 	char clipboard[CMDSZ];
 	int clipboardLen;
 	unsigned char newline;
+	unsigned char exit;
 } pshapp_common_t;
 
 
@@ -653,7 +654,7 @@ static int psh_readcmd(struct termios *orig, psh_hist_t *cmdhist, char **cmd)
 				}
 				else if (!(n + m)) {
 					printf("exit\r\n");
-					tcsetpgrp(STDIN_FILENO, -1);
+					pshapp_common.exit = 1;
 					free(*cmd);
 					*cmd = NULL;
 					break;
@@ -1612,12 +1613,27 @@ static int psh_run(int exitable, const char *console)
 		return -EPERM;
 	}
 
-	/* Put ourselves in our own process group */
-	pgrp = getpid();
-	err = setpgid(pgrp, pgrp);
-	if (err < 0) {
-		fprintf(stderr, "psh: failed to put shell in its own process group\n");
-		return err;
+	if (psh_common.tcpid == -1) {
+		if (setsid() == (pid_t)-1) {
+			fprintf(stderr, "psh: failed to start a new session\n");
+			return -errno;
+		}
+
+		if (ioctl(STDIN_FILENO, TIOCSCTTY, 0) < 0) {
+			fprintf(stderr, "psh: failed to acquire the controlling terminal\n");
+			return -errno;
+		}
+
+		pgrp = getpgrp();
+	}
+	else {
+		/* Put ourselves in our own process group */
+		pgrp = getpid();
+		err = setpgid(pgrp, pgrp);
+		if (err < 0) {
+			fprintf(stderr, "psh: failed to put shell in its own process group\n");
+			return err;
+		}
 	}
 
 	/* Save original terminal settings */
@@ -1640,8 +1656,9 @@ static int psh_run(int exitable, const char *console)
 		return -ENOMEM;
 	}
 	pshapp_common.cmdhist = cmdhist;
+	pshapp_common.exit = 0;
 
-	while (pgrp == tcgetpgrp(STDIN_FILENO)) {
+	while ((pshapp_common.exit == 0) && (pgrp == tcgetpgrp(STDIN_FILENO))) {
 		struct psh_redir redir;
 
 		int n = psh_readcmd(&orig, cmdhist, &cmd);
@@ -1756,7 +1773,7 @@ static int psh_run(int exitable, const char *console)
 
 int psh_pshappexit(int argc, char **argv)
 {
-	tcsetpgrp(STDIN_FILENO, -1);
+	pshapp_common.exit = 1;
 	return 0;
 }
 
