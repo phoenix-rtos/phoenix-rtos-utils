@@ -45,31 +45,34 @@ extern psh_common_t psh_common;
 /* (rounds n to prec decimal places and cuts trailing zeros), e.g. */
 /* utils_prefix(10, -15496, 3, 2, buff) saves "-15.5M" in buff */
 /* utils_prefix(2, 2000, 10, 3, buff) saves "1.953M" in buff */
-extern int psh_prefix(unsigned int base, int x, int y, unsigned int prec, char *buff);
+int psh_prefix(unsigned int base, int x, int y, unsigned int prec, char *buff);
 
 
-extern void _psh_exit(int code);
+void _psh_exit(int code);
 
 
-extern void psh_registerapp(psh_appentry_t *newapp);
+void psh_registerapp(psh_appentry_t *newapp);
 
 
-extern const psh_appentry_t *psh_findapp(char *appname);
+const psh_appentry_t *psh_findapp(char *appname);
 
 
-extern const psh_appentry_t *psh_applist_first(void);
+const psh_appentry_t *psh_applist_first(void);
 
 
-extern const psh_appentry_t *psh_applist_next(const psh_appentry_t *current);
+const psh_appentry_t *psh_applist_next(const psh_appentry_t *current);
 
 
-extern size_t psh_write(int fd, const void *buf, size_t count);
+size_t psh_write(int fd, const void *buf, size_t count);
 
 
-extern size_t psh_read(int fd, void *buf, size_t count);
+size_t psh_read(int fd, void *buf, size_t count);
 
 
-extern int psh_ttyopen(const char *dev);
+void psh_ttyinstall(int fd, char *ttydev);
+
+
+int psh_ttyopen(const char *dev);
 
 
 #endif
