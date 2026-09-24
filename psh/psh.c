@@ -164,7 +164,9 @@ int psh_ttyopen(const char *ttydev)
 	dup2(fd, STDOUT_FILENO);
 	dup2(fd, STDERR_FILENO);
 
-	close(fd);
+	if ((fd != STDIN_FILENO) && (fd != STDOUT_FILENO) && (fd != STDERR_FILENO)) {
+		close(fd);
+	}
 
 	return EOK;
 }
