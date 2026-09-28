@@ -1,0 +1,14 @@
+benchmarks/jitter/main.c
+  h_fc26ad17182140 178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "12bffd9e2e83b9899034a179b5e1b020833b3a4c",
+  "prompts": {},
+  "humans": {
+    "h_fc26ad17182140": {
+      "author": "Lukasz Leczkowski <lukasz.leczkowski@phoenix-rtos.com>"
+    }
+  }
+}
