@@ -1,0 +1,54 @@
+nandtool/nandtool.c
+  s_6eca4c097581d4::t_6a34cde0a2b9b6 30,158-170,248-249
+  s_16b123ebee32e7::t_a59d2b4066c595 594
+  s_16b123ebee32e7::t_56b5e90aec7da4 172-173,178-181,186,188,195,201,203,205-211,213,217-218,220,225,227,229-231,233-234,238-244,246,603-604
+  s_a0a5a630e0df54::t_7f7db29f8ee1df 171,174,176-177,182-183,185,187,189-194,196-200,202,212,214-216,219,221-224,226,228,232,235-237,245,247,251-255,543,602,605-609,743
+  s_16b123ebee32e7::t_0c30ed3dd3e04b 45-46,51,76-82,84,98-99,133,545,742
+  s_433c6622d0e696::t_a3c3eefc882eb2 175,184,250
+  s_433c6622d0e696::t_49e3a8fd956c46 544,585,600,745
+  s_16b123ebee32e7::t_e251ddcb159432 26
+  s_16b123ebee32e7::t_be06cfcf8e4bfd 18
+  s_16b123ebee32e7::t_620faafc3ac8c6 204,744
+nandtool/Makefile
+  s_a0a5a630e0df54::t_f202cee6236fa5 11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d90d98c2363fff6ce3036a8cc7c2d24e992a7b19",
+  "prompts": {},
+  "sessions": {
+    "s_16b123ebee32e7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6cfef533-61b8-48d7-9bbc-32e24d1861d1",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": null
+    },
+    "s_433c6622d0e696": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dbd40c4b-e740-4369-a4fb-4ee20c573de6",
+        "model": "claude-opus-5"
+      },
+      "human_author": null
+    },
+    "s_6eca4c097581d4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8c5eccc3-ad42-4dcc-803a-5e9c4b0a5e9f",
+        "model": "claude-opus-5"
+      },
+      "human_author": null
+    },
+    "s_a0a5a630e0df54": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f1dfe217-bddb-48e4-b4b4-66c59041d5f9",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
