@@ -8,6 +8,7 @@ NAME := nandtool
 LOCAL_PATH = $(call my-dir)
 LOCAL_SRCS := flashmng.c nandtool.c
 LOCAL_INSTALL_PATH := /bin
+LIBS := libsha256
 
 ifneq (, $(findstring imx6ull, $(TARGET)))
   LOCAL_CFLAGS += -DHAS_BCB

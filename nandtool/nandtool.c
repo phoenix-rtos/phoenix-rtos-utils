@@ -25,6 +25,7 @@
 #include <sys/stat.h>
 
 #include "flashmng.h"
+#include <libsha256.h>
 #ifdef HAS_BCB
 #include "bcb.h"
 #endif
@@ -141,6 +142,104 @@ static int nandtool_flash(const char *path, unsigned int start, int raw)
 	close(fd);
 
 	return err;
+}
+
+
+static void nandtool_hexdigest(const uint8_t *digest, char *hex)
+{
+	static const char nibble[] = "0123456789abcdef";
+	unsigned int i;
+
+	for (i = 0; i < SHA256_DIGEST_SIZE; i++) {
+		hex[2 * i] = nibble[digest[i] >> 4];
+		hex[2 * i + 1] = nibble[digest[i] & 0x0f];
+	}
+	hex[2 * SHA256_DIGEST_SIZE] = '\0';
+}
+
+
+/*
+ * Print the SHA-256 of `size` bytes flashed from block `start`, skipping bad
+ * blocks the way nandtool_flash() does. Comparing it is the caller's job.
+ */
+static int nandtool_sha256(long long size, unsigned int start)
+{
+	const flashsrv_info_t *info = nandtool_common.info;
+	const unsigned int nblocks = info->size / info->erasesz;
+	unsigned int block;
+	size_t len, offs;
+	ssize_t got;
+	sha256_ctx_t ctx;
+	uint8_t digest[SHA256_DIGEST_SIZE];
+	char hex[2 * SHA256_DIGEST_SIZE + 1];
+	uint8_t *buff;
+	int err = EOK;
+
+	if ((buff = malloc(info->erasesz)) == NULL) {
+		fprintf(stderr, "nandtool: failed to allocate buffer\n");
+		return -ENOMEM;
+	}
+
+	sha256_init(&ctx);
+
+	for (block = start; (size > 0) && (block < nblocks); block++) {
+		if ((err = flashmng_isbad(nandtool_common.oid, block)) < 0) {
+			fprintf(stderr, "nandtool: failed to check block %u, err: %d\n", block, err);
+			break;
+		}
+		else if (err > 0) {
+			err = EOK;
+			continue;
+		}
+
+		/* whole pages only: erased pages past the image may fail the ECC check */
+		len = info->erasesz;
+		if ((long long)len > size) {
+			len = ((size + info->writesz - 1) / info->writesz) * info->writesz;
+		}
+
+		if (lseek(nandtool_common.fd, (off_t)block * info->erasesz, SEEK_SET) < 0) {
+			err = -errno;
+			fprintf(stderr, "nandtool: failed to lseek to block %u, err: %d\n", block, err);
+			break;
+		}
+
+		for (offs = 0; offs < len; offs += (size_t)got) {
+			if ((got = read(nandtool_common.fd, buff + offs, len - offs)) <= 0) {
+				err = (got < 0) ? -errno : -EIO;
+				fprintf(stderr, "nandtool: failed to read block %u, err: %d\n", block, err);
+				break;
+			}
+		}
+
+		if (err < 0) {
+			break;
+		}
+
+		if ((long long)len > size) {
+			len = (size_t)size;
+		}
+
+		sha256_process(&ctx, buff, len);
+		size -= len;
+	}
+
+	free(buff);
+
+	if ((err == EOK) && (size > 0)) {
+		fprintf(stderr, "nandtool: %lld bytes past the end of the partition\n", size);
+		err = -EINVAL;
+	}
+
+	if (err < 0) {
+		return err;
+	}
+
+	sha256_done(&ctx, digest);
+	nandtool_hexdigest(digest, hex);
+	printf("%s\n", hex);
+
+	return EOK;
 }
 
 
@@ -431,6 +530,9 @@ static void nandtool_help(const char *prog)
 	printf("\t-i <path>         - path of the file to flash (requires -s option)\n");
 	printf("\t-r                - flash raw data\n");
 	printf("\t-s <block>        - start flashing from given block (requires -i)\n");
+	printf("\n");
+	printf("\t-n <bytes>        - read back <bytes> of the partition and print their SHA-256 hex digest\n");
+	printf("\t                    (from block -s if given; with -i it runs after flashing, the digest is the last line)\n");
 #ifdef HAS_BCB
 	printf("\t-f                - write FCB (dangerous)\n");
 	printf("\t-t                - write DBBT (use -l to scan specified partitions for bad blocks)\n");
@@ -470,6 +572,7 @@ int main(int argc, char **argv)
 {
 	int check = 0, raw = 0, flash_start = -1, erase_start = -1, erase_size = -1, write_cleanmarkers = 0;
 	int dump_start = -1, dump_size = -1, oob = 0;
+	long long digest_size = -1;
 #ifdef HAS_BCB
 	int write_fcb = 0;
 	int write_dbbt = 0;
@@ -478,14 +581,22 @@ int main(int argc, char **argv)
 	char *scan_bb_dev_real[SCAN_DEVICES_MAX_CNT];
 #endif
 	const char *ipath = NULL, *opath = NULL;
-	char *dev;
+	char *dev, *endptr;
 	int c, err;
 
 	if (isatty(STDOUT_FILENO))
 		nandtool_common.interactive = 1;
 
-	while ((c = getopt(argc, argv, "e:d:i:o:rs:bchjqftl:")) != -1) {
+	while ((c = getopt(argc, argv, "e:d:i:o:rs:bchjqftl:n:")) != -1) {
 		switch (c) {
+			case 'n':
+				digest_size = strtoll(optarg, &endptr, 0);
+				if ((*optarg == '\0') || (*endptr != '\0') || (digest_size < 0)) {
+					fprintf(stderr, "nandtool: invalid -n size\n");
+					return 1;
+				}
+				break;
+
 			case 'e':
 				if (nandtool_parseRange(optarg, &erase_start, &erase_size) < 0) {
 					fprintf(stderr, "nandtool: Fail to parse erase args!\n");
@@ -619,6 +730,9 @@ int main(int argc, char **argv)
 			break;
 
 		if ((flash_start >= 0) && (ipath != NULL) && ((err = nandtool_flash(ipath, flash_start, raw)) < 0))
+			break;
+
+		if ((digest_size >= 0) && ((err = nandtool_sha256(digest_size, (flash_start >= 0) ? (unsigned int)flash_start : 0)) < 0))
 			break;
 
 #ifdef HAS_BCB
