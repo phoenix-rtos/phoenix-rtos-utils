@@ -16,6 +16,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <sys/debug.h>
 #include <sys/threads.h>
 #include <sys/reboot.h>
 #include <sys/minmax.h>
@@ -83,13 +84,18 @@ static int psh_pm_getThreads(threadinfo_t **pinfo, int *n)
 }
 
 
-static void psh_pm_reboot(const char *reason)
+/* debug() is printed by the kernel: it can't block on a stuck tty server nor stay queued in it at reboot */
+static void psh_pm_reboot(const char *reason, const char *detail)
 {
-	printf("pm: rebooting! reason: %s\n", reason);
+	debug("pm: rebooting! reason: ");
+	debug(reason);
+	if (detail != NULL) {
+		debug(detail);
+	}
+	debug("\n");
 
-	int err = reboot(PHOENIX_REBOOT_MAGIC);
-	if (err < 0) {
-		printf("pm: failed to restart the machine\n");
+	if (reboot(PHOENIX_REBOOT_MAGIC) < 0) {
+		debug("pm: failed to restart the machine\n");
 	}
 }
 
@@ -182,7 +188,7 @@ int psh_pm(int argc, char *argv[])
 		int ctcnt = psh_pm_getThreads(&ctinfo, &ctsize);
 		if (ctcnt < 0) {
 			if ((rebootNoMem != 0) && (ctcnt == -ENOMEM)) {
-				psh_pm_reboot("ENOMEM while getting thread info");
+				psh_pm_reboot("ENOMEM while getting thread info", NULL);
 			}
 			continue;
 		}
@@ -201,10 +207,10 @@ int psh_pm(int argc, char *argv[])
 			}
 
 			if ((!ignore_ppid || ipid != ppid) && (ipid < cpid)) {
-				fprintf(stderr, "pm: process %d died\n", ipid);
 				if (restart) {
-					psh_pm_reboot("monitored process died");
+					psh_pm_reboot("monitored process died: ", itinfo[i].name);
 				}
+				fprintf(stderr, "pm: process %d (%s) died\n", ipid, itinfo[i].name);
 			}
 
 			if (ipid <= cpid) {
@@ -224,16 +230,16 @@ int psh_pm(int argc, char *argv[])
 
 		if (rebootNoMem != 0) {
 			uint32_t currTotal = psh_pm_getTotal();
+			if (currTotal > maxTotal) {
+				psh_pm_reboot("total mem exceeded limit", NULL);
+			}
+
+			if (currKernel > maxKernel) {
+				psh_pm_reboot("kernel mem exceeded limit", NULL);
+			}
+
 			if ((currTotal > warnTotal) || (currKernel > warnKernel)) {
 				printf("pm: mem: total: %u / %u   kernel: %u / %u\n", currTotal, maxTotal, currKernel, maxKernel);
-
-				if (currTotal > maxTotal) {
-					psh_pm_reboot("total mem exceeded limit");
-				}
-
-				if (currKernel > maxKernel) {
-					psh_pm_reboot("kernel mem exceeded limit");
-				}
 			}
 		}
 	}
