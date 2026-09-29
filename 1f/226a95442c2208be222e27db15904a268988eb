@@ -1,0 +1,19 @@
+psh/pm/pm.c
+  s_c8ba00c624d8df::t_5d3fb2473fdbdc 19,87,90,92-96,209-214,235-239,241-245,247-248
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1f226a95442c2208be222e27db15904a268988eb",
+  "prompts": {},
+  "sessions": {
+    "s_c8ba00c624d8df": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "295b282a-5cea-4f0b-91b8-9fae5f358cef",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
