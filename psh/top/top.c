@@ -52,7 +52,9 @@ static int psh_top_cmppid(const void *t1, const void *t2)
 
 static int psh_top_cmptime(const void *t1, const void *t2)
 {
-	return ((int)((threadinfo_t *)t1)->cpuTime - (int)((threadinfo_t *)t2)->cpuTime) * psh_top_common.sortdir;
+	threadinfo_t *ti1 = ((threadinfo_t *)t1), *ti2 = ((threadinfo_t *)t2);
+	time_t time1 = ti1->systemTime + ti1->userTime, time2 = ti2->systemTime + ti2->userTime;
+	return ((int)(time1 - time2)) * psh_top_common.sortdir;
 }
 
 
@@ -124,6 +126,7 @@ static void psh_top_refresh(char cmd, threadinfo_t *info, threadinfo_t *previnfo
 	struct winsize ws;
 	static unsigned int prevcnt = 0;
 	unsigned int i, j, m, s, hs, w, lines = 3, runcnt = 0, waitcnt = 0;
+	time_t cpuTime1, cpuTime2;
 	char buff[8];
 
 	/* Calculate load */
@@ -137,8 +140,11 @@ static void psh_top_refresh(char cmd, threadinfo_t *info, threadinfo_t *previnfo
 		}
 
 		/* Prevent negative load if a new thread with the same tid has occured */
-		if (p)
-			info[i].load = (info[i].cpuTime > p->cpuTime) ? (info[i].cpuTime - p->cpuTime) * 1000 / delta : 0;
+		if (p) {
+			cpuTime1 = info[i].systemTime + info[i].userTime;
+			cpuTime2 = p->systemTime + p->userTime;
+			info[i].load = (cpuTime1 > cpuTime2) ? (cpuTime1 - cpuTime2) * 1000 / delta : 0;
+		}
 	}
 
 	prevcnt = totcnt;
@@ -152,7 +158,8 @@ static void psh_top_refresh(char cmd, threadinfo_t *info, threadinfo_t *previnfo
 			for (j = i + 1; j < totcnt && info[j].pid == info[i].pid; j++) {
 				info[i].tid++;
 				info[i].load += info[j].load;
-				info[i].cpuTime += info[j].cpuTime;
+				info[i].userTime += info[j].userTime;
+				info[i].systemTime += info[j].systemTime;
 				info[i].priority = min(info[i].priority, info[j].priority);
 				info[i].state = min(info[i].state, info[j].state);
 				info[i].wait = max(info[i].wait, info[j].wait);
@@ -216,9 +223,9 @@ static void psh_top_refresh(char cmd, threadinfo_t *info, threadinfo_t *previnfo
 			printf("\033[1m");
 
 		/* cpuTime is in usces */
-		m = info[i].cpuTime / (60 * 1000000);
-		s = info[i].cpuTime / 1000000 - 60 * m;
-		hs = info[i].cpuTime / 10000 - 60 * 100 * m - 100 * s;
+		m = (info[i].userTime + info[i].systemTime) / (60 * 1000000);
+		s = (info[i].userTime + info[i].systemTime) / 1000000 - 60 * m;
+		hs = (info[i].userTime + info[i].systemTime) / 10000 - 60 * 100 * m - 100 * s;
 		printf("\n%8u %8u %4d %5s %3u.%u %6ss %4u:%02u.%02u ", (psh_top_common.threads) ? info[i].tid : info[i].pid,
 				info[i].ppid, info[i].priority, (info[i].state) ? "sleep" : "ready",
 				info[i].load / 10, info[i].load % 10, buff, m, s, hs);
