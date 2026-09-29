@@ -1,0 +1,23 @@
+nandtool/nandtool.c
+  s_c8ba00c624d8df::t_4006993343bf2d 535
+  s_c8ba00c624d8df::t_21e23ee65a117a 28,148-245,533-534,575,584,590,592-599,735-736
+  s_c8ba00c624d8df::t_a606496da89c89 737
+nandtool/Makefile
+  s_c8ba00c624d8df::t_21e23ee65a117a 11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "245f12017ca203f209e9c46034111576ea4462c2",
+  "prompts": {},
+  "sessions": {
+    "s_c8ba00c624d8df": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "295b282a-5cea-4f0b-91b8-9fae5f358cef",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
