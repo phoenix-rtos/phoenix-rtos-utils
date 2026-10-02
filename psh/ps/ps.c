@@ -128,7 +128,8 @@ static int psh_ps(int argc, char **argv)
 			for (j = i + 1; j < tcnt && info[j].pid == info[i].pid; j++) {
 				info[i].tid++;
 				info[i].load += info[j].load;
-				info[i].cpuTime += info[j].cpuTime;
+				info[i].userTime += info[j].userTime;
+				info[i].systemTime += info[j].systemTime;
 				info[i].priority = min(info[i].priority, info[j].priority);
 				info[i].state = min(info[i].state, info[j].state);
 				info[i].wait = max(info[i].wait, info[j].wait);
@@ -152,7 +153,7 @@ static int psh_ps(int argc, char **argv)
 		printf("%8u %8u %4d %5s %3u.%u %6ss ", info[i].pid, info[i].ppid, info[i].priority, (info[i].state) ? "sleep" : "ready",
 				info[i].load / 10, info[i].load % 10, buff);
 
-		s = (info[i].cpuTime + 500000) / 1000000;
+		s = (info[i].systemTime + info[i].userTime + 500000) / 1000000;
 		d = s / 86400;
 		s %= 86400;
 		h = s / 3600;
