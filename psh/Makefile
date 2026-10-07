@@ -25,11 +25,20 @@ LOCAL_LDFLAGS := -z stack-size=4096 -z noexecstack
 PSH_ALLCOMMANDS := bind cat cd chmod cp date dd df dmesg echo edit exec hm hd \
 ifconfig kill ln ls mem mkdir mount nc nslookup ntpclient perf ping pm printenv \
 ps pwd reboot rm rmdir runfile route sync sysexec top touch tty umount uptime wget
+
+ifdef USBMON
+  PSH_ALLCOMMANDS += usbmon
+endif
+
 PSH_COMMANDS ?= $(PSH_ALLCOMMANDS)
 PSH_INTERNAL_APPLETS := pshapp help $(filter $(PSH_ALLCOMMANDS), $(PSH_COMMANDS))
 
 SRCS := $(foreach app, $(PSH_INTERNAL_APPLETS), $(wildcard $(LOCAL_PATH)$(app)/*.c))
 LIBS := libtrace
+
+ifneq ($(filter usbmon, $(PSH_INTERNAL_APPLETS)),)
+  LIBS += libusb
+endif
 
 # Header for project-specific applets
 HEADERS:= $(LOCAL_PATH)/psh.h
