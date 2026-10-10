@@ -34,7 +34,10 @@
 #define CONTROL_BLOCK_ADDRESS   -5
 #define BLOW_FUSES              -6
 #define CHANGE_FLASH            -7
+#define PROGRAM_FUSE            -8
 #define CLOSE_PSD               -100
+
+#define PARTITON_NUM_OTP 0xa5a55a5aU /* Number is intentionally "irregular" to reduce possibility of accidental selection */
 
 
 enum {
