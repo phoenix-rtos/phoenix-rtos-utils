@@ -402,7 +402,12 @@ static int psd_writeFile(sdp_cmd_t *cmd)
 
 			/* check for badblocks - TODO: test it */
 			if (fileOffs % psd_common.flash.erasesz == 0) {
-				while (flashmng_isBadBlock(psd_common.f->oid, fileOffs)) {
+				while ((res = flashmng_isBadBlock(psd_common.f->oid, fileOffs)) != 0) {
+					if (res < 0) {
+						err = -eReport2;
+						break;
+					}
+
 					printf("writeFile: badblock at offs: 0x%x\n", (uint32_t)fileOffs);
 
 					/* Direct write - abort without error */
