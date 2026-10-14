@@ -426,7 +426,13 @@ static int nandtool_scan(const char *dev, dbbt_t *dbbt)
 	for (idx = 0; idx < info->size / info->erasesz; idx++) {
 		unsigned int blockno = (offs / info->erasesz) + idx;
 
-		if (flashmng_isbad(oid, idx)) {
+		err = flashmng_isbad(oid, idx);
+		if (err < 0) {
+			fprintf(stderr, "nandtool: failed to check block %u, err: %d\n", blockno, err);
+			return err;
+		}
+
+		if (err > 0) {
 			printf("nandtool: block %u is marked as bad\n", blockno);
 			if (dbbt != NULL) {
 				dbbt->bad_block[dbbt->entries_num] = blockno;
