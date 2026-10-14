@@ -150,7 +150,8 @@ int flashmng_checkRange(oid_t oid, unsigned int start, unsigned int size, dbbt_t
 	for (addr = start; addr < start + size; addr += flashmng_common.info.erasesz) {
 		unsigned int blockno = addr / flashmng_common.info.erasesz;
 
-		if (flashmng_isBadBlock(oid, addr)) {
+		/* oid is the partition: query the offset inside it, DBBT needs the absolute block number */
+		if (flashmng_isBadBlock(oid, addr - start)) {
 			printf("Block %u is marked as bad\n", blockno);
 			dbbt->bad_block[dbbt->entries_num] = blockno;
 			dbbt->entries_num++;
