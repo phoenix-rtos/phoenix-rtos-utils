@@ -1,0 +1,34 @@
+nandtool/nandtool.c
+  s_e8579681b803f9::t_7d2141c1b6ff1c 563-564
+  s_e8579681b803f9::t_41427968884597 579,581-592
+  s_e8579681b803f9::t_b7b3c54948ce0e 520-523
+  s_e8579681b803f9::t_d20d3026ef7b04 728-738
+  s_e8579681b803f9::t_4eb916b1260bf3 28
+  s_e8579681b803f9::t_6bff515aed1fc3 148-232
+nandtool/tests/Makefile.host
+  s_e8579681b803f9::t_7b0c49271b2cdd 1-27
+nandtool/tests/test_sha256.c
+  s_e8579681b803f9::t_9037b0a023018e 1-111
+nandtool/sha256.c
+  s_e8579681b803f9::t_4e37553aab99bd 1-173
+nandtool/Makefile
+  s_e8579681b803f9::t_7cf70956701a72 9
+nandtool/sha256.h
+  s_e8579681b803f9::t_c31d48ad07872c 1-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "f193f80fa50f2321ecb7e4afd00e6372fbfb3d28",
+  "prompts": {},
+  "sessions": {
+    "s_e8579681b803f9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bc3e6802-d090-4170-bef4-b6532170443a",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
