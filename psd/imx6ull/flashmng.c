@@ -58,10 +58,7 @@ int flashmng_isBadBlock(oid_t oid, uint32_t addr)
 	if (msgSend(oid.port, &msg) < 0)
 		return -1;
 
-	if (msg.o.err != 0)
-		return 1;
-
-	return 0;
+	return (msg.o.err > 0) ? 1 : msg.o.err;
 }
 
 
@@ -141,17 +138,23 @@ int flashmng_getAttr(int type, long long *val, oid_t oid)
 }
 
 
-int flashmng_checkRange(oid_t oid, unsigned int start, unsigned int size, dbbt_t *dbbt)
+int flashmng_checkRange(oid_t oid, unsigned int partOffs, unsigned int size, dbbt_t *dbbt)
 {
 	uint32_t cnt = 0;
 	uint32_t bbcnt = 0;
 	uint32_t addr;
+	int err;
 
-	for (addr = start; addr < start + size; addr += flashmng_common.info.erasesz) {
-		unsigned int blockno = addr / flashmng_common.info.erasesz;
+	for (addr = 0; addr < size; addr += flashmng_common.info.erasesz) {
+		unsigned int blockno = (partOffs + addr) / flashmng_common.info.erasesz; /* DBBT: absolute block number */
 
-		/* oid is the partition: query the offset inside it, DBBT needs the absolute block number */
-		if (flashmng_isBadBlock(oid, addr - start)) {
+		err = flashmng_isBadBlock(oid, addr);
+		if (err < 0) {
+			printf("Failed to check absolute block %u, err: %d\n", blockno, err);
+			return err;
+		}
+
+		if (err > 0) {
 			printf("Block %u is marked as bad\n", blockno);
 			dbbt->bad_block[dbbt->entries_num] = blockno;
 			dbbt->entries_num++;
@@ -182,8 +185,14 @@ int flashmng_cleanMarkers(oid_t oid, unsigned int start, unsigned int size)
 
 	for (addr = start; addr < start + size; addr += flashmng_common.info.erasesz) {
 		unsigned int blockno = addr / flashmng_common.info.erasesz; /* note: this is relative to the beginning of the partition */
+		int err = flashmng_isBadBlock(oid, addr);
 
-		if (flashmng_isBadBlock(oid, addr)) {
+		if (err < 0) {
+			printf("CleanMarkers: failed to check partition block %u, err: %d\n", blockno, err);
+			return err;
+		}
+
+		if (err > 0) {
 			printf("CleanMarkers: block %u is marked as bad - skipping\n", blockno);
 			continue;
 		}
