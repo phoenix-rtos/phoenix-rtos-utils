@@ -1,0 +1,19 @@
+psd/imx6ull/flashmng.c
+  s_5901b3ff89b0dd::t_f410a24ff6f0c9 153,191
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b2356e5a9849ce9ce560895c8259dcdd09bbd72d",
+  "prompts": {},
+  "sessions": {
+    "s_5901b3ff89b0dd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "88097223-e89a-4e38-83ba-570cc59c5e6b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
