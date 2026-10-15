@@ -1,0 +1,23 @@
+psd/imx6ull/flashmng.c
+  s_12831ff4e772b0::t_6d9a55aa7a4faa 61,141,146,148-149,151-157,188-193,195
+psd/imx6ull/flashmng.h
+  s_12831ff4e772b0::t_758eb1607106a1 24,28,32,36,40-41,44,48,52
+psd/imx6ull/psd.c
+  s_12831ff4e772b0::t_1aa1e471c0a7a2 405-410
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4cd10435d30bb6db100f1a0dee7a7b577ed3a377",
+  "prompts": {},
+  "sessions": {
+    "s_12831ff4e772b0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f5cea00b-53d0-4a66-bcd7-cdb5be997dce",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
