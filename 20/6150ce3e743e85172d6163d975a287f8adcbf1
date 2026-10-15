@@ -1,0 +1,34 @@
+psd/imx6ull/flashmng.c
+  s_12831ff4e772b0::t_6d9a55aa7a4faa 61,141,146,148-149,151-152,154-157,188-190,192-193,195
+  s_5901b3ff89b0dd::t_f410a24ff6f0c9 153,191
+psd/imx6ull/flashmng.h
+  s_12831ff4e772b0::t_758eb1607106a1 24,28,32,36,40-41,44,48,52
+psd/imx6ull/psd.c
+  s_12831ff4e772b0::t_1aa1e471c0a7a2 405-410
+nandtool/nandtool.c
+  s_12831ff4e772b0::t_997d55aa838179 429-435
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "206150ce3e743e85172d6163d975a287f8adcbf1",
+  "prompts": {},
+  "sessions": {
+    "s_12831ff4e772b0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f5cea00b-53d0-4a66-bcd7-cdb5be997dce",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    },
+    "s_5901b3ff89b0dd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "88097223-e89a-4e38-83ba-570cc59c5e6b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
