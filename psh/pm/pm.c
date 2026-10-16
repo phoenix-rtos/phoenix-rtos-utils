@@ -178,6 +178,12 @@ int psh_pm(int argc, char *argv[])
 	if (itcnt < 0)
 		return EXIT_FAILURE;
 
+	/* remove processes started after pm (with larger pid) */
+	const pid_t ownPid = getpid();
+	while ((itcnt > 0) && (itinfo[itcnt - 1].pid >= ownPid)) {
+		itcnt -= 1;
+	}
+
 	/* print warning if more than 90% of monitored threshold is reached */
 	const uint32_t warnKernel = maxKernel - maxKernel / 10;
 	const uint32_t warnTotal = maxTotal - maxTotal / 10;
