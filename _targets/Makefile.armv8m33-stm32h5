@@ -1,0 +1,9 @@
+#
+# Makefile for Phoenix-RTOS 3 utils
+#
+# STM32H5 tool set
+#
+# Copyright 2026 Phoenix Systems
+#
+
+DEFAULT_COMPONENTS := psh
