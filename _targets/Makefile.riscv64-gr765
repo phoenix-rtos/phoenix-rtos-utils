@@ -6,4 +6,4 @@
 # Copyright 2025 Phoenix Systems
 #
 
-DEFAULT_COMPONENTS := psh nandtool
+DEFAULT_COMPONENTS := psh nandtool coredump_server
