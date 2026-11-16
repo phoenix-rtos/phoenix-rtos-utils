@@ -42,7 +42,7 @@
 /* Shell definitions */
 #define PROMPT       "(psh)% " /* Shell prompt */
 #define SCRIPT_MAGIC ":{}:"    /* Every psh script should start with this line */
-#define CMDSZ        128       /* Command buffer size */
+#define CMDSZ        256       /* Command buffer size */
 #define HISTSZ       512       /* Command history size */
 
 
